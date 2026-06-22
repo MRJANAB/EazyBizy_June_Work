@@ -1,0 +1,10 @@
+project_id = "oufwdhgzozngsdhqmdui"
+
+[functions.process-loan]
+verify_jwt = false
+
+[functions.format-report]
+verify_jwt = false
+
+[functions.generate-cma-report]
+verify_jwt = false

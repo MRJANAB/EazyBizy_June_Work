@@ -1,0 +1,15 @@
+ALTER TABLE public.gtab_applications
+  ADD COLUMN IF NOT EXISTS skilled_workers_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS skilled_workers_salary NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS semi_skilled_workers_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS semi_skilled_workers_salary NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS wages_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS wages_salary NUMERIC DEFAULT 0;
+
+ALTER TABLE public.loan_applications
+  ADD COLUMN IF NOT EXISTS skilled_workers_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS skilled_workers_salary NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS semi_skilled_workers_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS semi_skilled_workers_salary NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS wages_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS wages_salary NUMERIC DEFAULT 0;

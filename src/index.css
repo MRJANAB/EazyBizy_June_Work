@@ -1,0 +1,870 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap");
+
+/* ── GTAB Form Premium Fonts ─────────────────────────────────────────────── */
+/* Space Grotesk — headings: sharp, modern, fintech-grade */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap");
+/* DM Sans — labels & body: best-in-class UI readability on dark backgrounds */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap");
+/* DM Mono — numbers & currency: clear digit distinction, tabular aligned */
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .gtab-step-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .gtab-step-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  @media (max-width: 640px) {
+    .gtab-application-shell,
+    .gtab-application-shell * {
+      min-width: 0;
+    }
+
+    .gtab-action-bar {
+      position: relative !important;
+      inset: auto !important;
+      transform: none !important;
+    }
+  }
+}
+
+@layer base {
+  :root {
+    /* Dark Fintech Theme — Cyan/Gold */
+    --background: 224 44% 6%;
+    --foreground: 220 13% 91%;
+
+    --card: 222 42% 10%;
+    --card-foreground: 220 13% 91%;
+
+    --popover: 222 42% 10%;
+    --popover-foreground: 220 13% 91%;
+
+    --primary: 174 66% 51%;
+    --primary-foreground: 224 44% 6%;
+
+    --secondary: 215 22% 17%;
+    --secondary-foreground: 220 13% 91%;
+
+    --muted: 220 22% 14%;
+    --muted-foreground: 220 9% 63%;
+
+    --accent: 174 32% 12%;
+    --accent-foreground: 174 66% 72%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 174 22% 18%;
+    --input: 220 22% 14%;
+    --ring: 174 66% 51%;
+
+    --radius: 0.875rem;
+
+    /* Dark Fintech Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(224 48% 5%) 0%, hsl(222 44% 8%) 50%, hsl(218 38% 11%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(174 66% 51%) 0%, hsl(192 86% 44%) 100%);
+    --gradient-secondary: linear-gradient(135deg, hsl(215 22% 17%) 0%, hsl(215 24% 13%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(43 98% 58%) 0%, hsl(38 96% 50%) 100%);
+    --gradient-glow: radial-gradient(ellipse at center, hsl(174 66% 51% / 0.14) 0%, transparent 68%);
+    --gradient-card: linear-gradient(145deg, hsl(222 42% 10%) 0%, hsl(224 46% 8%) 100%);
+
+    /* Refined Shadows */
+    --shadow-glow: 0 0 40px hsl(174 66% 51% / 0.28);
+    --shadow-card: 0 20px 56px hsl(0 0% 0% / 0.60);
+    --shadow-button: 0 10px 30px hsl(174 66% 51% / 0.32);
+    --shadow-elevated: 0 24px 64px hsl(0 0% 0% / 0.7);
+
+    --glass-bg: hsl(224 46% 7% / 0.90);
+    --glass-border: hsl(174 50% 45% / 0.20);
+    --chart-1: 41 22.2% 64.6%;
+    --chart-2: 185 11.8% 60%;
+    --chart-3: 227 7% 39.8%;
+    --chart-4: 84 18.9% 82.8%;
+    --chart-5: 70 18.8% 76.9%;
+    --sidebar: 248 0.3% 98.4%;
+    --sidebar-foreground: 265 4% 12.9%;
+    --sidebar-primary: 266 4% 20.8%;
+    --sidebar-primary-foreground: 248 0.3% 98.4%;
+    --sidebar-accent: 248 0.7% 96.8%;
+    --sidebar-accent-foreground: 266 4% 20.8%;
+    --sidebar-border: 256 1.3% 92.9%;
+    --sidebar-ring: 257 4% 70.4%;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+    --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+    --tracking-normal: 0em;
+    --spacing: 0.25rem;
+  }
+
+  /* Dashboard Theme - Matches root dark fintech theme */
+  .light-theme {
+    --background: 224 44% 6%;
+    --foreground: 220 13% 91%;
+
+    --card: 222 42% 10%;
+    --card-foreground: 220 13% 91%;
+
+    --popover: 222 42% 10%;
+    --popover-foreground: 220 13% 91%;
+
+    --primary: 174 66% 51%;
+    --primary-foreground: 224 44% 6%;
+
+    --secondary: 215 22% 17%;
+    --secondary-foreground: 220 13% 91%;
+
+    --muted: 220 22% 14%;
+    --muted-foreground: 220 9% 63%;
+
+    --accent: 174 32% 12%;
+    --accent-foreground: 174 66% 72%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 174 22% 18%;
+    --input: 220 22% 14%;
+    --ring: 174 66% 51%;
+
+    /* Dark fintech gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(224 48% 5%) 0%, hsl(222 44% 8%) 50%, hsl(218 38% 11%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(222 42% 10%) 0%, hsl(224 46% 8%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(174 66% 51%) 0%, hsl(192 86% 44%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(43 98% 58%) 0%, hsl(38 96% 50%) 100%);
+    --gradient-glow: radial-gradient(ellipse at center, hsl(174 66% 51% / 0.14) 0%, transparent 68%);
+
+    /* Shadows */
+    --shadow-glow: 0 0 40px hsl(174 66% 51% / 0.28);
+    --shadow-card: 0 20px 56px hsl(0 0% 0% / 0.60);
+    --shadow-button: 0 10px 30px hsl(174 66% 51% / 0.32);
+    --shadow-elevated: 0 24px 64px hsl(0 0% 0% / 0.7);
+
+    --glass-bg: hsl(224 46% 7% / 0.90);
+    --glass-border: hsl(174 50% 45% / 0.20);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    overflow-x: hidden;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
+  #root {
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  span,
+  a,
+  button {
+    overflow-wrap: anywhere;
+  }
+
+  table {
+    overflow-wrap: normal;
+  }
+
+  .apexcharts-canvas,
+  .apexcharts-svg,
+  .apexcharts-inner {
+    max-width: 100% !important;
+  }
+  .dark {
+    --background: 0 0% 15%;
+    --foreground: 248 0.3% 98.4%;
+    --card: 266 4% 20.8%;
+    --card-foreground: 248 0.3% 98.4%;
+    --popover: 266 4% 20.8%;
+    --popover-foreground: 248 0.3% 98.4%;
+    --primary: 256 1.3% 92.9%;
+    --primary-foreground: 266 4% 20.8%;
+    --secondary: 260 4.1% 27.9%;
+    --secondary-foreground: 248 0.3% 98.4%;
+    --muted: 260 4.1% 27.9%;
+    --muted-foreground: 257 4% 70.4%;
+    --accent: 260 4.1% 27.9%;
+    --accent-foreground: 248 0.3% 98.4%;
+    --border: 0 0% 100% / 10%;
+    --input: 0 0% 100% / 15%;
+    --ring: 264 2.7% 55.1%;
+    --destructive: 22 19.1% 70.4%;
+    --destructive-foreground: 248 0.3% 98.4%;
+    --chart-1: 264 24.3% 48.8%;
+    --chart-2: 162 17% 69.6%;
+    --chart-3: 70 18.8% 76.9%;
+    --chart-4: 304 26.5% 62.7%;
+    --chart-5: 16 24.6% 64.5%;
+    --sidebar: 266 4% 20.8%;
+    --sidebar-foreground: 248 0.3% 98.4%;
+    --sidebar-primary: 264 24.3% 48.8%;
+    --sidebar-primary-foreground: 248 0.3% 98.4%;
+    --sidebar-accent: 260 4.1% 27.9%;
+    --sidebar-accent-foreground: 248 0.3% 98.4%;
+    --sidebar-border: 0 0% 100% / 10%;
+    --sidebar-ring: 264 2.7% 55.1%;
+    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+    --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+  }
+}
+
+@layer components {
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .gradient-glow {
+    background: var(--gradient-glow);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-button {
+    box-shadow: var(--shadow-button);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-gold {
+    background: var(--gradient-gold);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.6s ease-out forwards;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GTAB Loan Application — Premium Interactive Styling
+   Brand: Navy #061421 · Teal #00C2D1 · Gold #D4AF37
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GTAB Form Typography System
+   Space Grotesk (headings) · DM Sans (body/labels) · DM Mono (numbers)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Base — DM Sans for all text (inherited by every child element) */
+  .gtab-application-shell {
+    font-family: 'DM Sans', 'Plus Jakarta Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* App name bar ("EazyBizy Loan Application") */
+  .gtab-application-shell .gtab-app-name {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  /* Step title ("Project Requirements") */
+  .gtab-application-shell h2 {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.035em;
+    line-height: 1.15;
+    font-feature-settings: "ss01";
+  }
+
+  /* Section headings inside step cards */
+  .gtab-application-shell h3 {
+    font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+
+  /* Step indicator button labels */
+  .gtab-application-shell .gtab-step-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.35;
+  }
+
+  /* Form field labels */
+  .gtab-application-shell label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
+
+  /* Text / email / password inputs */
+  .gtab-application-shell input[type="text"],
+  .gtab-application-shell input[type="email"],
+  .gtab-application-shell input[type="password"],
+  .gtab-application-shell input[type="date"],
+  .gtab-application-shell input[type="search"],
+  .gtab-application-shell textarea {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+  }
+
+  /* Number & phone inputs → DM Mono for crisp digit rendering */
+  .gtab-application-shell input[type="number"],
+  .gtab-application-shell input[type="tel"] {
+    font-family: 'DM Mono', 'Space Mono', monospace;
+    font-size: 15px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+
+  /* Select / combobox triggers */
+  .gtab-application-shell [role="combobox"] {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+
+  /* Hint / caption text below inputs */
+  .gtab-application-shell .text-xs {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    line-height: 1.5;
+  }
+
+  /* All tabular numeric values (stat cards, CMA metrics, DSCR, etc.) */
+  .gtab-application-shell .tabular-nums {
+    font-family: 'DM Mono', 'Space Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  /* Badge / small label text */
+  .gtab-application-shell .text-\[10px\],
+  .gtab-application-shell .text-\[11px\] {
+    font-family: 'DM Sans', sans-serif;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  /* Section subtitle / description text */
+  .gtab-application-shell .text-muted-foreground {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.005em;
+    line-height: 1.55;
+  }
+
+  /* Button text inside the wizard */
+  .gtab-application-shell button {
+    font-family: 'DM Sans', sans-serif;
+    letter-spacing: 0.01em;
+  }
+
+@keyframes gtab-label-glow {
+  from { color: hsl(174 66% 51% / 0); }
+  to   { color: #00C2D1; }
+}
+
+@keyframes gtab-input-appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@layer components {
+
+  /* ── All inputs inside the wizard ──────────────────────────────────────── */
+  .gtab-application-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  .gtab-application-shell textarea {
+    transition: border-color 0.22s ease, box-shadow 0.26s ease, transform 0.18s ease;
+    box-shadow:
+      inset 0 2px 8px rgba(0, 0, 0, 0.50),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .gtab-application-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):hover,
+  .gtab-application-shell textarea:hover {
+    border-color: rgba(0, 194, 209, 0.50) !important;
+    box-shadow:
+      inset 0 2px 8px rgba(0, 0, 0, 0.38),
+      0 0 0 1px rgba(0, 194, 209, 0.22),
+      0 4px 22px rgba(0, 194, 209, 0.13);
+    transform: translateY(-0.5px);
+  }
+
+  .gtab-application-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+  .gtab-application-shell textarea:focus {
+    border-color: #00C2D1 !important;
+    outline: none !important;
+    box-shadow:
+      inset 0 1px 4px rgba(0, 0, 0, 0.26),
+      0 0 0 2.5px rgba(0, 194, 209, 0.34),
+      0 0 26px rgba(0, 194, 209, 0.22),
+      0 6px 28px rgba(0, 0, 0, 0.22);
+    transform: translateY(-1.5px);
+  }
+
+  /* ── Select / combobox triggers ────────────────────────────────────────── */
+  .gtab-application-shell [role="combobox"] {
+    transition: border-color 0.22s ease, box-shadow 0.26s ease, transform 0.18s ease;
+    box-shadow:
+      inset 0 2px 7px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .gtab-application-shell [role="combobox"]:hover {
+    border-color: rgba(0, 194, 209, 0.50) !important;
+    box-shadow:
+      inset 0 2px 7px rgba(0, 0, 0, 0.35),
+      0 0 0 1px rgba(0, 194, 209, 0.22),
+      0 4px 22px rgba(0, 194, 209, 0.13);
+    transform: translateY(-0.5px);
+  }
+
+  .gtab-application-shell [role="combobox"][data-state="open"],
+  .gtab-application-shell [role="combobox"]:focus-within {
+    border-color: #00C2D1 !important;
+    outline: none;
+    box-shadow:
+      inset 0 1px 4px rgba(0, 0, 0, 0.22),
+      0 0 0 2.5px rgba(0, 194, 209, 0.34),
+      0 0 26px rgba(0, 194, 209, 0.22);
+    transform: translateY(-1.5px);
+  }
+
+  /* ── Label highlight when sibling input is focused ─────────────────────── */
+  .gtab-field:focus-within > label,
+  .gtab-field:focus-within .gtab-label {
+    color: #00C2D1;
+    transition: color 0.2s ease;
+  }
+
+  /* ── Keyframes ──────────────────────────────────────────────────────────── */
+  @keyframes gtab-shimmer {
+    0%   { transform: translateX(-110%) skewX(-12deg); }
+    100% { transform: translateX(210%)  skewX(-12deg); }
+  }
+  @keyframes gtab-ring-breathe {
+    0%, 100% { opacity: 0.55; }
+    50%       { opacity: 1.00; }
+  }
+  @keyframes gtab-border-glow {
+    0%, 100% { box-shadow: 0 0 0 1.5px rgba(0,194,209,0.30), 0 0 18px rgba(0,194,209,0.10); }
+    50%       { box-shadow: 0 0 0 1.5px rgba(0,194,209,0.55), 0 0 36px rgba(0,194,209,0.20); }
+  }
+
+  /* ── Dark section cards (PersonalInfoStep) ───────────────────────────────
+     Lift + teal glow ring + shimmer sweep on hover                          */
+  .gtab-card-dark {
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.30s ease,
+      border-color 0.25s ease;
+  }
+  /* shimmer streak */
+  .gtab-card-dark::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      rgba(0, 194, 209, 0.07) 50%,
+      rgba(55, 222, 214, 0.12) 55%,
+      transparent 65%
+    );
+    transform: translateX(-110%) skewX(-12deg);
+    pointer-events: none;
+    z-index: 1;
+    transition: none;
+  }
+  .gtab-card-dark:hover::before {
+    animation: gtab-shimmer 0.65s ease forwards;
+  }
+  .gtab-card-dark:hover {
+    transform: translateY(-5px);
+    box-shadow:
+      0 40px 80px rgba(0, 0, 0, 0.55),
+      0 0 0 1.5px rgba(0, 194, 209, 0.38),
+      0 0 50px rgba(0, 194, 209, 0.14),
+      inset 0 1px 0 rgba(0, 194, 209, 0.08);
+    border-color: rgba(0, 194, 209, 0.38) !important;
+    animation: gtab-border-glow 2s ease-in-out infinite;
+  }
+
+  /* ── Light section cards (Business Info, WC, Loan Details etc.) ──────────
+     Subtle lift + gradient top-edge glow + shimmer                          */
+  .gtab-card-light {
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform 0.30s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.28s ease,
+      border-color 0.22s ease;
+  }
+  /* gradient top-edge accent that slides in on hover */
+  .gtab-card-light::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #00C2D1, #37DED6, #00C2D1);
+    background-size: 200% 100%;
+    opacity: 0;
+    transform: scaleX(0.6);
+    transform-origin: left;
+    transition: opacity 0.28s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border-radius: 2px 2px 0 0;
+    z-index: 1;
+  }
+  .gtab-card-light::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      rgba(0, 194, 209, 0.04) 50%,
+      rgba(55, 222, 214, 0.07) 55%,
+      transparent 65%
+    );
+    transform: translateX(-110%) skewX(-12deg);
+    pointer-events: none;
+    z-index: 1;
+    transition: none;
+  }
+  .gtab-card-light:hover::before {
+    animation: gtab-shimmer 0.60s ease forwards;
+  }
+  .gtab-card-light:hover::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  .gtab-card-light:hover {
+    transform: translateY(-4px);
+    box-shadow:
+      0 28px 60px rgba(0, 0, 0, 0.14),
+      0 0 0 1.5px rgba(0, 194, 209, 0.22),
+      0 0 30px rgba(0, 194, 209, 0.08);
+    border-color: rgba(0, 194, 209, 0.25) !important;
+  }
+
+  /* ── Finance calculator card ─────────────────────────────────────────────
+     Strong lift + vivid teal aura                                           */
+  .gtab-card-finance {
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform 0.30s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.30s ease;
+  }
+  .gtab-card-finance::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgba(0, 194, 209, 0.09) 50%,
+      rgba(55, 222, 214, 0.15) 55%,
+      transparent 70%
+    );
+    transform: translateX(-110%) skewX(-12deg);
+    pointer-events: none;
+    z-index: 1;
+    transition: none;
+  }
+  .gtab-card-finance:hover::before {
+    animation: gtab-shimmer 0.70s ease forwards;
+  }
+  .gtab-card-finance:hover {
+    transform: translateY(-6px);
+    box-shadow:
+      0 48px 90px rgba(0, 0, 0, 0.65),
+      0 0 60px rgba(0, 194, 209, 0.28),
+      0 0 0 1.5px rgba(0, 194, 209, 0.42),
+      inset 0 1px 0 rgba(0, 194, 209, 0.10);
+    animation: gtab-border-glow 2.2s ease-in-out infinite;
+  }
+
+  /* ── Finance summary stat cards ──────────────────────────────────────────
+     Bounce scale + glow matching card accent color                          */
+  .gtab-stat-card {
+    position: relative;
+    overflow: hidden;
+    transition:
+      transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.24s ease;
+    box-shadow:
+      0 8px 28px rgba(0, 0, 0, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.20);
+  }
+  .gtab-stat-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.07) 50%,
+      rgba(255, 255, 255, 0.12) 55%,
+      transparent 70%
+    );
+    transform: translateX(-110%) skewX(-12deg);
+    pointer-events: none;
+    z-index: 1;
+    transition: none;
+  }
+  .gtab-stat-card:hover::before {
+    animation: gtab-shimmer 0.55s ease forwards;
+  }
+  .gtab-stat-card:hover {
+    transform: translateY(-6px) scale(1.04);
+    box-shadow:
+      0 24px 56px rgba(0, 0, 0, 0.55),
+      0 0 36px rgba(0, 194, 209, 0.22),
+      0 0 0 1.5px rgba(0, 194, 209, 0.30),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  /* ── Info / tip / suggestion boxes — subtle pulse glow on hover ─────────── */
+  .gtab-application-shell .rounded-xl.border.border-teal-200,
+  .gtab-application-shell .rounded-2xl.border.border-teal-200\/70 {
+    transition: box-shadow 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .gtab-application-shell .rounded-xl.border.border-teal-200:hover,
+  .gtab-application-shell .rounded-2xl.border.border-teal-200\/70:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(0, 194, 209, 0.12), 0 0 0 1px rgba(0, 194, 209, 0.22);
+  }
+
+  /* ── Amber CA tip box ────────────────────────────────────────────────────── */
+  .gtab-application-shell .rounded-xl.border.border-amber-200 {
+    transition: box-shadow 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .gtab-application-shell .rounded-xl.border.border-amber-200:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(251, 191, 36, 0.14), 0 0 0 1px rgba(251, 191, 36, 0.28);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GTAB — Input Polish: ₹ symbol · spinner removal · modern date picker
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. ₹ Placeholder — bright enough to read on any dark background ──── */
+.gtab-application-shell input::placeholder,
+.gtab-application-shell textarea::placeholder {
+  color: rgba(148, 163, 184, 0.85) !important; /* slate-400 @ 85% opacity */
+  font-family: 'DM Sans', 'Noto Sans', system-ui, sans-serif;
+  font-weight: 400;
+}
+
+/* Number inputs: fall back to system-ui for ₹ glyph if DM Mono misses it */
+.gtab-application-shell input[type="number"] {
+  font-family: 'DM Mono', 'Noto Sans', system-ui, monospace;
+}
+
+/* ── 2. Remove ugly spinner arrows from ALL number inputs ─────────────── */
+.gtab-application-shell input[type="number"]::-webkit-outer-spin-button,
+.gtab-application-shell input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+.gtab-application-shell input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ── 3. Modern Date Picker ────────────────────────────────────────────── */
+
+/* Force dark color-scheme so date text renders white on dark input */
+.gtab-application-shell input[type="date"] {
+  color-scheme: dark;
+  position: relative;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+/* Replace the old browser calendar icon with a clean teal SVG */
+.gtab-application-shell input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 6px;
+  margin-right: 2px;
+  border-radius: 6px;
+  opacity: 0.85;
+  transition: opacity 0.18s ease, background 0.18s ease;
+  /* Teal calendar SVG icon */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2300C2D1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='3' ry='3'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 18px 18px;
+  /* Hide the default browser icon */
+  color: transparent;
+  -webkit-appearance: none;
+}
+
+.gtab-application-shell input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: rgba(0, 194, 209, 0.15);
+}
+
+/* Date field text colour — ensure MM/DD/YYYY shows in readable white/teal */
+.gtab-application-shell input[type="date"]:not(:placeholder-shown),
+.gtab-application-shell input[type="date"]:valid {
+  color: #e2e8f0; /* slate-200 — bright readable white-grey */
+}
+
+/* Highlighted selected date segment → teal accent */
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0 2px;
+}
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-text {
+  color: rgba(0, 194, 209, 0.6);
+  padding: 0 3px;
+}
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-month-field,
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-day-field,
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-year-field {
+  color: #e2e8f0;
+  border-radius: 3px;
+  padding: 1px 3px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-month-field:focus,
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-day-field:focus,
+.gtab-application-shell input[type="date"]::-webkit-datetime-edit-year-field:focus {
+  background: rgba(0, 194, 209, 0.22);
+  color: #00C2D1;
+  outline: none;
+}

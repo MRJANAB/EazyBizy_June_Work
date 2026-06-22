@@ -1,0 +1,48 @@
+# ── Build outputs ────────────────────────────────────────────────────────────
+dist
+dist-ssr
+build
+
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.eggs
+
+# ── Environment / Secrets — NEVER commit these ───────────────────────────────
+.env
+.env.local
+.env.*.local
+*.local
+
+# ── Generated reports (large binary/json files) ──────────────────────────────
+backend/generated_reports/
+*.pdf
+
+# ── Python cache ─────────────────────────────────────────────────────────────
+backend/**/__pycache__/
+backend/**/*.pyc
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+Thumbs.db

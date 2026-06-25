@@ -11,6 +11,7 @@ from .breakeven import calculate_breakeven
 from .sensitivity import calculate_sensitivity
 from .historical import (
     build_historical_statement,
+    build_historical_balance_sheet,
     historical_sales_trend,
     projection_continuity,
 )
@@ -54,6 +55,7 @@ def generate_cma_report(intake_data: Dict[str, Any]) -> Dict[str, Any]:
         "operating_statement": operating_statement,
         "depreciation_chart": calculate_depreciation_by_class(intake),
         "historical_operating_statement": historical_statement,
+        "historical_balance_sheet": build_historical_balance_sheet(intake),
         "operating_statement_full": operating_statement_full,
         "projection_continuity": continuity,
         "balance_sheet": balance_sheet,

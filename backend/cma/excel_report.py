@@ -133,6 +133,18 @@ def _op_periods(results, n=5):
     return cols
 
 
+def _bs_periods(results, n=5):
+    """Combined balance-sheet columns: audited historicals + projected years."""
+    hist = results.get("historical_balance_sheet", [])
+    proj = results.get("balance_sheet", [])[:n]
+    fy = _fy_labels(results, n)
+    tags = ["(provisional)", "(estimated)", "(projected)", "(projected)", "(projected)"]
+    cols = [(str(h.get("year", "")), "(audited)", h, True) for h in hist]
+    for i, b in enumerate(proj):
+        cols.append((fy[i], tags[i] if i < len(tags) else "(projected)", b, False))
+    return cols
+
+
 def _autosize(ws, first_w=46):
     ws.column_dimensions["A"].width = first_w
     for col in range(2, ws.max_column + 1):
@@ -472,9 +484,11 @@ def _sheet_operating_statement(wb, results, n=5):
 
 def _sheet_balance_sheet_full(wb, results, n=5):
     ws = wb.create_sheet("Balance Sheet")
-    _title(ws, "Balance Sheet (Form III)", n + 1)
-    _period_header(ws, results, n)
-    bs_rows = results.get("balance_sheet", [])[:n]
+    cols = _bs_periods(results, n)
+    _title(ws, "Balance Sheet (Form III)", len(cols) + 1)
+    _header_cols(ws, [(c[0], c[1]) for c in cols])
+    bs_list = [c[2] for c in cols]
+    n_hist = sum(1 for c in cols if c[3])           # audited columns count
     dep = results.get("depreciation_chart", {}).get("totals", {})
 
     def L(b, k):
@@ -483,51 +497,55 @@ def _sheet_balance_sheet_full(wb, results, n=5):
     def CA(b, k):
         return b["assets"]["current_assets"].get(k, 0)
 
-    _row(ws, "CURRENT LIABILITIES", [""] * n, sub=True, span=n)
-    _row(ws, "  Working Capital Bank Borrowing", [L(b, "wc_loan") for b in bs_rows], span=n)
-    _row(ws, "  Sundry Creditors (Trade)", [L(b, "creditors") for b in bs_rows], span=n)
+    blank = len(bs_list)
+    _row(ws, "CURRENT LIABILITIES", [""] * blank, sub=True)
+    _row(ws, "  Working Capital Bank Borrowing", [L(b, "wc_loan") for b in bs_list])
+    _row(ws, "  Sundry Creditors (Trade)", [L(b, "creditors") for b in bs_list])
     _row(ws, "  TOTAL CURRENT LIABILITIES",
-         [L(b, "wc_loan") + L(b, "creditors") for b in bs_rows], bold=True, span=n)
-    _row(ws, "TERM LIABILITIES", [""] * n, sub=True, span=n)
-    _row(ws, "  Term Loan", [L(b, "term_loan") for b in bs_rows], span=n)
-    _row(ws, "  TOTAL TERM LIABILITIES", [L(b, "term_loan") for b in bs_rows], bold=True, span=n)
+         [L(b, "wc_loan") + L(b, "creditors") for b in bs_list], bold=True)
+    _row(ws, "TERM LIABILITIES", [""] * blank, sub=True)
+    _row(ws, "  Term Loan", [L(b, "term_loan") for b in bs_list])
+    _row(ws, "  TOTAL TERM LIABILITIES", [L(b, "term_loan") for b in bs_list], bold=True)
     _row(ws, "TOTAL OUTSIDE LIABILITIES",
-         [L(b, "wc_loan") + L(b, "creditors") + L(b, "term_loan") for b in bs_rows], bold=True, span=n)
-    _row(ws, "NET WORTH", [""] * n, sub=True, span=n)
-    _row(ws, "  Capital & Reserves", [L(b, "net_worth") for b in bs_rows], span=n)
-    _row(ws, "  NET WORTH", [L(b, "net_worth") for b in bs_rows], bold=True, span=n)
-    _row(ws, "TOTAL LIABILITIES", [b["liabilities"]["total"] for b in bs_rows], bold=True, span=n)
+         [L(b, "wc_loan") + L(b, "creditors") + L(b, "term_loan") for b in bs_list], bold=True)
+    _row(ws, "NET WORTH", [""] * blank, sub=True)
+    _row(ws, "  Capital & Reserves", [L(b, "net_worth") for b in bs_list])
+    _row(ws, "  NET WORTH", [L(b, "net_worth") for b in bs_list], bold=True)
+    _row(ws, "TOTAL LIABILITIES", [b["liabilities"]["total"] for b in bs_list], bold=True)
 
-    _row(ws, "CURRENT ASSETS", [""] * n, sub=True, span=n)
-    _row(ws, "  Cash & Bank Balance", [CA(b, "cash") for b in bs_rows], span=n)
-    _row(ws, "  Receivables (Debtors)", [CA(b, "debtors") for b in bs_rows], span=n)
-    _row(ws, "  Inventory - Raw Material", [CA(b, "rm_stock") for b in bs_rows], span=n)
-    _row(ws, "  Inventory - Work in Progress", [CA(b, "wip") for b in bs_rows], span=n)
-    _row(ws, "  Inventory - Finished Goods", [CA(b, "fg") for b in bs_rows], span=n)
-    _row(ws, "  TOTAL CURRENT ASSETS", [CA(b, "total") for b in bs_rows], bold=True, span=n)
-    _row(ws, "FIXED ASSETS", [""] * n, sub=True, span=n)
-    _row(ws, "  Gross Block", dep.get("opening", [0] * n)[:n], span=n)
-    _row(ws, "  Less: Depreciation", dep.get("depreciation", [0] * n)[:n], span=n)
-    _row(ws, "  NET BLOCK", [b["assets"].get("fixed_assets", 0) for b in bs_rows], bold=True, span=n)
-    _row(ws, "OTHER / INTANGIBLE ASSETS", [b["assets"].get("other_assets", 0) for b in bs_rows], span=n)
-    _row(ws, "TOTAL ASSETS", [b["assets"]["total"] for b in bs_rows], bold=True, span=n)
+    _row(ws, "CURRENT ASSETS", [""] * blank, sub=True)
+    _row(ws, "  Cash & Bank Balance", [CA(b, "cash") for b in bs_list])
+    _row(ws, "  Receivables (Debtors)", [CA(b, "debtors") for b in bs_list])
+    _row(ws, "  Inventory - Raw Material", [CA(b, "rm_stock") for b in bs_list])
+    _row(ws, "  Inventory - Work in Progress", [CA(b, "wip") for b in bs_list])
+    _row(ws, "  Inventory - Finished Goods", [CA(b, "fg") for b in bs_list])
+    _row(ws, "  TOTAL CURRENT ASSETS", [CA(b, "total") for b in bs_list], bold=True)
+    _row(ws, "FIXED ASSETS", [""] * blank, sub=True)
+    # Gross block / depreciation only available for projected years.
+    _row(ws, "  Gross Block", [""] * n_hist + dep.get("opening", [0] * n)[:n])
+    _row(ws, "  Less: Depreciation", [""] * n_hist + dep.get("depreciation", [0] * n)[:n])
+    _row(ws, "  NET BLOCK", [b["assets"].get("fixed_assets", 0) for b in bs_list], bold=True)
+    _row(ws, "OTHER / INTANGIBLE ASSETS", [b["assets"].get("other_assets", 0) for b in bs_list])
+    _row(ws, "TOTAL ASSETS", [b["assets"]["total"] for b in bs_list], bold=True)
 
     _row(ws, "Tangible Net Worth",
-         [L(b, "net_worth") - b["assets"].get("other_assets", 0) for b in bs_rows], span=n)
+         [L(b, "net_worth") - b["assets"].get("other_assets", 0) for b in bs_list])
     _row(ws, "Net Working Capital",
-         [CA(b, "total") - (L(b, "wc_loan") + L(b, "creditors")) for b in bs_rows], span=n)
+         [CA(b, "total") - (L(b, "wc_loan") + L(b, "creditors")) for b in bs_list])
     _row(ws, "Current Ratio",
          [round(CA(b, "total") / (L(b, "wc_loan") + L(b, "creditors")), 2)
-          if (L(b, "wc_loan") + L(b, "creditors")) else 0 for b in bs_rows], money=False, span=n)
-    _row(ws, "Difference [Assets - Liabilities]", [b.get("check", 0) for b in bs_rows], span=n)
+          if (L(b, "wc_loan") + L(b, "creditors")) else 0 for b in bs_list], money=False)
+    _row(ws, "Difference [Assets - Liabilities]", [b.get("check", 0) for b in bs_list])
     _autosize(ws, first_w=40)
 
 
 def _sheet_comparative(wb, results, n=5):
     ws = wb.create_sheet("Comparative Statement")
-    _title(ws, "Comparative Statement of Current Assets & Liabilities", n + 1)
-    _period_header(ws, results, n)
-    bs_rows = results.get("balance_sheet", [])[:n]
+    cols = _bs_periods(results, n)
+    _title(ws, "Comparative Statement of Current Assets & Liabilities", len(cols) + 1)
+    _header_cols(ws, [(c[0], c[1]) for c in cols])
+    bs_list = [c[2] for c in cols]
+    blank = len(bs_list)
 
     def CA(b, k):
         return b["assets"]["current_assets"].get(k, 0)
@@ -535,18 +553,18 @@ def _sheet_comparative(wb, results, n=5):
     def L(b, k):
         return b["liabilities"].get(k, 0)
 
-    _row(ws, "A. CURRENT ASSETS", [""] * n, sub=True, span=n)
-    _row(ws, "  1. Raw Material", [CA(b, "rm_stock") for b in bs_rows], span=n)
-    _row(ws, "  2. Work-in-Progress", [CA(b, "wip") for b in bs_rows], span=n)
-    _row(ws, "  3. Finished Goods", [CA(b, "fg") for b in bs_rows], span=n)
-    _row(ws, "  4. Receivables (Debtors)", [CA(b, "debtors") for b in bs_rows], span=n)
-    _row(ws, "  5. Cash & Bank", [CA(b, "cash") for b in bs_rows], span=n)
-    _row(ws, "  TOTAL CURRENT ASSETS", [CA(b, "total") for b in bs_rows], bold=True, span=n)
-    _row(ws, "B. CURRENT LIABILITIES", [""] * n, sub=True, span=n)
-    _row(ws, "  6. Sundry Creditors", [L(b, "creditors") for b in bs_rows], span=n)
-    _row(ws, "  7. WC Bank Borrowing", [L(b, "wc_loan") for b in bs_rows], span=n)
+    _row(ws, "A. CURRENT ASSETS", [""] * blank, sub=True)
+    _row(ws, "  1. Raw Material", [CA(b, "rm_stock") for b in bs_list])
+    _row(ws, "  2. Work-in-Progress", [CA(b, "wip") for b in bs_list])
+    _row(ws, "  3. Finished Goods", [CA(b, "fg") for b in bs_list])
+    _row(ws, "  4. Receivables (Debtors)", [CA(b, "debtors") for b in bs_list])
+    _row(ws, "  5. Cash & Bank", [CA(b, "cash") for b in bs_list])
+    _row(ws, "  TOTAL CURRENT ASSETS", [CA(b, "total") for b in bs_list], bold=True)
+    _row(ws, "B. CURRENT LIABILITIES", [""] * blank, sub=True)
+    _row(ws, "  6. Sundry Creditors", [L(b, "creditors") for b in bs_list])
+    _row(ws, "  7. WC Bank Borrowing", [L(b, "wc_loan") for b in bs_list])
     _row(ws, "  TOTAL CURRENT LIABILITIES",
-         [L(b, "creditors") + L(b, "wc_loan") for b in bs_rows], bold=True, span=n)
+         [L(b, "creditors") + L(b, "wc_loan") for b in bs_list], bold=True)
     _autosize(ws)
 
 

@@ -108,6 +108,7 @@ class HistoricalFinancial(BaseModel):
     stock: float
     term_loan_outstanding: float
     wc_outstanding: float
+    net_fixed_assets: float = 0
     net_worth: float
 
 class ProductRevenueModel(BaseModel):

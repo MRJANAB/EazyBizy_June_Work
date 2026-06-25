@@ -46,6 +46,9 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { validateReport, type ValidationResult } from "@/lib/cmaValidator";
 
+// Indian-format currency helper, shared across all wizard steps.
+const fmt = (n: number) => n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : `₹${Math.round(n).toLocaleString('en-IN')}`;
+
 interface AdvancedCMAWizardProps {
   isOpen: boolean;
   onClose: () => void;
@@ -460,7 +463,7 @@ function computeScorecard(m: LiveMetrics, fd: CMAFormData): ScorecardParam[] {
     comment: nwRatio >= 1.0 ? 'Net worth covers loan — strong personal guarantee.' : nwRatio >= 0.5 ? 'Partial coverage — collateral support advised.' : 'Low net worth — CGTMSE or collateral essential.' });
 
   // Revenue assumption
-  const revG = fd.assumptions.revenue_growth;
+  const revG = fd.assumptions?.revenue_growth ?? 10;
   const revScore = revG <= 15 ? 15 : revG <= 20 ? 10 : revG <= 25 ? 6 : 3;
   params.push({ label: 'Revenue Growth Assumption', value: `${revG}%/yr`,
     score: revScore, maxScore: 15,
@@ -468,12 +471,12 @@ function computeScorecard(m: LiveMetrics, fd: CMAFormData): ScorecardParam[] {
     comment: revG <= 15 ? 'Conservative — credible to bank.' : revG <= 20 ? 'Moderate — justify with market data.' : 'Aggressive — may trigger bank sensitivity queries.' });
 
   // Historical track record
-  const histScore = fd.historical_financials.length >= 3 ? 10 :
-                    fd.historical_financials.length >= 1 ? 6 : 3;
-  params.push({ label: 'Historical Track Record', value: fd.historical_financials.length > 0 ? `${fd.historical_financials.length} year(s)` : 'New Unit',
+  const histCount = fd.historical_financials?.length ?? 0;
+  const histScore = histCount >= 3 ? 10 : histCount >= 1 ? 6 : 3;
+  params.push({ label: 'Historical Track Record', value: histCount > 0 ? `${histCount} year(s)` : 'New Unit',
     score: histScore, maxScore: 10,
-    status: fd.historical_financials.length >= 2 ? 'good' : fd.historical_financials.length === 1 ? 'warn' : 'bad',
-    comment: fd.historical_financials.length >= 2 ? 'Established track record — reduces credit risk.' : fd.historical_financials.length === 1 ? 'Limited history — first-gen entrepreneur risk.' : 'New unit — projections unvalidated by actuals.' });
+    status: histCount >= 2 ? 'good' : histCount === 1 ? 'warn' : 'bad',
+    comment: histCount >= 2 ? 'Established track record — reduces credit risk.' : histCount === 1 ? 'Limited history — first-gen entrepreneur risk.' : 'New unit — projections unvalidated by actuals.' });
 
   // MoF Balance
   const mofOk = Math.abs(m.mofBalance) < 2;
@@ -539,7 +542,9 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
         //    Check both top-level cma_data column and nested project_report_inputs.cma_data
         const savedDraft = (data as any).cma_data || (data.project_report_inputs as any)?.cma_data;
         if (savedDraft && typeof savedDraft === 'object' && Object.keys(savedDraft).length > 0) {
-            setFormData(savedDraft);
+            // Merge over defaults so drafts saved by older versions (missing
+            // assumptions / historical_financials / etc.) don't break later steps.
+            setFormData({ ...INITIAL_CMA_DATA, ...savedDraft });
             toast({ title: "Draft Loaded", description: "Your previously saved CMA progress has been restored." });
             setIsLoadingData(false);
             return;
@@ -969,11 +974,16 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
           const mofTotal = (mof.promoter_contribution || 0) + (mof.unsecured_loans || 0) + (mof.subsidy || 0) + (mof.term_loan || 0) + (mof.other_funding || 0);
           const mofGap   = liveMetrics.totalProjectCost - mofTotal;
           const wcLoan   = mof.working_capital_loan || 0;
-          const autoBalance = () => {
-            const newPromoter = Math.max(0, liveMetrics.totalProjectCost - (mof.term_loan || 0) - (mof.subsidy || 0) - (mof.unsecured_loans || 0) - (mof.other_funding || 0));
-            setFormData({...formData, means_of_finance: {...mof, promoter_contribution: newPromoter}});
-          };
-          const syncTermLoan = () => setFormData({...formData, means_of_finance: {...mof, term_loan: formData.loan.amount}});
+          // Functional setState so these never read a stale closure of formData.
+          const autoBalance = () => setFormData(prev => {
+            const pc = Object.values(prev.project_cost).reduce((a, b) => a + (b || 0), 0);
+            const m = prev.means_of_finance;
+            const newPromoter = Math.max(0, pc - (m.term_loan || 0) - (m.subsidy || 0) - (m.unsecured_loans || 0) - (m.other_funding || 0));
+            return { ...prev, means_of_finance: { ...m, promoter_contribution: newPromoter } };
+          });
+          const syncTermLoan = () => setFormData(prev => ({
+            ...prev, means_of_finance: { ...prev.means_of_finance, term_loan: prev.loan.amount }
+          }));
           const mofRows = [
             { key: 'promoter_contribution', label: 'Promoter Equity / Own Funds', color: 'text-teal-400' },
             { key: 'subsidy',               label: 'Govt Subsidy / Margin Money',  color: 'text-emerald-400' },
@@ -986,10 +996,10 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-bold">Step 4 — Means of Finance</h3>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="text-blue-400 border-blue-500/30 text-xs" onClick={syncTermLoan}>
+                  <Button type="button" size="sm" variant="outline" className="text-blue-400 border-blue-500/30 text-xs" onClick={syncTermLoan}>
                     ↓ Sync Term Loan from Step 3
                   </Button>
-                  <Button size="sm" className="bg-teal-600 hover:bg-teal-500 text-xs" onClick={autoBalance}>
+                  <Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-500 text-xs" onClick={autoBalance}>
                     ⚡ Auto-Balance Promoter Equity
                   </Button>
                 </div>
@@ -1030,7 +1040,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                     <AlertCircle size={18} />
                     <span className="text-sm font-bold">MoF gap: ₹{Math.abs(mofGap).toLocaleString('en-IN')} {mofGap > 0 ? 'SHORT' : 'EXCESS'}</span>
                   </div>
-                  <Button size="sm" className="bg-rose-600 hover:bg-rose-500 text-xs" onClick={autoBalance}>Fix Now</Button>
+                  <Button type="button" size="sm" className="bg-rose-600 hover:bg-rose-500 text-xs" onClick={autoBalance}>Fix Now</Button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm font-bold">
@@ -1090,9 +1100,10 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
           { key: 'stock',                 label: 'Stock / Inventory',     section: 'Balance Sheet' },
           { key: 'term_loan_outstanding', label: 'Term Loan O/S',         section: 'Balance Sheet' },
           { key: 'wc_outstanding',        label: 'WC Loan O/S',           section: 'Balance Sheet' },
+          { key: 'net_fixed_assets',      label: 'Net Fixed Assets',      section: 'Balance Sheet' },
           { key: 'net_worth',             label: 'Net Worth / Equity',    section: 'Balance Sheet' },
         ];
-        const emptyHF = { year: String(new Date().getFullYear() - 1), sales: 0, purchases: 0, gross_profit: 0, salary: 0, rent: 0, utilities: 0, admin_expenses: 0, marketing: 0, depreciation: 0, interest: 0, tax: 0, pat: 0, cash: 0, debtors: 0, creditors: 0, stock: 0, term_loan_outstanding: 0, wc_outstanding: 0, net_worth: 0 };
+        const emptyHF = { year: String(new Date().getFullYear() - 1), sales: 0, purchases: 0, gross_profit: 0, salary: 0, rent: 0, utilities: 0, admin_expenses: 0, marketing: 0, depreciation: 0, interest: 0, tax: 0, pat: 0, cash: 0, debtors: 0, creditors: 0, stock: 0, term_loan_outstanding: 0, wc_outstanding: 0, net_fixed_assets: 0, net_worth: 0 };
         return (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1700,7 +1711,6 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
             expense_growth:   { label: 'Opex Growth / Year',       tip: 'Admin/utility cost escalation. Typical: 5–8%.', max: 30 },
             salary_increment: { label: 'Salary Increment / Year',  tip: 'Annual increment for manpower. Typical: 8–10%.', max: 30 },
           };
-          const fmt = (n: number) => n >= 100000 ? `₹${(n/100000).toFixed(1)}L` : `₹${Math.round(n).toLocaleString('en-IN')}`;
           const dscrColor = (d: number) => d >= 1.5 ? 'text-emerald-400' : d >= 1.25 ? 'text-amber-400' : 'text-rose-400';
           const pnlRows: { key: keyof typeof projection[0]; label: string; bold?: boolean; indent?: boolean }[] = [
             { key: 'revenue',      label: 'Revenue (Gross Sales)',       bold: true },

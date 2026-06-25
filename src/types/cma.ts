@@ -85,6 +85,7 @@ export interface CMAHistoricalFinancial {
   stock: number;
   term_loan_outstanding: number;
   wc_outstanding: number;
+  net_fixed_assets: number;
   net_worth: number;
 }
 

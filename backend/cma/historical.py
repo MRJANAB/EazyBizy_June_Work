@@ -49,7 +49,52 @@ def build_historical_statement(intake: CMAIntake) -> List[Dict[str, Any]]:
             "stock":           round(h.stock, 2),
             "term_loan_outstanding": round(h.term_loan_outstanding, 2),
             "wc_outstanding":  round(h.wc_outstanding, 2),
+            "net_fixed_assets": round(getattr(h, "net_fixed_assets", 0) or 0, 2),
             "net_worth":       round(h.net_worth, 2),
+        })
+    return rows
+
+
+def build_historical_balance_sheet(intake: CMAIntake) -> List[Dict[str, Any]]:
+    """
+    Audited balance sheet per historical year, shaped like the projected
+    balance_sheet rows so the Excel/PDF can render an 'audited' column.
+
+    Uses the fields captured in the wizard's historical step. `check` shows the
+    audited tally gap (audited figures may not balance to the rupee).
+    """
+    rows = []
+    for h in intake.historical_financials:
+        net_fixed = round(getattr(h, "net_fixed_assets", 0) or 0, 2)
+        creditors = round(h.creditors, 2)
+        wc_loan   = round(h.wc_outstanding, 2)
+        term_loan = round(h.term_loan_outstanding, 2)
+        net_worth = round(h.net_worth, 2)
+        cash      = round(h.cash, 2)
+        debtors   = round(h.debtors, 2)
+        stock     = round(h.stock, 2)
+
+        total_ca = round(stock + debtors + cash, 2)
+        total_liab = round(net_worth + term_loan + wc_loan + creditors, 2)
+        total_assets = round(net_fixed + total_ca, 2)
+
+        rows.append({
+            "year": h.year,
+            "period_type": "Actual",
+            "liabilities": {
+                "net_worth": net_worth, "term_loan": term_loan,
+                "wc_loan": wc_loan, "creditors": creditors, "total": total_liab,
+            },
+            "assets": {
+                "fixed_assets": net_fixed,
+                "current_assets": {
+                    "rm_stock": 0.0, "wip": 0.0, "fg": stock, "stock": stock,
+                    "debtors": debtors, "cash": cash, "total": total_ca,
+                },
+                "other_assets": 0.0,
+                "total": total_assets,
+            },
+            "check": round(total_assets - total_liab, 2),
         })
     return rows
 

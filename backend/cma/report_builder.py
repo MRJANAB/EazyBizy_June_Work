@@ -3,9 +3,12 @@ from .intake_mapper import CMAIntake
 from .operating_statement import calculate_operating_statement
 from .balance_sheet import calculate_balance_sheet
 from .depreciation import calculate_depreciation_by_class
-from .ratios import calculate_ratios
+from .ratios import calculate_ratios, calculate_ratios_extended
 from .cashflow import calculate_cashflow
 from .mpbf import calculate_mpbf, calculate_mpbf_by_year
+from .fund_flow import calculate_fund_flow
+from .breakeven import calculate_breakeven
+from .sensitivity import calculate_sensitivity
 from .historical import (
     build_historical_statement,
     historical_sales_trend,
@@ -55,7 +58,11 @@ def generate_cma_report(intake_data: Dict[str, Any]) -> Dict[str, Any]:
         "projection_continuity": continuity,
         "balance_sheet": balance_sheet,
         "cash_flow": cash_flow,
+        "fund_flow": calculate_fund_flow(intake, operating_statement, balance_sheet),
         "ratios": ratios,
+        "ratios_extended": calculate_ratios_extended(intake, operating_statement, balance_sheet),
+        "breakeven": calculate_breakeven(operating_statement),
+        "sensitivity": calculate_sensitivity(intake, operating_statement),
         "mpbf": mpbf,
         "mpbf_by_year": mpbf_by_year,
         "summary": {

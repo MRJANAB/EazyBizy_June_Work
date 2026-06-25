@@ -291,19 +291,134 @@ def _sheet_mpbf(wb, results, n=5):
     _autosize(ws)
 
 
+def _sheet_ratios(wb, results, n=5):
+    ws = wb.create_sheet("Ratio Analysis")
+    _title(ws, "Ratio Analysis", n + 1)
+    _period_header(ws, results, n)
+    rx = results.get("ratios_extended", [])[:n]
+
+    def col(key, fmt2=False):
+        vals = []
+        for r in rx:
+            v = r.get(key)
+            vals.append("N/A" if v is None else (round(v, 2) if fmt2 else v))
+        return vals
+
+    _row(ws, "PROFITABILITY", [""] * n, sub=True, span=n)
+    _row(ws, "Gross Profit Ratio (%)", col("gross_profit_ratio"), money=False, span=n)
+    _row(ws, "Net Profit Ratio (%)", col("net_profit_ratio"), money=False, span=n)
+    _row(ws, "Return on Capital Employed (%)", col("roce_pct"), money=False, span=n)
+    _row(ws, "LIQUIDITY", [""] * n, sub=True, span=n)
+    _row(ws, "Current Ratio", col("current_ratio"), money=False, span=n)
+    _row(ws, "Quick Ratio", col("quick_ratio"), money=False, span=n)
+    _row(ws, "SOLVENCY", [""] * n, sub=True, span=n)
+    _row(ws, "Debt-Equity Ratio", col("debt_equity"), money=False, span=n)
+    _row(ws, "TOL / TNW", col("tol_tnw"), money=False, span=n)
+    _row(ws, "TTL / TNW", col("ttl_tnw"), money=False, span=n)
+    _row(ws, "Interest Coverage Ratio", col("interest_coverage"), money=False, span=n)
+    _row(ws, "EFFICIENCY (TURNOVER)", [""] * n, sub=True, span=n)
+    _row(ws, "Stock Turnover Ratio", col("stock_turnover"), money=False, span=n)
+    _row(ws, "Total Assets Turnover Ratio", col("total_assets_turnover"), money=False, span=n)
+    _row(ws, "Fixed Assets Turnover Ratio", col("fixed_assets_turnover"), money=False, span=n)
+    _row(ws, "Current Assets Turnover Ratio", col("ca_turnover"), money=False, span=n)
+    _row(ws, "Working Capital Turnover Ratio", col("wc_turnover"), money=False, span=n)
+    _row(ws, "Capital Turnover Ratio", col("capital_turnover"), money=False, span=n)
+    _row(ws, "GROWTH (YoY)", [""] * n, sub=True, span=n)
+    _row(ws, "Growth in Net Sales (%)", col("growth_sales_pct"), money=False, span=n)
+    _row(ws, "Growth in Net Profit (%)", col("growth_profit_pct"), money=False, span=n)
+    _row(ws, "Growth in Net Worth (%)", col("growth_net_worth_pct"), money=False, span=n)
+    _row(ws, "ADDITIONAL", [""] * n, sub=True, span=n)
+    _row(ws, "Tangible Net Worth", col("tangible_net_worth"), span=n)
+    _row(ws, "Net Working Capital", col("net_working_capital"), span=n)
+    _autosize(ws)
+
+
+def _sheet_fund_flow(wb, results, n=5):
+    ws = wb.create_sheet("Fund Flow Statement")
+    _title(ws, "Fund Flow Statement", n + 1)
+    _period_header(ws, results, n)
+    ff = results.get("fund_flow", [])[:n]
+
+    def col(key):
+        return [f.get(key, 0) for f in ff]
+
+    _row(ws, "1. SOURCES", [""] * n, sub=True, span=n)
+    _row(ws, "  (a) Net Profit", col("net_profit"), span=n)
+    _row(ws, "  (b) Depreciation", col("depreciation"), span=n)
+    _row(ws, "  (c) Increase in Capital", col("increase_in_capital"), span=n)
+    _row(ws, "  (d) Increase in Term Liabilities", col("increase_in_term_liab"), span=n)
+    _row(ws, "  Total Sources", col("total_sources"), bold=True, span=n)
+    _row(ws, "2. USES", [""] * n, sub=True, span=n)
+    _row(ws, "  (a) Purchase of Fixed Assets", col("purchase_fixed_assets"), span=n)
+    _row(ws, "  (b) Repayment of Term Liabilities", col("repayment_term_liab"), span=n)
+    _row(ws, "  Total Uses", col("total_uses"), bold=True, span=n)
+    _row(ws, "3. Long Term Surplus / (Deficit)", col("long_term_surplus"), bold=True, span=n)
+    _row(ws, "4. Increase / (Decrease) in Current Assets", col("increase_in_ca"), span=n)
+    _row(ws, "5. Increase / (Decrease) in Current Liabilities", col("increase_in_cl"), span=n)
+    _row(ws, "6. Increase / (Decrease) in Working Capital", col("increase_in_wc"), span=n)
+    _row(ws, "7. Net Surplus / (Deficit)", col("net_surplus"), bold=True, span=n)
+    _autosize(ws, first_w=50)
+
+
+def _sheet_breakeven(wb, results, n=5):
+    ws = wb.create_sheet("Breakeven Analysis")
+    _title(ws, "Breakeven Analysis", n + 1)
+    _period_header(ws, results, n)
+    be = results.get("breakeven", [])[:n]
+
+    def col(key):
+        return [b.get(key, 0) for b in be]
+
+    _row(ws, "1. Net Sales", col("net_sales"), bold=True, span=n)
+    _row(ws, "2. Variable Costs", col("variable_costs"), span=n)
+    _row(ws, "3. Contribution (1 - 2)", col("contribution"), bold=True, span=n)
+    _row(ws, "   Contribution (% of Sales)", col("contribution_pct"), money=False, span=n)
+    _row(ws, "4. Fixed Costs", col("fixed_costs"), span=n)
+    _row(ws, "5. Breakeven Point (Sales Value)", col("bep_sales"), bold=True, span=n)
+    _row(ws, "6. Breakeven % (on Net Sales)", col("bep_pct"), money=False, span=n)
+    _autosize(ws)
+
+
+def _sheet_sensitivity(wb, results, n=5):
+    ws = wb.create_sheet("Sensitivity Analysis")
+    _title(ws, "Sensitivity Analysis", n + 1)
+    _period_header(ws, results, n)
+    s = results.get("sensitivity", {})
+
+    blocks = [
+        ("1. BASE CASE (PROJECTIONS)", "base"),
+        ("2. SALES DECREASE BY 10%", "sales_down_10"),
+        ("3. RAW MATERIAL / CONSUMABLE COST +10%", "rm_cost_up_10"),
+        ("4. INTEREST RATE INCREASE BY 2%", "interest_up_2"),
+    ]
+    for title, key in blocks:
+        rows = s.get(key, [])[:n]
+        _row(ws, title, [""] * n, sub=True, span=n)
+        _row(ws, "  Net Sales", [r.get("net_sales", 0) for r in rows], span=n)
+        _row(ws, "  Net Profit After Tax", [r.get("pat", 0) for r in rows], span=n)
+        _row(ws, "  DSCR", [r.get("dscr", 0) for r in rows], money=False, span=n)
+    _autosize(ws)
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
 
 def build_cma_workbook(results: Dict[str, Any]) -> bytes:
-    """Build the Phase-A CMA workbook and return xlsx bytes."""
+    """Build the CMA workbook (Phase A + B sheets) and return xlsx bytes."""
     wb = Workbook()
     wb.remove(wb.active)  # drop default sheet
 
+    # Phase A
     _sheet_summary(wb, results)
     _sheet_depreciation(wb, results)
     _sheet_cash_flow(wb, results)
     _sheet_dscr(wb, results)
     _sheet_turnover(wb, results)
     _sheet_mpbf(wb, results)
+    # Phase B
+    _sheet_ratios(wb, results)
+    _sheet_fund_flow(wb, results)
+    _sheet_breakeven(wb, results)
+    _sheet_sensitivity(wb, results)
 
     out = io.BytesIO()
     wb.save(out)

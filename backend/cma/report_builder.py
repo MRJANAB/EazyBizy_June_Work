@@ -2,6 +2,7 @@ from typing import Dict, Any
 from .intake_mapper import CMAIntake
 from .operating_statement import calculate_operating_statement
 from .balance_sheet import calculate_balance_sheet
+from .depreciation import calculate_depreciation_by_class
 from .ratios import calculate_ratios
 from .cashflow import calculate_cashflow
 from .mpbf import calculate_mpbf, calculate_mpbf_by_year
@@ -48,6 +49,7 @@ def generate_cma_report(intake_data: Dict[str, Any]) -> Dict[str, Any]:
             "loan": intake.loan.model_dump()
         },
         "operating_statement": operating_statement,
+        "depreciation_chart": calculate_depreciation_by_class(intake),
         "historical_operating_statement": historical_statement,
         "operating_statement_full": operating_statement_full,
         "projection_continuity": continuity,

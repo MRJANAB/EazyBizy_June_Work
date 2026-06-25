@@ -59,3 +59,56 @@ def calculate_depreciation_schedule(intake: CMAIntake, years: int = 5) -> List[D
         })
 
     return schedule
+
+
+# Display labels for the Depreciation Chart (CMA sheet).
+_CLASS_LABELS = [
+    ("land",             "Land",                 0.0),
+    ("building",         "Building",             5.0),
+    ("furniture",        "Furniture & Fixtures", 10.0),
+    ("plant_machinery",  "Plant & Machinery",    10.0),
+    ("computers",        "Computers",            40.0),
+    ("vehicles",         "Vehicles",             15.0),
+    ("office_equipment", "Office Equipment",     10.0),
+]
+
+
+def calculate_depreciation_by_class(intake: CMAIntake, years: int = 5) -> Dict[str, Any]:
+    """
+    Per-asset-class WDV schedule for the CMA Depreciation Chart.
+
+    For each class returns opening (written-down) value, depreciation and
+    closing WDV per year, plus the aggregate totals row. Land carries a 0% rate
+    (never depreciates).
+    """
+    rates = intake.depreciation_rates if isinstance(intake.depreciation_rates, dict) else _DEFAULT_RATES
+    pc = intake.project_cost
+    costs = {
+        "land": pc.land, "building": pc.building, "furniture": pc.furniture,
+        "plant_machinery": pc.plant_machinery, "computers": pc.computers,
+        "vehicles": pc.vehicles, "office_equipment": pc.office_equipment,
+    }
+
+    classes = []
+    for key, label, default_rate in _CLASS_LABELS:
+        rate = 0.0 if key == "land" else rates.get(key, default_rate)
+        opening = costs.get(key, 0.0)
+        rows = []
+        for _ in range(years):
+            dep = opening * rate / 100.0
+            wdv = opening - dep
+            rows.append({
+                "opening": round(opening, 2),
+                "depreciation": round(dep, 2),
+                "wdv": round(wdv, 2),
+            })
+            opening = wdv
+        classes.append({"name": label, "rate": rate, "years": rows})
+
+    totals = {"opening": [], "depreciation": [], "wdv": []}
+    for y in range(years):
+        totals["opening"].append(round(sum(c["years"][y]["opening"] for c in classes), 2))
+        totals["depreciation"].append(round(sum(c["years"][y]["depreciation"] for c in classes), 2))
+        totals["wdv"].append(round(sum(c["years"][y]["wdv"] for c in classes), 2))
+
+    return {"classes": classes, "totals": totals}

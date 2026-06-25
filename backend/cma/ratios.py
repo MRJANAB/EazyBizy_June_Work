@@ -23,18 +23,18 @@ def calculate_ratios(intake: CMAIntake, operating_projections: List[Dict[str, An
         total_debt = bs['liabilities']['term_loan'] + bs['liabilities']['wc_loan']
         debt_equity = total_debt / bs['liabilities']['net_worth'] if bs['liabilities']['net_worth'] > 0 else 0
         
-        # BUG 8 FIX: DSCR = (CashAccruals + TL_Interest) / (TL_Repayment + TL_Interest)
-        # cash_accruals = PAT + Depreciation (already computed in operating_statement)
-        # Use half-yearly reducing balance principal: TermLoan / (tenure_years × 2) × 2 per year
-        tenure_years      = max(int(intake.loan.tenure_months / 12), 1)
-        tl_interest       = op['interest']
-        cash_acc          = op['cash_accruals']  # PAT + Dep
-        principal_repayment = intake.means_of_finance.term_loan / tenure_years
+        # DSCR = (Cash Accruals + TL Interest) / (TL Principal + TL Interest)
+        # Uses the term-loan portion of interest and the actual scheduled
+        # principal for this year (from the single-source loan schedule),
+        # NOT a straight-line tenure average — so DSCR matches the amortisation.
+        tl_interest         = op.get('tl_interest', op['interest'])
+        cash_acc            = op['cash_accruals']  # PAT + Dep
+        principal_repayment = op.get('tl_principal', 0.0)
         numerator   = cash_acc + tl_interest
         denominator = tl_interest + principal_repayment
         dscr = numerator / denominator if denominator > 0 else 0
-        
-        # Interest Coverage = EBITDA / Interest
+
+        # Interest Coverage = EBITDA / Interest (total finance cost: TL + WC)
         interest_coverage = op['ebitda'] / op['interest'] if op['interest'] > 0 else 0
         
         # Margins

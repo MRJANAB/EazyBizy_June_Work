@@ -1,5 +1,7 @@
 from typing import List, Dict, Any
 from .intake_mapper import CMAIntake
+from .loan_schedule import calculate_loan_schedule
+from .depreciation import calculate_depreciation_schedule
 
 
 def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dict[str, Any]]:
@@ -36,28 +38,13 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
     exp_growth  = intake.assumptions.get("expense_growth", 5.0) / 100
     sal_incr    = intake.assumptions.get("salary_increment", 8.0) / 100
 
-    # Depreciation (SLM on fixed assets)
-    fixed_assets = (
-        intake.project_cost.building + intake.project_cost.plant_machinery +
-        intake.project_cost.furniture + intake.project_cost.computers +
-        intake.project_cost.vehicles + intake.project_cost.office_equipment
-    )
-    # Apply contingency to plant_machinery gross block
-    dep_rates = intake.depreciation_rates if isinstance(intake.depreciation_rates, dict) else {
-        "building": 5.0, "plant_machinery": 10.0, "furniture": 10.0,
-        "vehicles": 15.0, "computers": 40.0, "office_equipment": 10.0
-    }
-    depreciation = (
-        intake.project_cost.building       * dep_rates.get("building",        5.0) / 100 +
-        intake.project_cost.plant_machinery * dep_rates.get("plant_machinery", 10.0) / 100 +
-        intake.project_cost.furniture       * dep_rates.get("furniture",       10.0) / 100 +
-        intake.project_cost.computers       * dep_rates.get("computers",       40.0) / 100 +
-        intake.project_cost.vehicles        * dep_rates.get("vehicles",        15.0) / 100 +
-        intake.project_cost.office_equipment * dep_rates.get("office_equipment", 10.0) / 100
-    )
+    # Depreciation: WDV (reducing-balance) per year — declines as assets age,
+    # instead of charging the full rate on original cost every year.
+    dep_schedule = calculate_depreciation_schedule(intake, years)
 
-    # Term loan interest (annual)
-    tl_interest = intake.loan.amount * (intake.loan.interest_rate / 100)
+    # Financing: reducing-balance term-loan interest + revolving WC interest.
+    # Single source of truth — every downstream module reads these same figures.
+    loan_schedule = calculate_loan_schedule(intake, years)
 
     current_revenue = base_revenue
     current_salary  = base_salary
@@ -81,7 +68,16 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
         total_opex   = current_salary + current_opex
         ebitda       = gross_profit - total_opex
 
-        pbt  = ebitda - depreciation - tl_interest
+        # Reducing-balance financing cost for this year (TL + WC).
+        sched          = loan_schedule[year - 1]
+        tl_interest    = sched["tl_interest"]
+        wc_interest    = sched["wc_interest"]
+        total_interest = tl_interest + wc_interest
+
+        # WDV depreciation for this year (declines as assets age).
+        depreciation = dep_schedule[year - 1]["depreciation"]
+
+        pbt  = ebitda - depreciation - total_interest
         tax  = max(0, pbt * (intake.tax_rate / 100))
         pat  = pbt - tax
         cash_accruals = pat + depreciation
@@ -96,7 +92,11 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
             "other_opex":         round(current_opex, 2),
             "ebitda":             round(ebitda, 2),
             "depreciation":       round(depreciation, 2),
-            "interest":           round(tl_interest, 2),
+            "interest":           round(total_interest, 2),   # TL + WC (total finance cost)
+            "tl_interest":        round(tl_interest, 2),       # term-loan portion only
+            "wc_interest":        round(wc_interest, 2),       # working-capital portion
+            "tl_principal":       round(sched["tl_principal"], 2),
+            "tl_closing":         round(sched["tl_closing"], 2),
             "pbt":                round(pbt, 2),
             "tax":                round(tax, 2),
             "pat":                round(pat, 2),

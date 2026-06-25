@@ -109,13 +109,17 @@ def create_cma_pdf(data: dict, output_path: Optional[str] = None) -> Any:
     S = get_styles()
 
     # ── Safely pull sub-dicts ─────────────────────────────────────────────────
-    proj     = data.get('projections', {})
-    os_data  = proj.get('operating_statement', [])
-    bs_data  = proj.get('balance_sheet', [])
-    rat_data = proj.get('ratios', [])
-    dscr_d   = proj.get('dscr', {})
-    wc_mpbf  = proj.get('working_capital', {}).get('mpbf', 0)
-    dscr_avg = dscr_d.get('average', 0)
+    proj      = data.get('projections', {})
+    os_data   = proj.get('operating_statement', [])
+    bs_data   = proj.get('balance_sheet', [])
+    rat_data  = proj.get('ratios', [])
+    dscr_d    = proj.get('dscr', {})
+    wc_mpbf   = proj.get('working_capital', {}).get('mpbf', 0)
+    dscr_avg  = dscr_d.get('average', 0)
+    cf_data    = proj.get('cash_flow', [])
+    mpbf_data  = proj.get('mpbf_by_year', [])
+    hist_data  = proj.get('historical_operating_statement', [])
+    continuity = proj.get('projection_continuity', {})
 
     # Year 1 / Year 3 safe access
     y1 = os_data[0] if os_data else {}
@@ -182,6 +186,47 @@ def create_cma_pdf(data: dict, output_path: Optional[str] = None) -> Any:
         S['NormalText']
     ))
     story.append(Spacer(1, 8*mm))
+
+    # ── 2b. HISTORICAL (AUDITED) OPERATING STATEMENT — existing businesses only ──
+    if hist_data:
+        story.append(Paragraph("HISTORICAL (AUDITED) OPERATING STATEMENT", S['SectionHeader']))
+        story.append(Spacer(1, 4*mm))
+
+        hist_rows = [
+            ("Revenue from Operations",   "revenue"),
+            ("Less: Cost of Goods Sold",  "cogs"),
+            ("GROSS PROFIT",              "gross_profit"),
+            ("EBITDA",                    "ebitda"),
+            ("Depreciation",              "depreciation"),
+            ("Interest",                  "interest"),
+            ("NET PROFIT AFTER TAX",      "pat"),
+        ]
+        hist_header = [Paragraph("<b>Particulars</b>", S['TableHeader'])] + [
+            Paragraph(f"<b>{h.get('year', '')}</b>", S['TableHeader']) for h in hist_data
+        ]
+        hist_table: List[List[Any]] = [hist_header]
+        for label, key in hist_rows:
+            bold = label.isupper()
+            row: List[Any] = [Paragraph(f"<b>{label}</b>" if bold else label, S['NormalText'])]
+            for h in hist_data:
+                fmt = rs(h.get(key, 0))
+                row.append(Paragraph(f"<b>{fmt}</b>" if bold else fmt, S['TableText']))
+            hist_table.append(row)
+
+        col1 = 62*mm
+        rest = (108*mm) / max(len(hist_data), 1)
+        ht = Table(hist_table, colWidths=[col1] + [rest]*len(hist_data), repeatRows=1)
+        ht.setStyle(_table_style_base())
+        story.append(ht)
+        story.append(Spacer(1, 4*mm))
+
+        if continuity.get("applicable"):
+            flag = "RED FLAG" if continuity.get("implausible") else "Reasonable"
+            story.append(Paragraph(
+                f"<b>Projection continuity ({flag}):</b> {continuity.get('note', '')}",
+                S['NormalText']
+            ))
+        story.append(PageBreak())
 
     # ── 3. OPERATING STATEMENT ────────────────────────────────────────────────
     story.append(Paragraph("I. PROJECTED OPERATING STATEMENT", S['SectionHeader']))
@@ -312,21 +357,19 @@ def create_cma_pdf(data: dict, output_path: Optional[str] = None) -> Any:
          Paragraph("<b>DSCR</b>",                    S['TableHeader'])],
     ]
 
-    # Build DSCR detail from operating_statement + ratios (richer than dscr_d['yearly'])
-    tl = data.get('_intake_term_loan', 0)
-    tenure_yrs = max(1, len(os_data))
-    annual_principal = tl / tenure_yrs if tl else 0
-
+    # DSCR detail straight from the amortisation schedule carried on each row:
+    # term-loan interest and scheduled principal (not a straight-line average).
     for i, yr_op in enumerate(os_data):
-        yr_r   = rat_data[i] if i < len(rat_data) else {}
-        ca     = yr_op.get('cash_accruals', 0)
-        intr   = yr_op.get('interest', 0)
-        dscr_v = yr_r.get('dscr', 0)
+        yr_r      = rat_data[i] if i < len(rat_data) else {}
+        ca        = yr_op.get('cash_accruals', 0)
+        intr      = yr_op.get('tl_interest', yr_op.get('interest', 0))
+        principal = yr_op.get('tl_principal', 0)
+        dscr_v    = yr_r.get('dscr', 0)
         dscr_table_data.append([
             f"Year {yr_op['year']}",
             rs(ca),
             rs(intr),
-            rs(annual_principal),
+            rs(principal),
             f"<b>{dscr_v:.2f}x</b>",
         ])
 
@@ -350,6 +393,76 @@ def create_cma_pdf(data: dict, output_path: Optional[str] = None) -> Any:
         S['SmallGray']
     ))
     story.append(Spacer(1, 16*mm))
+
+    # ── 6b. CASH FLOW STATEMENT (reconciled to Balance Sheet) ─────────────────
+    if cf_data:
+        story.append(PageBreak())
+        story.append(Paragraph("IV. CASH FLOW STATEMENT", S['SectionHeader']))
+        story.append(Spacer(1, 4*mm))
+
+        cf_rows = [
+            ("Opening Cash & Bank",            "opening_cash",   False),
+            ("Operating Cash Flow",            "operating_cash", True),
+            ("  Working Capital Change",       "wc_change",      False),
+            ("Investing Cash Flow",            "investing_cash", False),
+            ("Financing Cash Flow",            "financing_cash", False),
+            ("Net Cash Flow",                  "net_cash_flow",  True),
+            ("Closing Cash (= Balance Sheet)", "closing_cash",   True),
+        ]
+        cf_table: List[List[Any]] = [_yr_header(S)]
+        for label, key, bold in cf_rows:
+            row: List[Any] = [Paragraph(f"<b>{label}</b>" if bold else label, S['NormalText'])]
+            for yr in cf_data:
+                fmt = rs(yr.get(key, 0))
+                row.append(Paragraph(f"<b>{fmt}</b>" if bold else fmt, S['TableText']))
+            cf_table.append(row)
+
+        cft = Table(cf_table, colWidths=[62*mm] + [21.6*mm]*5, repeatRows=1)
+        cft.setStyle(_table_style_base())
+        story.append(cft)
+        story.append(Spacer(1, 3*mm))
+        all_recon = all(c.get("reconciles", False) for c in cf_data)
+        story.append(Paragraph(
+            "<i>Closing cash reconciles to the Balance Sheet cash line in every year"
+            + ("." if all_recon else " — review flagged years.") + "</i>",
+            S['SmallGray']
+        ))
+
+    # ── 6c. MAXIMUM PERMISSIBLE BANK FINANCE (per year) ───────────────────────
+    if mpbf_data:
+        story.append(Spacer(1, 10*mm))
+        story.append(Paragraph("V. MAXIMUM PERMISSIBLE BANK FINANCE (MPBF)", S['SectionHeader']))
+        story.append(Spacer(1, 4*mm))
+
+        mpbf_rows = [
+            ("Chargeable Current Assets",          "current_assets"),
+            ("Less: Other Current Liab (Creditors)", "other_cl"),
+            ("Working Capital Gap",                "wc_gap"),
+            ("MPBF (Method II) - Permissible",     "mpbf"),
+            ("WC Limit Sought",                    "wc_loan_sought"),
+        ]
+        mpbf_table: List[List[Any]] = [_yr_header(S)]
+        for label, key in mpbf_rows:
+            bold = key in ("mpbf", "wc_loan_sought")
+            row: List[Any] = [Paragraph(f"<b>{label}</b>" if bold else label, S['NormalText'])]
+            for yr in mpbf_data:
+                fmt = rs(yr.get(key, 0))
+                row.append(Paragraph(f"<b>{fmt}</b>" if bold else fmt, S['TableText']))
+            mpbf_table.append(row)
+
+        mt = Table(mpbf_table, colWidths=[62*mm] + [21.6*mm]*5, repeatRows=1)
+        mt.setStyle(_table_style_base())
+        story.append(mt)
+        story.append(Spacer(1, 3*mm))
+        y1m = mpbf_data[0]
+        within = y1m.get("within_limit", True)
+        verdict = ("within the permissible MPBF limit" if within
+                   else f"ABOVE the permissible MPBF by {rs(y1m.get('excess_over_mpbf', 0))}")
+        story.append(Paragraph(
+            f"<i>Year 1: WC limit sought ({rs(y1m.get('wc_loan_sought', 0))}) is {verdict} "
+            f"(Method II = {rs(y1m.get('mpbf', 0))}).</i>",
+            S['SmallGray']
+        ))
 
     # ── 7. DECLARATION ────────────────────────────────────────────────────────
     decl = [

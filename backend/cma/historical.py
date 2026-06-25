@@ -43,9 +43,12 @@ def build_historical_statement(intake: CMAIntake) -> List[Dict[str, Any]]:
             "pat":             round(h.pat, 2),
             "cash_accruals":   round(h.pat + h.depreciation, 2),
             # Carried actuals for the analyst (balance-sheet side)
+            "cash":            round(h.cash, 2),
             "debtors":         round(h.debtors, 2),
             "creditors":       round(h.creditors, 2),
             "stock":           round(h.stock, 2),
+            "term_loan_outstanding": round(h.term_loan_outstanding, 2),
+            "wc_outstanding":  round(h.wc_outstanding, 2),
             "net_worth":       round(h.net_worth, 2),
         })
     return rows

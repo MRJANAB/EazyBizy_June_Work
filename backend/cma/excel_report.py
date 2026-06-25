@@ -82,7 +82,9 @@ def _period_header(ws, results, n=5):
             cell.border = _BORDER
 
 
-def _row(ws, label: str, values: List[Any], *, bold=False, sub=False, money=True, span=5):
+def _row(ws, label: str, values: List[Any], *, bold=False, sub=False, money=True, span=None):
+    if span is None:
+        span = len(values)
     ws.append([label] + list(values))
     r = ws.max_row
     lab = ws.cell(r, 1)
@@ -102,6 +104,33 @@ def _row(ws, label: str, values: List[Any], *, bold=False, sub=False, money=True
         if bold:
             cell.fill = _TOTAL_FILL
     lab.border = _BORDER
+
+
+def _header_cols(ws, cols):
+    """Period header for a variable column set: cols = [(label, tag), ...]."""
+    ws.append(["Particulars"] + [c[0] for c in cols])
+    r1 = ws.max_row
+    ws.append([""] + [c[1] for c in cols])
+    r2 = ws.max_row
+    for col in range(1, len(cols) + 2):
+        for r in (r1, r2):
+            cell = ws.cell(r, col)
+            cell.fill = _HEADER_FILL if r == r1 else _SUB_FILL
+            cell.font = _HEADER_FONT if r == r1 else Font(italic=True, size=8, color="475569")
+            cell.alignment = _CENTER if col > 1 else _LEFT
+            cell.border = _BORDER
+
+
+def _op_periods(results, n=5):
+    """Combined column set: audited historicals + projected years."""
+    hist = results.get("historical_operating_statement", [])
+    proj = results.get("operating_statement", [])[:n]
+    fy = _fy_labels(results, n)
+    tags = ["(provisional)", "(estimated)", "(projected)", "(projected)", "(projected)"]
+    cols = [(str(h.get("year", "")), "(audited)", h) for h in hist]
+    for i, o in enumerate(proj):
+        cols.append((fy[i], tags[i] if i < len(tags) else "(projected)", o))
+    return cols
 
 
 def _autosize(ws, first_w=46):
@@ -400,25 +429,148 @@ def _sheet_sensitivity(wb, results, n=5):
     _autosize(ws)
 
 
+def _sheet_operating_statement(wb, results, n=5):
+    ws = wb.create_sheet("Operating Statement")
+    cols = _op_periods(results, n)
+    _title(ws, "Operating Statement (Form II)", len(cols) + 1)
+    _header_cols(ws, [(c[0], c[1]) for c in cols])
+    ops = [c[2] for c in cols]
+
+    def g(o, k):
+        return o.get(k, 0)
+
+    def tl_int(o):
+        return o.get("tl_interest", o.get("interest", 0))
+
+    def wc_int(o):
+        return o.get("wc_interest", 0)
+
+    _row(ws, "1. Gross Sales / Sales & Services", [g(o, "revenue") for o in ops], bold=True)
+    _row(ws, "2. Net Sales", [g(o, "revenue") for o in ops], bold=True)
+    _row(ws, "3. COST OF SALES", [""] * len(ops), sub=True)
+    _row(ws, "   Raw Material / Consumables", [g(o, "cogs") for o in ops])
+    _row(ws, "   Depreciation", [g(o, "depreciation") for o in ops])
+    _row(ws, "   Cost of Production / Sales",
+         [g(o, "cogs") + g(o, "depreciation") for o in ops], bold=True)
+    _row(ws, "4. Selling, General & Admin Expenses",
+         [g(o, "salary") + g(o, "other_opex") for o in ops])
+    _row(ws, "5. Total Cost of Sales (3+4)",
+         [g(o, "cogs") + g(o, "depreciation") + g(o, "salary") + g(o, "other_opex") for o in ops], bold=True)
+    _row(ws, "6. Operating Profit before Interest",
+         [g(o, "ebitda") - g(o, "depreciation") for o in ops], bold=True)
+    _row(ws, "7. Interest on Working Capital", [wc_int(o) for o in ops])
+    _row(ws, "   Interest on Term Loan", [tl_int(o) for o in ops])
+    _row(ws, "8. Operating Profit after Interest (PBT)", [g(o, "pbt") for o in ops], bold=True)
+    _row(ws, "9. Provision for Tax", [g(o, "tax") for o in ops])
+    _row(ws, "10. NET PROFIT AFTER TAX", [g(o, "pat") for o in ops], bold=True)
+    _row(ws, "11. Retained Profit", [g(o, "pat") for o in ops])
+    _row(ws, "NP Ratio (%)",
+         [round(g(o, "pat") / g(o, "revenue") * 100, 2) if g(o, "revenue") else 0 for o in ops],
+         money=False)
+    _autosize(ws, first_w=40)
+
+
+def _sheet_balance_sheet_full(wb, results, n=5):
+    ws = wb.create_sheet("Balance Sheet")
+    _title(ws, "Balance Sheet (Form III)", n + 1)
+    _period_header(ws, results, n)
+    bs_rows = results.get("balance_sheet", [])[:n]
+    dep = results.get("depreciation_chart", {}).get("totals", {})
+
+    def L(b, k):
+        return b["liabilities"].get(k, 0)
+
+    def CA(b, k):
+        return b["assets"]["current_assets"].get(k, 0)
+
+    _row(ws, "CURRENT LIABILITIES", [""] * n, sub=True, span=n)
+    _row(ws, "  Working Capital Bank Borrowing", [L(b, "wc_loan") for b in bs_rows], span=n)
+    _row(ws, "  Sundry Creditors (Trade)", [L(b, "creditors") for b in bs_rows], span=n)
+    _row(ws, "  TOTAL CURRENT LIABILITIES",
+         [L(b, "wc_loan") + L(b, "creditors") for b in bs_rows], bold=True, span=n)
+    _row(ws, "TERM LIABILITIES", [""] * n, sub=True, span=n)
+    _row(ws, "  Term Loan", [L(b, "term_loan") for b in bs_rows], span=n)
+    _row(ws, "  TOTAL TERM LIABILITIES", [L(b, "term_loan") for b in bs_rows], bold=True, span=n)
+    _row(ws, "TOTAL OUTSIDE LIABILITIES",
+         [L(b, "wc_loan") + L(b, "creditors") + L(b, "term_loan") for b in bs_rows], bold=True, span=n)
+    _row(ws, "NET WORTH", [""] * n, sub=True, span=n)
+    _row(ws, "  Capital & Reserves", [L(b, "net_worth") for b in bs_rows], span=n)
+    _row(ws, "  NET WORTH", [L(b, "net_worth") for b in bs_rows], bold=True, span=n)
+    _row(ws, "TOTAL LIABILITIES", [b["liabilities"]["total"] for b in bs_rows], bold=True, span=n)
+
+    _row(ws, "CURRENT ASSETS", [""] * n, sub=True, span=n)
+    _row(ws, "  Cash & Bank Balance", [CA(b, "cash") for b in bs_rows], span=n)
+    _row(ws, "  Receivables (Debtors)", [CA(b, "debtors") for b in bs_rows], span=n)
+    _row(ws, "  Inventory - Raw Material", [CA(b, "rm_stock") for b in bs_rows], span=n)
+    _row(ws, "  Inventory - Work in Progress", [CA(b, "wip") for b in bs_rows], span=n)
+    _row(ws, "  Inventory - Finished Goods", [CA(b, "fg") for b in bs_rows], span=n)
+    _row(ws, "  TOTAL CURRENT ASSETS", [CA(b, "total") for b in bs_rows], bold=True, span=n)
+    _row(ws, "FIXED ASSETS", [""] * n, sub=True, span=n)
+    _row(ws, "  Gross Block", dep.get("opening", [0] * n)[:n], span=n)
+    _row(ws, "  Less: Depreciation", dep.get("depreciation", [0] * n)[:n], span=n)
+    _row(ws, "  NET BLOCK", [b["assets"].get("fixed_assets", 0) for b in bs_rows], bold=True, span=n)
+    _row(ws, "OTHER / INTANGIBLE ASSETS", [b["assets"].get("other_assets", 0) for b in bs_rows], span=n)
+    _row(ws, "TOTAL ASSETS", [b["assets"]["total"] for b in bs_rows], bold=True, span=n)
+
+    _row(ws, "Tangible Net Worth",
+         [L(b, "net_worth") - b["assets"].get("other_assets", 0) for b in bs_rows], span=n)
+    _row(ws, "Net Working Capital",
+         [CA(b, "total") - (L(b, "wc_loan") + L(b, "creditors")) for b in bs_rows], span=n)
+    _row(ws, "Current Ratio",
+         [round(CA(b, "total") / (L(b, "wc_loan") + L(b, "creditors")), 2)
+          if (L(b, "wc_loan") + L(b, "creditors")) else 0 for b in bs_rows], money=False, span=n)
+    _row(ws, "Difference [Assets - Liabilities]", [b.get("check", 0) for b in bs_rows], span=n)
+    _autosize(ws, first_w=40)
+
+
+def _sheet_comparative(wb, results, n=5):
+    ws = wb.create_sheet("Comparative Statement")
+    _title(ws, "Comparative Statement of Current Assets & Liabilities", n + 1)
+    _period_header(ws, results, n)
+    bs_rows = results.get("balance_sheet", [])[:n]
+
+    def CA(b, k):
+        return b["assets"]["current_assets"].get(k, 0)
+
+    def L(b, k):
+        return b["liabilities"].get(k, 0)
+
+    _row(ws, "A. CURRENT ASSETS", [""] * n, sub=True, span=n)
+    _row(ws, "  1. Raw Material", [CA(b, "rm_stock") for b in bs_rows], span=n)
+    _row(ws, "  2. Work-in-Progress", [CA(b, "wip") for b in bs_rows], span=n)
+    _row(ws, "  3. Finished Goods", [CA(b, "fg") for b in bs_rows], span=n)
+    _row(ws, "  4. Receivables (Debtors)", [CA(b, "debtors") for b in bs_rows], span=n)
+    _row(ws, "  5. Cash & Bank", [CA(b, "cash") for b in bs_rows], span=n)
+    _row(ws, "  TOTAL CURRENT ASSETS", [CA(b, "total") for b in bs_rows], bold=True, span=n)
+    _row(ws, "B. CURRENT LIABILITIES", [""] * n, sub=True, span=n)
+    _row(ws, "  6. Sundry Creditors", [L(b, "creditors") for b in bs_rows], span=n)
+    _row(ws, "  7. WC Bank Borrowing", [L(b, "wc_loan") for b in bs_rows], span=n)
+    _row(ws, "  TOTAL CURRENT LIABILITIES",
+         [L(b, "creditors") + L(b, "wc_loan") for b in bs_rows], bold=True, span=n)
+    _autosize(ws)
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
 
 def build_cma_workbook(results: Dict[str, Any]) -> bytes:
-    """Build the CMA workbook (Phase A + B sheets) and return xlsx bytes."""
+    """Build the CMA workbook in RBI/Nayak-Tandon sheet order and return xlsx bytes."""
     wb = Workbook()
     wb.remove(wb.active)  # drop default sheet
 
-    # Phase A
+    # Ordered to follow the standard CMA pack (Narrative & Graphical sheets pending).
     _sheet_summary(wb, results)
-    _sheet_depreciation(wb, results)
-    _sheet_cash_flow(wb, results)
-    _sheet_dscr(wb, results)
-    _sheet_turnover(wb, results)
-    _sheet_mpbf(wb, results)
-    # Phase B
-    _sheet_ratios(wb, results)
-    _sheet_fund_flow(wb, results)
-    _sheet_breakeven(wb, results)
-    _sheet_sensitivity(wb, results)
+    _sheet_operating_statement(wb, results)   # Phase C
+    _sheet_balance_sheet_full(wb, results)    # Phase C
+    _sheet_depreciation(wb, results)          # Phase A
+    _sheet_comparative(wb, results)           # Phase C
+    _sheet_ratios(wb, results)                # Phase B
+    _sheet_turnover(wb, results)              # Phase A
+    _sheet_mpbf(wb, results)                  # Phase A
+    _sheet_fund_flow(wb, results)             # Phase B
+    _sheet_cash_flow(wb, results)             # Phase A
+    _sheet_dscr(wb, results)                  # Phase A
+    _sheet_breakeven(wb, results)             # Phase B
+    _sheet_sensitivity(wb, results)           # Phase B
 
     out = io.BytesIO()
     wb.save(out)

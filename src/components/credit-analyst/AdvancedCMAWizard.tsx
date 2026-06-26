@@ -39,6 +39,8 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
+  Lightbulb,
+  ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CMAFormData, INITIAL_CMA_DATA } from "@/types/cma";
@@ -274,6 +276,96 @@ function getStepInsights(stepId: string, m: LiveMetrics, fd: CMAFormData): Insig
   return out;
 }
 
+// ─── CA & Banker's Lens — proactive, calculation-aware guidance per step ───────
+// Best-practice tips a CA / banker would give while preparing or appraising the
+// CMA. Pure rule/maths based (no external calls). Dynamic where numbers help.
+function getStepTips(stepId: string, m: LiveMetrics, fd: CMAFormData): Insight[] {
+  const t: Insight[] = [];
+  const L = (n: number) => `₹${(n / 100000).toFixed(1)}L`;
+  switch (stepId) {
+    case 'applicant':
+      t.push({ level: 'info', text: 'Bankers weigh promoter experience in the SAME line of business heavily — 3+ relevant years materially improves approval odds.' });
+      t.push({ level: 'info', text: 'Keep name, PAN & Aadhaar identical across all documents — mismatches are a leading cause of sanction delays.' });
+      t.push({ level: 'info', text: 'A qualification relevant to the activity (technical/trade) strengthens the promoter profile in the appraisal note.' });
+      break;
+    case 'business':
+      t.push({ level: 'info', text: 'Udyam registration unlocks PMEGP/CGTMSE benefits and priority-sector classification — register if pending.' });
+      t.push({ level: 'info', text: 'Banks cross-check GST returns against projected sales; for a proprietorship the promoter’s net worth IS the firm’s net worth.' });
+      t.push({ level: 'info', text: 'Match the constitution to the scheme — PMEGP suits proprietorship/partnership; larger limits suit Pvt Ltd/LLP.' });
+      break;
+    case 'loan':
+      t.push({ level: 'info', text: 'Match term-loan tenure to asset life; Working Capital is a revolving annual facility, not a term loan.' });
+      t.push({ level: 'info', text: 'A 6–12 month moratorium aligned to break-even is viewed favourably — repayment starts when cash flow does.' });
+      t.push({ level: 'info', text: 'Use a realistic rate (current MSME ~9–12%). Understating it inflates DSCR and invites rejection at appraisal.' });
+      break;
+    case 'cost': {
+      const soft = fd.project_cost.preliminary_expenses + fd.project_cost.marketing_launch + fd.project_cost.consultancy_fees + fd.project_cost.registration_license;
+      const softPct = m.totalProjectCost > 0 ? (soft / m.totalProjectCost) * 100 : 0;
+      t.push({ level: 'info', text: 'Bankers fund “hard” assets readily. Keep soft costs (preliminary, marketing, consultancy) within ~10–15% of project cost.' });
+      if (softPct > 15) t.push({ level: 'warn', text: `Soft costs are ${softPct.toFixed(0)}% of project cost — above ~15% draws scrutiny; shift to capitalised assets where valid.` });
+      t.push({ level: 'info', text: 'Add 3–5% contingency — under-provisioning causes overruns the bank won’t refinance later.' });
+      t.push({ level: 'info', text: 'Land is often excluded from bank-financed project cost unless freehold and independently valued.' });
+      break;
+    }
+    case 'finance':
+      t.push({ level: 'info', text: 'Promoter contribution ≥ 15% (vs the 10% floor) improves approval odds and pricing — show real skin-in-the-game.' });
+      t.push({ level: 'info', text: 'Means of Finance must equal Project Cost to the rupee. WC bank finance is shown separately as a revolving limit.' });
+      if (m.deRatio > 0) t.push({ level: m.deRatio <= 2 ? 'good' : 'info', text: `Target D:E ≤ 2:1 for comfort (3:1 is the outer MSME limit). You are at ${m.deRatio.toFixed(2)}:1.` });
+      break;
+    case 'historical':
+      t.push({ level: 'info', text: '2–3 years of audited financials with rising sales and positive PAT is the strongest credit signal.' });
+      t.push({ level: 'info', text: 'Reconcile historical sales to GST/ITR filings — bankers verify, and gaps erode credibility.' });
+      t.push({ level: 'info', text: 'Enter Net Fixed Assets per year so the report shows a tallied audited Balance Sheet column alongside projections.' });
+      break;
+    case 'products': {
+      const gm = m.monthlyRevenue > 0 ? (1 - m.monthlyRM / m.monthlyRevenue) * 100 : 0;
+      t.push({ level: 'info', text: 'Justify Year-1 revenue against installed capacity and last year’s actuals — avoid jumps over ~25–30%.' });
+      if (m.monthlyRevenue > 0) t.push({ level: gm >= 20 ? 'good' : 'warn', text: `Gross margin is ~${gm.toFixed(0)}%. Below 20% is a red flag (esp. trading); manufacturing should show clear value addition.` });
+      t.push({ level: 'info', text: 'Back selling price and volumes with evidence (quotations, orders, rate cards) — bankers ask for proof of demand.' });
+      break;
+    }
+    case 'manpower':
+      t.push({ level: 'info', text: 'Payroll above ~35–40% of revenue signals labour-heavy operations — ensure it stays sustainable after scale-up.' });
+      t.push({ level: 'info', text: 'Include realistic promoter remuneration — a zero promoter salary artificially inflates profit and DSCR.' });
+      break;
+    case 'opex':
+      t.push({ level: 'info', text: 'Keep opex defensible against the historical run-rate; sudden drops look optimistic to an appraiser.' });
+      t.push({ level: 'info', text: 'Power, rent and marketing should scale with capacity utilisation rather than staying flat across years.' });
+      break;
+    case 'wc_norms':
+      t.push({ level: 'info', text: 'Tandon Method-II: the bank funds 75% of the working-capital gap; the remaining 25% is promoter margin.' });
+      t.push({ level: 'info', text: 'Receivables ≤ 45 days and inventory ≤ 60 days keep the cash-conversion cycle bank-friendly.' });
+      t.push({ level: 'info', text: 'Negotiating longer supplier credit (creditor days) shrinks the funding gap — but stay within industry norms.' });
+      break;
+    case 'depreciation':
+      t.push({ level: 'info', text: 'Use WDV (Income-Tax) rates consistently across years — mixing SLM and WDV distorts the projected net block.' });
+      t.push({ level: 'info', text: 'Higher early depreciation lowers taxable profit but also lowers book PAT — bankers read DSCR on cash accruals (PAT + dep).' });
+      break;
+    case 'net_worth':
+      t.push({ level: m.netWorth >= m.termLoan && m.termLoan > 0 ? 'good' : 'info', text: `Promoter net worth ≥ loan amount = strong personal guarantee (yours: ${L(m.netWorth)} vs loan ${L(m.termLoan)}).` });
+      t.push({ level: 'info', text: 'List liquid assets (FD, mutual funds) separately — they reassure bankers on margin and contingency cover.' });
+      break;
+    case 'guarantor':
+      t.push({ level: 'info', text: 'A guarantor with independent, verifiable net worth strengthens a thin-file or first-generation proposal.' });
+      break;
+    case 'collateral':
+      t.push({ level: 'info', text: 'CGTMSE can replace collateral up to ₹5 Cr — remember to budget the guarantee fee in the projections.' });
+      t.push({ level: 'info', text: 'Hypothecation of current + fixed assets is standard primary security; fire/allied-perils insurance is mandatory.' });
+      break;
+    case 'scorecard':
+      t.push({ level: 'info', text: 'A clean sanction usually needs all three: DSCR ≥ 1.5 (min 1.25), D:E ≤ 2, promoter ≥ 15%.' });
+      t.push({ level: 'info', text: 'Record your CA opinion and any conditions — the sanctioning committee and audit trail rely on it.' });
+      break;
+    case 'assumptions':
+      t.push({ level: 'info', text: 'Conservative assumptions (growth ≤ 15%) are more credible — banks run a downside (−10% sales) sensitivity anyway.' });
+      t.push({ level: 'info', text: 'Keep COGS growth tied to revenue growth; decoupling them breaks the projection logic an appraiser will test.' });
+      break;
+    default:
+      t.push({ level: 'info', text: 'Fill each field as a banker would expect — consistent, evidence-backed, and conservative.' });
+  }
+  return t;
+}
+
 // ─── WC auto-calculator (Tandon Method II) ───────────────────────────────────
 function computeWCFromNorms(fd: CMAFormData, m: LiveMetrics) {
   const wc = fd.wc_norms;
@@ -487,6 +579,40 @@ function computeScorecard(m: LiveMetrics, fd: CMAFormData): ScorecardParam[] {
 
   return params;
 }
+
+// Collapsible best-practice tips panel shown on every step.
+const BankerTips = ({ tips }: { tips: Insight[] }) => {
+  const [open, setOpen] = useState(true);
+  if (!tips.length) return null;
+  const dot: Record<string, string> = {
+    good: 'text-emerald-400', warn: 'text-amber-400', error: 'text-rose-400', info: 'text-teal-400',
+  };
+  return (
+    <div className="mb-6 rounded-2xl border border-teal-500/20 bg-gradient-to-br from-teal-500/[0.07] to-emerald-500/[0.04] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-teal-500/[0.05] transition-colors"
+      >
+        <span className="flex items-center gap-2 text-sm font-bold text-teal-300">
+          <Lightbulb size={16} className="text-amber-400" />
+          CA &amp; Banker's Lens — Tips for this step
+        </span>
+        <ChevronDown size={16} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-2">
+          {tips.map((tip, i) => (
+            <div key={i} className="flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
+              <span className={`shrink-0 mt-0.5 font-black ${dot[tip.level]}`}>▸</span>
+              <span>{tip.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const InsightCard = ({ insights }: { insights: Insight[] }) => {
   if (!insights.length) return null;
@@ -2091,6 +2217,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                   exit={{ opacity: 0, x: -20 }}
                   className="max-w-4xl mx-auto"
                 >
+                  <BankerTips tips={getStepTips(steps[currentStep].id, liveMetrics, formData)} />
                   {renderStep()}
                 </motion.div>
               </AnimatePresence>

@@ -70,6 +70,12 @@ def generate_cma_report(intake_data: Dict[str, Any]) -> Dict[str, Any]:
         "summary": {
             "total_project_cost": intake.project_cost.total_cost,
             "means_of_finance": intake.means_of_finance.total_finance,
+            "promoter_contribution": intake.means_of_finance.promoter_contribution,
+            "promoter_pct": round(
+                intake.means_of_finance.promoter_contribution / intake.project_cost.total_cost * 100, 2
+            ) if intake.project_cost.total_cost else 0,
+            "term_loan": intake.means_of_finance.term_loan,
+            "wc_loan_sought": intake.means_of_finance.working_capital_loan,
             "avg_dscr": round(sum(r['dscr'] for r in ratios) / len(ratios), 2) if ratios else 0,
             "max_debt_equity": max(r['debt_equity'] for r in ratios) if ratios else 0,
             "is_existing_business": len(historical_statement) > 0,

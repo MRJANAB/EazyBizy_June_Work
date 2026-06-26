@@ -91,6 +91,105 @@ def _summary(results):
     return {"title": "Summary", "kind": "kv", "pairs": pairs}
 
 
+def _ca_observations(results):
+    """
+    CA Observations & Recommendation — an analyst's read of the computed numbers
+    against banking benchmarks. Rendered as a 3-column table:
+    Parameter | Value | Benchmark | Assessment (Assessment carried in the label-less
+    columns). Derived purely from the engine results.
+    """
+    summ = results.get("summary", {})
+    ratios = results.get("ratios", [])
+    rx = results.get("ratios_extended", [])
+    mpbf = results.get("mpbf_by_year", [])
+    bs = results.get("balance_sheet", [])
+    be = results.get("breakeven", [])
+    ops = results.get("operating_statement", [])
+    sens = results.get("sensitivity", {})
+    cont = results.get("projection_continuity", {})
+
+    def verdict(ok, caution=None):
+        if caution is True:
+            return "Caution"
+        return "Good" if ok else "Concern"
+
+    rows = []
+
+    def obs(param, value, benchmark, assess):
+        rows.append(_r(param, [value, benchmark, assess], money=False))
+
+    # DSCR
+    dscr = summ.get("avg_dscr", 0)
+    obs("Average DSCR", f"{dscr:.2f}", ">= 1.50 (min 1.25)",
+        "Good" if dscr >= 1.5 else "Caution" if dscr >= 1.25 else "Concern")
+    # Debt-Equity
+    de = summ.get("max_debt_equity", 0)
+    obs("Debt-Equity Ratio", f"{de:.2f}:1", "<= 2.0 (max 3.0)",
+        "Good" if de <= 2 else "Caution" if de <= 3 else "Concern")
+    # Promoter contribution
+    pc = summ.get("promoter_pct", 0)
+    obs("Promoter Contribution", f"{pc:.1f}%", ">= 15% (min 10%)",
+        "Good" if pc >= 15 else "Caution" if pc >= 10 else "Concern")
+    # Current ratio (Year 1)
+    cr = ratios[0].get("current_ratio", 0) if ratios else 0
+    obs("Current Ratio (Yr 1)", f"{cr:.2f}", ">= 1.33",
+        "Good" if cr >= 1.33 else "Caution" if cr >= 1.1 else "Concern")
+    # Interest coverage (Year 1)
+    ic = rx[0].get("interest_coverage", 0) if rx else 0
+    obs("Interest Coverage (Yr 1)", f"{ic:.2f}", ">= 2.0",
+        "Good" if ic >= 2 else "Caution" if ic >= 1.5 else "Concern")
+    # TOL / TNW
+    tol = rx[0].get("tol_tnw", 0) if rx else 0
+    obs("TOL / TNW (Yr 1)", f"{tol:.2f}", "<= 3.0",
+        "Good" if tol <= 3 else "Caution" if tol <= 4 else "Concern")
+    # MPBF vs WC sought
+    if mpbf:
+        m0 = mpbf[0]
+        within = m0.get("within_limit", True)
+        obs("WC Limit vs MPBF", f"Sought {m0.get('wc_loan_sought', 0):,.0f}",
+            f"<= MPBF {m0.get('mpbf', 0):,.0f}", "Good" if within else "Concern")
+    # Break-even (Year 1)
+    if be:
+        bep = be[0].get("bep_pct", 0)
+        obs("Break-even (Yr 1)", f"{bep:.1f}% of sales", "<= 70% comfortable",
+            "Good" if bep <= 70 else "Caution" if bep <= 85 else "Concern")
+    # Profitability trend
+    if ops:
+        pat1, pat5 = ops[0].get("pat", 0), ops[-1].get("pat", 0)
+        growing = pat5 >= pat1 and pat1 > 0
+        obs("Net Profit (PAT) Trend", f"Yr1 {pat1:,.0f} -> Yr5 {pat5:,.0f}", "Positive & rising",
+            "Good" if growing else "Caution" if pat5 > 0 else "Concern")
+    # Stress resilience (sales -10%)
+    if sens.get("sales_down_10"):
+        stress = min((r.get("dscr", 0) for r in sens["sales_down_10"]), default=0)
+        obs("Stress DSCR (Sales -10%)", f"{stress:.2f} (min yr)", ">= 1.0",
+            "Good" if stress >= 1.0 else "Concern")
+    # Balance sheet tally
+    if bs:
+        max_check = max(abs(b.get("check", 0)) for b in bs)
+        obs("Balance Sheet Tally", f"max diff {max_check:.0f}", "= 0",
+            "Good" if max_check < 2 else "Concern")
+    # Projection continuity (existing business)
+    if cont.get("applicable"):
+        jp = cont.get("jump_pct", 0)
+        obs("Projection vs Last Actual", f"{jp:+.1f}%", "within +/- 30%",
+            "Concern" if cont.get("implausible") else "Good")
+
+    # Overall recommendation
+    concerns = sum(1 for r in rows if r["values"][2] == "Concern")
+    cautions = sum(1 for r in rows if r["values"][2] == "Caution")
+    if concerns == 0 and cautions <= 1:
+        rec = "RECOMMEND - financials meet banking benchmarks."
+    elif concerns <= 1:
+        rec = "CONDITIONAL - address the flagged item(s) before sanction."
+    else:
+        rec = "REVIEW - multiple parameters below benchmark; restructure advised."
+    rows.append(_r("OVERALL RECOMMENDATION", [rec, "", ""], style="bold", money=False))
+
+    cols = [("Value", ""), ("Benchmark", ""), ("Assessment", "")]
+    return {"title": "CA Observations & Recommendation", "kind": "table", "columns": cols, "rows": rows}
+
+
 def _operating_statement(results, n=5):
     cols, ops = op_periods(results, n)
 
@@ -403,10 +502,10 @@ def _sensitivity(results, n=5):
 
 # Short tab names (<=31 chars, Excel limit), in section order.
 _SHEET_NAMES = [
-    "Summary", "Operating Statement", "Balance Sheet", "Depreciation Chart",
-    "Comparative Statement", "Ratio Analysis", "Turnover Method", "MPBF",
-    "Fund Flow Statement", "Cash Flow", "DSCR Analysis", "Breakeven Analysis",
-    "Sensitivity Analysis",
+    "Summary", "CA Observations", "Operating Statement", "Balance Sheet",
+    "Depreciation Chart", "Comparative Statement", "Ratio Analysis",
+    "Turnover Method", "MPBF", "Fund Flow Statement", "Cash Flow",
+    "DSCR Analysis", "Breakeven Analysis", "Sensitivity Analysis",
 ]
 
 
@@ -414,6 +513,7 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Ordered CMA sections — the shared content for Excel and PDF."""
     secs = [
         _summary(results),
+        _ca_observations(results),
         _operating_statement(results),
         _balance_sheet(results),
         _depreciation(results),

@@ -182,7 +182,7 @@ function getStepInsights(stepId: string, m: LiveMetrics, fd: CMAFormData): Insig
       break;
     case 'business':
       if (!fd.business.udyam_registration) out.push({ level: 'info', text: 'Udyam registration not filled — recommended for MSME scheme benefits.' });
-      if (!fd.business.gst_number && fd.business.activity !== 'Proprietorship') out.push({ level: 'warn', text: 'GST number absent — may be required for larger loans.' });
+      if (!fd.business.gst_number && fd.business.constitution !== 'Proprietorship') out.push({ level: 'warn', text: 'GST number absent — may be required for larger loans.' });
       break;
     case 'loan':
       if (fd.loan.interest_rate < 7) out.push({ level: 'warn', text: 'Interest rate below 7% — verify with bank; likely MCLR-linked rate.' });
@@ -1779,7 +1779,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                       {[1,2,3,4,5].map(y => <span key={y} className="px-2 py-2 text-right border-r border-slate-700 last:border-0">Yr {y}</span>)}
                     </div>
                     {pnlRows.map(row => (
-                      <div key={row.key} className={`grid grid-cols-7 gap-0 border-t border-slate-800 ${row.bold ? 'bg-slate-800/30' : ''}`}>
+                      <div key={String(row.key)} className={`grid grid-cols-7 gap-0 border-t border-slate-800 ${row.bold ? 'bg-slate-800/30' : ''}`}>
                         <span className={`col-span-2 px-3 py-2 border-r border-slate-700 ${row.bold ? 'font-bold text-teal-300' : 'text-slate-400 pl-5'}`}>{row.label}</span>
                         {projection.map((yr) => {
                           const v = yr[row.key] as number;

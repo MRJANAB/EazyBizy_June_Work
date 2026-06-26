@@ -38,30 +38,9 @@ async def download_cma(payload: CMAIntake, format: str = "pdf"):
         filename_base = f"CMA_Report_{payload.applicant.pan}_{datetime.now().strftime('%Y%m%d')}"
         
         if format.lower() == "pdf":
-            # Map the results to the PDF generator's expected structure
-            pdf_data = {
-                "application_id": "CMA-" + payload.applicant.pan,
-                "business_name": payload.business.entity_name,
-                "promoter_name": payload.applicant.name,
-                "projections": {
-                    "operating_statement": results["operating_statement"],
-                    "historical_operating_statement": results.get("historical_operating_statement", []),
-                    "projection_continuity": results.get("projection_continuity", {}),
-                    "balance_sheet": results["balance_sheet"],
-                    "ratios": results["ratios"],
-                    "cash_flow": results.get("cash_flow", []),
-                    "mpbf_by_year": results.get("mpbf_by_year", []),
-                    "dscr": {
-                        "average": results["summary"]["avg_dscr"],
-                        "yearly": [{"year": r["year"], "dscr": r["dscr"]} for r in results["ratios"]]
-                    },
-                    "working_capital": {
-                        "mpbf": results["mpbf"].get("method2", results["mpbf"].get("recommended", 0))
-                    }
-                }
-            }
-            from pdf.cma_generator import create_cma_pdf
-            pdf_bytes = create_cma_pdf(pdf_data)
+            # PDF is a replica of the Excel — both render from the same sections.
+            from cma.pdf_report import build_cma_pdf
+            pdf_bytes = build_cma_pdf(results)
             
             return Response(
                 content=pdf_bytes,

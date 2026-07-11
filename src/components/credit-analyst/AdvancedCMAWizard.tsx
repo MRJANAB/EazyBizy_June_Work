@@ -51,6 +51,23 @@ import { validateReport, type ValidationResult } from "@/lib/cmaValidator";
 // Indian-format currency helper, shared across all wizard steps.
 const fmt = (n: number) => n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : `₹${Math.round(n).toLocaleString('en-IN')}`;
 
+// Map free-text values from the source loan application onto the wizard's
+// canonical enums, so the Select prefills instead of showing blank (and the
+// backend/report never receives an off-enum constitution/activity string).
+const normalizeConstitution = (v?: string): CMAFormData['business']['constitution'] => {
+  const s = (v || '').toLowerCase();
+  if (s.includes('llp') || s.includes('liability partnership')) return 'LLP';
+  if (s.includes('partner')) return 'Partnership';
+  if (s.includes('pvt') || s.includes('private') || s.includes('limited') || s.includes('company') || s.includes('ltd')) return 'Pvt Ltd';
+  return 'Proprietorship';
+};
+const normalizeActivity = (v?: string): CMAFormData['business']['activity'] => {
+  const s = (v || '').toLowerCase();
+  if (s.includes('trad') || s.includes('retail') || s.includes('wholesale') || s.includes('distribut')) return 'Trading';
+  if (s.includes('serv')) return 'Service';
+  return 'Manufacturing';
+};
+
 interface AdvancedCMAWizardProps {
   isOpen: boolean;
   onClose: () => void;
@@ -706,8 +723,8 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
           business: {
             ...INITIAL_CMA_DATA.business,
             entity_name: biz.business_name || data.business_entity_name || '',
-            constitution: (biz.business_type as any) || (data.registration_type as any) || 'Proprietorship',
-            activity: (biz.industry as any) || (data.industry_type as any) || 'Manufacturing',
+            constitution: normalizeConstitution(biz.business_type || data.registration_type),
+            activity: normalizeActivity(biz.industry || data.industry_type),
             gst_number: biz.gst_number || '',
             udyam_registration: biz.msme_number || '',
             commencement_date: biz.commencement_date || '',

@@ -33,7 +33,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCreditAnalystAuth } from "@/hooks/useCreditAnalystAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { AdvancedCMAWizard } from "@/components/credit-analyst/AdvancedCMAWizard";
-import { CMA_DEMO_DATA } from "@/lib/cmaDemoData";
+import { CMA_DEMO_SCHEMES, type DemoScheme } from "@/lib/cmaDemoData";
 
 interface LoanApplication {
   id: string;
@@ -158,7 +158,8 @@ const CreditAnalystDashboard = () => {
   const [isViewLoading, setIsViewLoading] = useState(false);
   const [dialogMode, setDialogMode] = useState<"view" | "evaluate">("view");
   const [selectedApplication, setSelectedApplication] = useState<LoanApplicationDetails | null>(null);
-  const [showDemo, setShowDemo] = useState(false);
+  const [demoPickerOpen, setDemoPickerOpen] = useState(false);
+  const [demoScheme, setDemoScheme] = useState<DemoScheme | null>(null);
   const [applicationDetailsCache, setApplicationDetailsCache] = useState<
     Record<string, LoanApplicationDetails>
   >({});
@@ -709,12 +710,21 @@ const CreditAnalystDashboard = () => {
     }
 
     try {
-      const { error } = await supabase
+      // .select() returns the rows actually deleted. If RLS blocks the delete it
+      // returns an empty array with NO error — so we must verify a row came back,
+      // otherwise the UI would falsely report success and the row reloads later.
+      const { data: deleted, error } = await supabase
         .from("loan_applications")
         .delete()
-        .eq("id", applicationId);
+        .eq("id", applicationId)
+        .select("id");
 
       if (error) throw error;
+      if (!deleted || deleted.length === 0) {
+        throw new Error(
+          "Delete was blocked. You may not have permission to delete this application (ask an admin to apply the credit-analyst delete policy)."
+        );
+      }
 
       setApplications(prev => prev.filter(app => app.id !== applicationId));
       toast({
@@ -908,7 +918,7 @@ const CreditAnalystDashboard = () => {
             </motion.div>
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3">
               <Button
-                onClick={() => setShowDemo(true)}
+                onClick={() => setDemoPickerOpen(true)}
                 className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 h-[52px] px-5 rounded-2xl font-bold shadow-xl shadow-teal-900/30"
               >
                 <TrendingUp className="h-4 w-4 mr-2" /> View Live Demo
@@ -1605,13 +1615,48 @@ const CreditAnalystDashboard = () => {
         />
       )}
 
-      {showDemo && (
+      {/* Live Demo — loan-scheme picker */}
+      <Dialog open={demoPickerOpen} onOpenChange={setDemoPickerOpen}>
+        <DialogContent className="max-w-4xl bg-slate-900 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">Live Demo — Choose a Loan Scheme</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Explore a fully-worked, <span className="text-emerald-400 font-semibold">approved</span> sample CMA for each
+              scheme. Watermarked PDF is free to download; Excel/CSV are admin-only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 py-2">
+            {CMA_DEMO_SCHEMES.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => { setDemoScheme(s); setDemoPickerOpen(false); }}
+                className="text-left p-4 rounded-2xl border border-slate-700 bg-slate-800/40 hover:border-teal-500/50 hover:bg-slate-800/70 transition-all group"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="font-black text-white group-hover:text-teal-400">{s.name}</p>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">Approved</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">{s.tagline}</p>
+                <p className="text-xs font-mono text-teal-400/80 mt-2">{s.loanRange}</p>
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {s.highlights.map((h) => (
+                    <span key={h} className="text-[9px] text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded-full">{h}</span>
+                  ))}
+                </div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {demoScheme && (
         <AdvancedCMAWizard
-          isOpen={showDemo}
-          onClose={() => setShowDemo(false)}
-          applicationId="demo"
+          key={demoScheme.id}
+          isOpen={!!demoScheme}
+          onClose={() => setDemoScheme(null)}
+          applicationId={`demo-${demoScheme.id}`}
           demoMode
-          initialData={CMA_DEMO_DATA}
+          initialData={demoScheme.data}
         />
       )}
     </div>

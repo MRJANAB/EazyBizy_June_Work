@@ -702,6 +702,8 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
         const pAssets = pri?.promoter_assets || {};
         const pWc = pri?.working_capital || {};
         const pRevenue = pri?.revenue || {};
+        const schemeStr = (pLoan.loan_scheme || data.loan_scheme || '').toLowerCase();
+        const isCgtmse = schemeStr.includes('cgtmse');
 
         const mappedData: Partial<CMAFormData> = {
           applicant: {
@@ -838,6 +840,32 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
               annual_increment_pct: 8,
             }] : []),
           ].filter(m => m.headcount > 0),
+          // Growth & tax assumptions from the applicant's project report (were
+          // previously ignored — the CA report defaulted to 10% growth / 25% tax).
+          assumptions: {
+            ...INITIAL_CMA_DATA.assumptions,
+            revenue_growth: Number(pRevenue.revenue_growth_pct) || INITIAL_CMA_DATA.assumptions.revenue_growth,
+            expense_growth: Number(pRevenue.expense_growth_pct) || INITIAL_CMA_DATA.assumptions.expense_growth,
+          },
+          tax_rate: Number(pRevenue.tax_rate_pct) || INITIAL_CMA_DATA.tax_rate,
+          // Guarantor & collateral captured on the applicant side — pre-fill so
+          // the CA reviews/edits rather than re-keying from scratch.
+          ...(pLoan.guarantor_name ? {
+            guarantor: {
+              name: pLoan.guarantor_name,
+              relation: pLoan.guarantor_relation || '',
+              net_worth: 0,
+            },
+          } : {}),
+          ...(pLoan.collateral_details || isCgtmse ? {
+            collateral: {
+              primary_security: pLoan.collateral_details || '',
+              collateral_items: [],
+              cgtmse_covered: isCgtmse,
+              cgtmse_coverage_pct: isCgtmse ? 75 : 0,
+              insurance_arranged: false,
+            },
+          } : {}),
         };
 
         setFormData(prev => ({ ...prev, ...mappedData }));

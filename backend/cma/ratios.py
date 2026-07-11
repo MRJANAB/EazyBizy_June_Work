@@ -115,6 +115,10 @@ def calculate_ratios_extended(intake: CMAIntake,
             "ca_turnover":           _safe_div(sales, ca_total),
             "wc_turnover":           _safe_div(sales, nwc),
             "capital_turnover":      _safe_div(sales, tnw),
+            # Turnover periods (days) — CMA RATIOS sheet
+            "inventory_days":        _safe_div(stock * 365, sales),
+            "collection_days":       _safe_div(CA.get("debtors", 0) * 365, sales),
+            "credit_period_days":    _safe_div(L.get("creditors", 0) * 365, op.get("cogs", 0)),
             # Growth (YoY)
             "growth_sales_pct":     growth(sales, prev.get("revenue", 0)) if prev else None,
             "growth_profit_pct":    growth(op.get("pat", 0), prev.get("pat", 0)) if prev else None,

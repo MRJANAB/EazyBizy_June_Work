@@ -61,8 +61,10 @@ async def download_cma(payload: CMAIntake, format: str = "pdf"):
                 content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 extension = "xlsx"
             else:
-                # CSV — flat operating statement as the primary export.
-                pd.DataFrame(results["operating_statement"]).to_csv(output, index=False)
+                # CSV — full report, every section stacked (same content as
+                # the Excel/PDF), flattened into one CSV from the shared source.
+                from cma.csv_report import build_cma_csv
+                output = io.BytesIO(build_cma_csv(results))
                 content_type = "text/csv"
                 extension = "csv"
             

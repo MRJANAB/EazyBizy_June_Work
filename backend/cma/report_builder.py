@@ -9,6 +9,7 @@ from .mpbf import calculate_mpbf, calculate_mpbf_by_year
 from .fund_flow import calculate_fund_flow
 from .breakeven import calculate_breakeven
 from .sensitivity import calculate_sensitivity
+from .loan_schedule import calculate_loan_schedule
 from .historical import (
     build_historical_statement,
     build_historical_balance_sheet,
@@ -67,6 +68,7 @@ def generate_cma_report(intake_data: Dict[str, Any]) -> Dict[str, Any]:
         "sensitivity": calculate_sensitivity(intake, operating_statement),
         "mpbf": mpbf,
         "mpbf_by_year": mpbf_by_year,
+        "loan_schedule": calculate_loan_schedule(intake),
         "summary": {
             "total_project_cost": intake.project_cost.total_cost,
             "means_of_finance": intake.means_of_finance.total_finance,

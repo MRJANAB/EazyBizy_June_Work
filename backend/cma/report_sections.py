@@ -91,6 +91,47 @@ def _summary(results):
     return {"title": "Summary", "kind": "kv", "pairs": pairs}
 
 
+def _form_i(results):
+    """
+    Form I — Particulars of Borrower (KYC / applicant + business profile).
+    Pure presentation of intake metadata; nothing computed.
+    """
+    meta = results.get("metadata", {})
+    app, biz, loan = meta.get("applicant", {}), meta.get("business", {}), meta.get("loan", {})
+    pairs = [
+        ("A. APPLICANT / PROMOTER", ""),
+        ("Name", app.get("name", "")),
+        ("Father / Spouse Name", app.get("father_spouse_name", "")),
+        ("Date of Birth", app.get("dob", "")),
+        ("PAN", app.get("pan", "")),
+        ("Aadhaar", app.get("aadhaar", "")),
+        ("Mobile", app.get("mobile", "")),
+        ("Email", app.get("email", "")),
+        ("Address", ", ".join(x for x in [app.get("address", ""), app.get("city", ""),
+                                          app.get("state", ""), app.get("pincode", "")] if x)),
+        ("Education", app.get("education", "")),
+        ("Experience (years)", app.get("experience_years", "")),
+        ("B. BUSINESS / UNIT", ""),
+        ("Entity Name", biz.get("entity_name", "")),
+        ("Constitution", biz.get("constitution", "")),
+        ("Activity / Industry", biz.get("activity", "")),
+        ("GST Number", biz.get("gst_number", "")),
+        ("Udyam Registration", biz.get("udyam_registration", "")),
+        ("IEC (Export)", biz.get("iec", "") or "N/A"),
+        ("Commencement Date", biz.get("commencement_date", "")),
+        ("C. FACILITY SOUGHT", ""),
+        ("Purpose", loan.get("purpose", "")),
+        ("Loan Type", loan.get("loan_type", "")),
+        ("Scheme", loan.get("scheme", "")),
+        ("Preferred Bank", loan.get("preferred_bank", "")),
+        ("Amount", loan.get("amount", 0)),
+        ("Interest Rate (%)", loan.get("interest_rate", 0)),
+        ("Tenure (months)", loan.get("tenure_months", 0)),
+        ("Moratorium (months)", loan.get("moratorium_months", 0)),
+    ]
+    return {"title": "Form I - Particulars of Borrower", "kind": "kv", "pairs": pairs}
+
+
 def _ca_observations(results):
     """
     CA Observations & Recommendation — an analyst's read of the computed numbers
@@ -297,7 +338,7 @@ def _comparative(results, n=5):
         _r("  7. WC Bank Borrowing", [L(b, "wc_loan") for b in bs]),
         _r("  TOTAL CURRENT LIABILITIES", [L(b, "creditors") + L(b, "wc_loan") for b in bs], "bold"),
     ]
-    return {"title": "Comparative Statement of Current Assets & Liabilities", "kind": "table", "columns": cols, "rows": rows}
+    return {"title": "Form IV - Comparative Statement of Current Assets & Liabilities", "kind": "table", "columns": cols, "rows": rows}
 
 
 def _ratios(results, n=5):
@@ -325,6 +366,9 @@ def _ratios(results, n=5):
         _r("Total Assets Turnover Ratio", c("total_assets_turnover"), money=False),
         _r("Fixed Assets Turnover Ratio", c("fixed_assets_turnover"), money=False),
         _r("Working Capital Turnover Ratio", c("wc_turnover"), money=False),
+        _r("Inventory Holding Period (days)", c("inventory_days"), money=False),
+        _r("Average Collection Period (days)", c("collection_days"), money=False),
+        _r("Average Credit Period (days)", c("credit_period_days"), money=False),
         _r("GROWTH (YoY)", [""] * len(rx), "sub"),
         _r("Growth in Net Sales (%)", c("growth_sales_pct"), money=False),
         _r("Growth in Net Profit (%)", c("growth_profit_pct"), money=False),
@@ -423,7 +467,7 @@ def _fund_flow(results, n=5):
         _r("6. Increase / (Decrease) in Working Capital", c("increase_in_wc")),
         _r("7. Net Surplus / (Deficit)", c("net_surplus"), "bold"),
     ]
-    return {"title": "Fund Flow Statement", "kind": "table", "columns": cols, "rows": rows}
+    return {"title": "Form VI - Fund Flow Statement", "kind": "table", "columns": cols, "rows": rows}
 
 
 def _cash_flow(results, n=5):
@@ -440,7 +484,7 @@ def _cash_flow(results, n=5):
         _r("Opening Cash & Bank", c("opening_cash")),
         _r("Closing Cash & Bank (= Balance Sheet)", c("closing_cash"), "bold"),
     ]
-    return {"title": "Cash Flow Statement", "kind": "table", "columns": cols, "rows": rows}
+    return {"title": "Form V - Cash Flow Statement", "kind": "table", "columns": cols, "rows": rows}
 
 
 def _dscr(results, n=5):
@@ -478,7 +522,7 @@ def _breakeven(results, n=5):
         _r("5. Breakeven Point (Sales Value)", c("bep_sales"), "bold"),
         _r("6. Breakeven % (on Net Sales)", c("bep_pct"), money=False),
     ]
-    return {"title": "Breakeven Analysis", "kind": "table", "columns": cols, "rows": rows}
+    return {"title": "Form VII - Breakeven Analysis", "kind": "table", "columns": cols, "rows": rows}
 
 
 def _sensitivity(results, n=5):
@@ -500,12 +544,85 @@ def _sensitivity(results, n=5):
     return {"title": "Sensitivity Analysis", "kind": "table", "columns": cols, "rows": rows}
 
 
+def _abf(results, n=5):
+    """
+    Assessed Bank Finance (ABF) sheet — the working-capital assessment banks
+    file alongside MPBF, plus the diagnostic %/days ratios from the CMA ABF form.
+    All figures derived from the projected balance sheet + operating statement.
+    """
+    cols = proj_columns(results, n)
+    bs = results.get("balance_sheet", [])[:n]
+    ops = results.get("operating_statement", [])[:n]
+
+    def CA(b): return b["assets"]["current_assets"]
+    tca   = [CA(b)["total"] for b in bs]
+    ocl   = [b["liabilities"]["creditors"] for b in bs]              # non-bank CL
+    bankf = [b["liabilities"]["wc_loan"] for b in bs]               # bank finance
+    wcg   = [round(tca[i] - ocl[i], 2) for i in range(len(bs))]     # working capital gap
+    nwc   = [round(tca[i] - ocl[i] - bankf[i], 2) for i in range(len(bs))]
+    abf   = [round(wcg[i] - nwc[i], 2) for i in range(len(bs))]     # = bank finance
+
+    def pct(num, den):
+        return [round(num[i] / den[i] * 100, 1) if den[i] else 0 for i in range(len(bs))]
+    def days(num, base_key):
+        out = []
+        for i, b in enumerate(bs):
+            base = ops[i].get(base_key, 0) if i < len(ops) else 0
+            out.append(round(num[i] * 365 / base, 0) if base else 0)
+        return out
+
+    stock = [CA(b)["stock"] for b in bs]
+    debt  = [CA(b)["debtors"] for b in bs]
+    sales = [o.get("revenue", 0) for o in ops]
+
+    rows = [
+        _r("1. Total Current Assets (TCA)", tca, "bold"),
+        _r("2. Current Liabilities (other than bank borrowing)", ocl),
+        _r("3. Working Capital Gap (1 - 2)", wcg, "bold"),
+        _r("4. Net Working Capital (actual / projected)", nwc),
+        _r("5. Assessed Bank Finance (3 - 4)", abf, "bold"),
+        _r("DIAGNOSTIC RATIOS", [""] * len(bs), "sub"),
+        _r("NWC / TCA (%)", pct(nwc, tca), money=False),
+        _r("Bank Finance / TCA (%)", pct(bankf, tca), money=False),
+        _r("Other CL / TCA (%)", pct(ocl, tca), money=False),
+        _r("Sundry Creditors / TCA (%)", pct(ocl, tca), money=False),
+        _r("Inventory / Net Sales (days)", days(stock, "revenue"), money=False),
+        _r("Receivables / Gross Sales (days)", days(debt, "revenue"), money=False),
+        _r("Sundry Creditors / Purchases (days)", days(ocl, "cogs"), money=False),
+    ]
+    return {"title": "Assessed Bank Finance (ABF)", "kind": "table", "columns": cols, "rows": rows}
+
+
+def _loan_schedule(results, n=5):
+    """
+    Term Loan Repayment Schedule — per-year amortisation (reducing balance) plus
+    the revolving WC interest, straight from the single-source loan schedule.
+    """
+    cols = proj_columns(results, n)
+    sch = results.get("loan_schedule", [])[:n]
+
+    def c(k): return [s.get(k, 0) for s in sch]
+    rows = [
+        _r("TERM LOAN", [""] * len(sch), "sub"),
+        _r("Opening Balance", c("tl_opening"), "bold"),
+        _r("Principal Repayment (during year)", c("tl_principal")),
+        _r("Interest on Term Loan", c("tl_interest")),
+        _r("Closing Balance", c("tl_closing"), "bold"),
+        _r("WORKING CAPITAL", [""] * len(sch), "sub"),
+        _r("WC Outstanding (revolving)", c("wc_outstanding")),
+        _r("Interest on Working Capital", c("wc_interest")),
+        _r("TOTAL INTEREST (TL + WC)", c("total_interest"), "bold"),
+    ]
+    return {"title": "Term Loan Repayment Schedule", "kind": "table", "columns": cols, "rows": rows}
+
+
 # Short tab names (<=31 chars, Excel limit), in section order.
 _SHEET_NAMES = [
-    "Summary", "CA Observations", "Operating Statement", "Balance Sheet",
-    "Depreciation Chart", "Comparative Statement", "Ratio Analysis",
-    "Turnover Method", "MPBF", "Fund Flow Statement", "Cash Flow",
-    "DSCR Analysis", "Breakeven Analysis", "Sensitivity Analysis",
+    "Summary", "Form I - Borrower", "CA Observations", "Operating Statement",
+    "Balance Sheet", "Depreciation Chart", "Comparative Statement", "Ratio Analysis",
+    "Turnover Method", "MPBF", "Assessed Bank Finance", "TL Repayment Schedule",
+    "Fund Flow Statement", "Cash Flow", "DSCR Analysis", "Breakeven Analysis",
+    "Sensitivity Analysis",
 ]
 
 
@@ -513,6 +630,7 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Ordered CMA sections — the shared content for Excel and PDF."""
     secs = [
         _summary(results),
+        _form_i(results),
         _ca_observations(results),
         _operating_statement(results),
         _balance_sheet(results),
@@ -521,6 +639,8 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
         _ratios(results),
         _turnover(results),
         _mpbf(results),
+        _abf(results),
+        _loan_schedule(results),
         _fund_flow(results),
         _cash_flow(results),
         _dscr(results),

@@ -109,7 +109,28 @@ def _section_table(sec, S, avail_w):
     return t
 
 
-def build_cma_pdf(results: Dict[str, Any], output_path: Optional[str] = None) -> Any:
+def _make_watermark(text: str):
+    """Return an onPage callback that stamps a repeating diagonal watermark."""
+    def _draw(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica-Bold", 42)
+        canvas.setFillColor(colors.HexColor("#0D9488"))
+        try:
+            canvas.setFillAlpha(0.08)
+        except Exception:
+            pass
+        w, h = landscape(A4)
+        canvas.translate(w / 2, h / 2)
+        canvas.rotate(30)
+        for iy in range(-3, 4):
+            for ix in range(-2, 3):
+                canvas.drawCentredString(ix * 320, iy * 120, text)
+        canvas.restoreState()
+    return _draw
+
+
+def build_cma_pdf(results: Dict[str, Any], output_path: Optional[str] = None,
+                  watermark: Optional[str] = None) -> Any:
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         output_path or buffer, pagesize=landscape(A4),
@@ -137,5 +158,9 @@ def build_cma_pdf(results: Dict[str, Any], output_path: Optional[str] = None) ->
             story.append(_section_table(sec, S, avail_w))
         story.append(PageBreak())
 
-    doc.build(story)
+    if watermark:
+        wm = _make_watermark(watermark)
+        doc.build(story, onFirstPage=wm, onLaterPages=wm)
+    else:
+        doc.build(story)
     return buffer.getvalue() if output_path is None else output_path

@@ -33,6 +33,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCreditAnalystAuth } from "@/hooks/useCreditAnalystAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { AdvancedCMAWizard } from "@/components/credit-analyst/AdvancedCMAWizard";
+import { CMA_DEMO_DATA } from "@/lib/cmaDemoData";
 
 interface LoanApplication {
   id: string;
@@ -157,6 +158,7 @@ const CreditAnalystDashboard = () => {
   const [isViewLoading, setIsViewLoading] = useState(false);
   const [dialogMode, setDialogMode] = useState<"view" | "evaluate">("view");
   const [selectedApplication, setSelectedApplication] = useState<LoanApplicationDetails | null>(null);
+  const [showDemo, setShowDemo] = useState(false);
   const [applicationDetailsCache, setApplicationDetailsCache] = useState<
     Record<string, LoanApplicationDetails>
   >({});
@@ -904,7 +906,13 @@ const CreditAnalystDashboard = () => {
                 Review and assess all loan applications with precision and audit-grade tools.
               </p>
             </motion.div>
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex gap-3">
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3">
+              <Button
+                onClick={() => setShowDemo(true)}
+                className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 h-[52px] px-5 rounded-2xl font-bold shadow-xl shadow-teal-900/30"
+              >
+                <TrendingUp className="h-4 w-4 mr-2" /> View Live Demo
+              </Button>
               <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl px-6 py-3 rounded-2xl border-l-4 border-l-teal-500 shadow-xl">
                 <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">Total Volume</p>
                 <p className="text-xl font-black text-white">₹ {(filteredApplications.reduce((s, a) => s + a.loanAmount, 0) / 100000).toFixed(1)}L</p>
@@ -1594,6 +1602,16 @@ const CreditAnalystDashboard = () => {
           isOpen={isCmaWizardOpen}
           onClose={() => setIsCmaWizardOpen(false)}
           applicationId={selectedApplication.id}
+        />
+      )}
+
+      {showDemo && (
+        <AdvancedCMAWizard
+          isOpen={showDemo}
+          onClose={() => setShowDemo(false)}
+          applicationId="demo"
+          demoMode
+          initialData={CMA_DEMO_DATA}
         />
       )}
     </div>

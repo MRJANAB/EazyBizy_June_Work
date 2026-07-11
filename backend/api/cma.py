@@ -29,19 +29,30 @@ async def generate_cma(payload: CMAIntake):
         raise HTTPException(status_code=500, detail="CMA generation failed. Check server logs.")
 
 @router.post("/download")
-async def download_cma(payload: CMAIntake, format: str = "pdf"):
+async def download_cma(payload: CMAIntake, format: str = "pdf", demo: bool = False):
     try:
+        # Demo mode: only the watermarked PDF is public. Excel/CSV carry the full
+        # raw data and are locked (admin-only) — refuse them on the demo path so
+        # the lock cannot be bypassed by calling the endpoint directly.
+        if demo and format.lower() in ("excel", "csv"):
+            raise HTTPException(
+                status_code=403,
+                detail="Excel/CSV export is locked in demo mode — available to admins only.",
+            )
+
         # Convert Pydantic model to dict for the report builder
         intake_data = payload.model_dump()
         results = generate_cma_report(intake_data)
-        
+
         filename_base = f"CMA_Report_{payload.applicant.pan}_{datetime.now().strftime('%Y%m%d')}"
-        
+        if demo:
+            filename_base = f"CMA_DEMO_{datetime.now().strftime('%Y%m%d')}"
+
         if format.lower() == "pdf":
             # PDF is a replica of the Excel — both render from the same sections.
             from cma.pdf_report import build_cma_pdf
-            pdf_bytes = build_cma_pdf(results)
-            
+            pdf_bytes = build_cma_pdf(results, watermark="EAZYBIZY  DEMO" if demo else None)
+
             return Response(
                 content=pdf_bytes,
                 media_type="application/pdf",
@@ -80,6 +91,8 @@ async def download_cma(payload: CMAIntake, format: str = "pdf"):
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
+    except HTTPException:
+        raise  # deliberate HTTP errors (e.g. 403 demo lock) pass through unchanged
     except Exception as e:
         print(f"CMA Download Error: {str(e)}")
         if "validation error" in str(e).lower():

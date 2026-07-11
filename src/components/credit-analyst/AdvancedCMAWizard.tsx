@@ -41,11 +41,13 @@ import {
   MinusCircle,
   Lightbulb,
   ChevronDown,
+  Lock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CMAFormData, INITIAL_CMA_DATA } from "@/types/cma";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { validateReport, type ValidationResult } from "@/lib/cmaValidator";
 
 // Indian-format currency helper, shared across all wizard steps.
@@ -73,6 +75,8 @@ interface AdvancedCMAWizardProps {
   onClose: () => void;
   applicationId: string;
   initialData?: Partial<CMAFormData>;
+  // Public demo: pre-filled sample, watermarked PDF, Excel/CSV admin-only.
+  demoMode?: boolean;
 }
 
 const steps = [
@@ -652,7 +656,8 @@ const InsightCard = ({ insights }: { insights: Insight[] }) => {
   );
 };
 
-export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData }: AdvancedCMAWizardProps) => {
+export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData, demoMode = false }: AdvancedCMAWizardProps) => {
+  const { isAdmin } = useAdminAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<CMAFormData>({ ...INITIAL_CMA_DATA, ...initialData });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -664,10 +669,11 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
   const liveMetrics = useMemo(() => computeLiveMetrics(formData), [formData]);
 
   useEffect(() => {
-    if (isOpen && applicationId) {
+    // Demo mode uses the pre-filled sample — never hit Supabase.
+    if (isOpen && applicationId && !demoMode) {
       fetchApplicationData();
     }
-  }, [isOpen, applicationId]);
+  }, [isOpen, applicationId, demoMode]);
 
   const fetchApplicationData = async () => {
     setIsLoadingData(true);
@@ -919,6 +925,15 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
   };
 
   const handleSubmit = async (format: 'pdf' | 'excel' | 'csv' = 'pdf') => {
+    // Demo mode: Excel & CSV are admin-only (they carry the full raw dataset).
+    if (demoMode && (format === 'excel' || format === 'csv') && !isAdmin) {
+      toast({
+        variant: "destructive",
+        title: "Locked in demo",
+        description: `${format.toUpperCase()} export is available to admins only. The watermarked PDF is free to download.`,
+      });
+      return;
+    }
     // Run validation — warn but NEVER block download
     const vResult = runFrontendValidation();
     setValidationResult(vResult);
@@ -939,7 +954,10 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
     try {
       const apiUrl = import.meta.env.VITE_CMA_API_URL || 'http://localhost:8000';
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`${apiUrl}/api/cma/download?format=${format}`, {
+      // In demo mode the PDF is watermarked (demo=true). Admin Excel/CSV go via
+      // the normal path (no demo flag) so they receive clean files.
+      const demoFlag = demoMode && format === 'pdf' ? '&demo=true' : '';
+      const response = await fetch(`${apiUrl}/api/cma/download?format=${format}${demoFlag}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2269,7 +2287,14 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
               <Zap size={24} />
             </div>
             <div>
-              <DialogTitle className="text-2xl font-bold">CA-Grade CMA Wizard</DialogTitle>
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                CA-Grade CMA Wizard
+                {demoMode && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    Live Demo · Sample Data
+                  </span>
+                )}
+              </DialogTitle>
               <div className="flex items-center gap-3 mt-1">
                   <div className="flex-1 h-1.5 w-48 bg-slate-800 rounded-full overflow-hidden">
                       <motion.div 
@@ -2360,24 +2385,26 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Download buttons always visible */}
+                {/* Download buttons — in demo mode CSV/Excel are admin-only */}
                 <Button
                   onClick={() => handleSubmit('csv')}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (demoMode && !isAdmin)}
                   variant="outline"
                   size="sm"
+                  title={demoMode && !isAdmin ? 'Locked — admin only in demo' : undefined}
                   className="border-slate-700 hover:bg-slate-800 text-xs h-9"
                 >
-                  CSV
+                  {demoMode && !isAdmin && <Lock size={11} className="mr-1" />} CSV
                 </Button>
                 <Button
                   onClick={() => handleSubmit('excel')}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (demoMode && !isAdmin)}
                   variant="outline"
                   size="sm"
+                  title={demoMode && !isAdmin ? 'Locked — admin only in demo' : undefined}
                   className="border-slate-700 hover:bg-slate-800 text-xs h-9"
                 >
-                  Excel
+                  {demoMode && !isAdmin && <Lock size={11} className="mr-1" />} Excel
                 </Button>
                 <Button
                   onClick={() => handleSubmit('pdf')}
@@ -2385,7 +2412,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                   size="sm"
                   className="bg-gradient-to-r from-teal-600 to-emerald-600 px-5 h-9 rounded-xl font-bold text-xs"
                 >
-                  {isSubmitting ? 'Generating...' : 'PDF Pack'}
+                  {isSubmitting ? 'Generating...' : demoMode ? 'PDF (Watermarked)' : 'PDF Pack'}
                 </Button>
                 {currentStep < steps.length - 1 && (
                   <Button onClick={handleNext} className="bg-teal-600 hover:bg-teal-500 px-6 h-12 rounded-xl font-bold ml-2">

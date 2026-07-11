@@ -180,6 +180,10 @@ export interface CMAFormData {
     rating: 'green' | 'amber' | 'red';
     recommendation: 'Recommend' | 'Conditional' | 'Decline';
     notes: string;
+    strengths?: string;
+    weaknesses?: string;
+    risk_mitigants?: string;
+    covenants?: string[];
   };
   assumptions: {
     revenue_growth: number;

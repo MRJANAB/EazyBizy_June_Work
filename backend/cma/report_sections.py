@@ -227,17 +227,50 @@ def _ca_observations(results):
         rec = "REVIEW - multiple parameters below benchmark; restructure advised."
     rows.append(_r("OVERALL RECOMMENDATION (system)", [rec, "", ""], style="bold", money=False))
 
-    # Analyst's manual recommendation & notes (from the wizard scorecard step).
+    # Analyst's manual recommendation (from the wizard scorecard step). Full
+    # write-up lives in the Credit Appraisal Note section.
     car = results.get("ca_recommendation")
-    if car and (car.get("recommendation") or car.get("notes")):
-        verdict = car.get("recommendation", "")
+    if car and car.get("recommendation"):
         rating = car.get("rating", "")
-        obs("Analyst's Recommendation", verdict, rating.upper() if rating else "", "")
-        if car.get("notes"):
-            rows.append(_r("Analyst's Notes", [car.get("notes"), "", ""], money=False))
+        obs("Analyst's Recommendation", car.get("recommendation", ""),
+            rating.upper() if rating else "", "See Credit Appraisal Note")
 
     cols = [("Value", ""), ("Benchmark", ""), ("Assessment", "")]
     return {"title": "CA Observations & Recommendation", "kind": "table", "columns": cols, "rows": rows}
+
+
+def _credit_appraisal_note(results):
+    """
+    Credit Appraisal Note — the analyst's/banker's qualitative sign-off:
+    verdict, strengths, risk factors, mitigants and the sanction covenants.
+    Rendered only when the analyst has filled it in the wizard.
+    """
+    car = results.get("ca_recommendation")
+    if not car:
+        return None
+    has_content = any(car.get(k) for k in
+                      ("recommendation", "notes", "strengths", "weaknesses", "risk_mitigants")) \
+                  or car.get("covenants")
+    if not has_content:
+        return None
+
+    rating = (car.get("rating", "") or "").upper()
+    verdict = car.get("recommendation", "")
+    pairs = []
+    if verdict:
+        pairs.append(("Recommendation", f"{verdict}" + (f"  ({rating})" if rating else "")))
+    if car.get("strengths"):
+        pairs.append(("Strengths", car.get("strengths")))
+    if car.get("weaknesses"):
+        pairs.append(("Risk Factors / Weaknesses", car.get("weaknesses")))
+    if car.get("risk_mitigants"):
+        pairs.append(("Risk Mitigants", car.get("risk_mitigants")))
+    covs = [c for c in (car.get("covenants") or []) if str(c).strip()]
+    for i, c in enumerate(covs, 1):
+        pairs.append((f"Covenant {i}", c))
+    if car.get("notes"):
+        pairs.append(("Remarks / Conditions", car.get("notes")))
+    return {"title": "Credit Appraisal Note", "kind": "kv", "pairs": pairs}
 
 
 def _operating_statement(results, n=5):
@@ -260,8 +293,12 @@ def _operating_statement(results, n=5):
         _r("   Raw Material / Consumables", [g(o, "cogs") for o in ops]),
         _r("   Depreciation", [g(o, "depreciation") for o in ops]),
         _r("   Cost of Production / Sales", [g(o, "cogs") + g(o, "depreciation") for o in ops], "bold"),
-        _r("4. Selling, General & Admin Expenses", [g(o, "salary") + g(o, "other_opex") for o in ops]),
-        _r("5. Total Cost of Sales (3+4)", [g(o, "cogs") + g(o, "depreciation") + g(o, "salary") + g(o, "other_opex") for o in ops], "bold"),
+        _r("4. Selling, General & Admin Expenses", [g(o, "salary") + g(o, "other_opex") + g(o, "cgtmse_fee") for o in ops]),
+    ]
+    if any(g(o, "cgtmse_fee") for o in ops):
+        rows.append(_r("   incl. CGTMSE Guarantee Fee", [g(o, "cgtmse_fee") for o in ops]))
+    rows += [
+        _r("5. Total Cost of Sales (3+4)", [g(o, "cogs") + g(o, "depreciation") + g(o, "salary") + g(o, "other_opex") + g(o, "cgtmse_fee") for o in ops], "bold"),
         _r("6. Operating Profit before Interest", [g(o, "ebitda") - g(o, "depreciation") for o in ops], "bold"),
         _r("7. Interest on Working Capital", [wc(o) for o in ops]),
         _r("   Interest on Term Loan", [tl(o) for o in ops]),
@@ -722,15 +759,30 @@ def _loan_schedule(results, n=5):
     return {"title": "Term Loan Repayment Schedule", "kind": "table", "columns": cols, "rows": rows}
 
 
-# Short tab names (<=31 chars, Excel limit), in section order.
-_SHEET_NAMES = [
-    "Summary", "Form I - Borrower", "Promoter Net Worth", "CA Observations",
-    "Operating Statement", "Balance Sheet", "Depreciation Chart",
-    "Comparative Statement", "Ratio Analysis", "Turnover Method", "MPBF",
-    "Assessed Bank Finance", "Security & Collateral", "TL Repayment Schedule",
-    "Fund Flow Statement", "Cash Flow", "DSCR Analysis", "Breakeven Analysis",
-    "Sensitivity Analysis",
-]
+# Short Excel tab names (<=31 chars, unique), keyed by section title so that
+# optional sections (which may be absent) never shift another sheet's name.
+_SHEET_NAME_BY_TITLE = {
+    "Summary": "Summary",
+    "Form I - Particulars of Borrower": "Form I - Borrower",
+    "Promoter's Net Worth Statement": "Promoter Net Worth",
+    "CA Observations & Recommendation": "CA Observations",
+    "Credit Appraisal Note": "Credit Appraisal Note",
+    "Operating Statement (Form II)": "Operating Statement",
+    "Balance Sheet (Form III)": "Balance Sheet",
+    "Depreciation Chart (WDV Method)": "Depreciation Chart",
+    "Form IV - Comparative Statement of Current Assets & Liabilities": "Comparative Statement",
+    "Ratio Analysis": "Ratio Analysis",
+    "Turnover Method (Nayak Committee)": "Turnover Method",
+    "Maximum Permissible Bank Finance (Tandon)": "MPBF",
+    "Assessed Bank Finance (ABF)": "Assessed Bank Finance",
+    "Security & Collateral Coverage": "Security & Collateral",
+    "Term Loan Repayment Schedule": "TL Repayment Schedule",
+    "Form VI - Fund Flow Statement": "Fund Flow Statement",
+    "Form V - Cash Flow Statement": "Cash Flow",
+    "Debt Service Coverage Ratio (DSCR)": "DSCR Analysis",
+    "Form VII - Breakeven Analysis": "Breakeven Analysis",
+    "Sensitivity Analysis": "Sensitivity Analysis",
+}
 
 
 def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -740,6 +792,7 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
         _form_i(results),
         _promoter_net_worth(results),
         _ca_observations(results),
+        _credit_appraisal_note(results),
         _operating_statement(results),
         _balance_sheet(results),
         _depreciation(results),
@@ -757,6 +810,6 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
         _sensitivity(results),
     ]
     secs = [s for s in ordered if s is not None]
-    for sec, name in zip(secs, _SHEET_NAMES):
-        sec["sheet"] = name
+    for sec in secs:
+        sec["sheet"] = _SHEET_NAME_BY_TITLE.get(sec["title"], sec["title"][:31])
     return secs

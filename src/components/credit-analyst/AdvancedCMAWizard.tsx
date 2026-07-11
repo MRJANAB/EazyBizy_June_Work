@@ -2037,7 +2037,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
           const scorePct      = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
           const autoRating    = scorePct >= 70 ? 'green' : scorePct >= 50 ? 'amber' : 'red';
           const autoLabel     = scorePct >= 70 ? 'Low Risk' : scorePct >= 50 ? 'Medium Risk' : 'High Risk';
-          const caRec = formData.ca_recommendation || { rating: autoRating as any, recommendation: scorePct >= 70 ? 'Recommend' as const : scorePct >= 50 ? 'Conditional' as const : 'Decline' as const, notes: '' };
+          const caRec = formData.ca_recommendation || { rating: autoRating as any, recommendation: scorePct >= 70 ? 'Recommend' as const : scorePct >= 50 ? 'Conditional' as const : 'Decline' as const, notes: '', strengths: '', weaknesses: '', risk_mitigants: '', covenants: [] as string[] };
           const setRec = (patch: Partial<typeof caRec>) => setFormData({...formData, ca_recommendation: {...caRec, ...patch}});
           const emiSched = computeEMISchedule(formData);
 
@@ -2143,15 +2143,59 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                     );
                   })}
                 </div>
+                {/* Credit Appraisal Note — structured CA / banker write-up */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-emerald-400">Strengths</Label>
+                    <textarea value={caRec.strengths || ''} onChange={e => setRec({ strengths: e.target.value })} rows={3}
+                      placeholder="e.g. Promoter brings 40% equity; healthy 45% margin; strong collateral cover."
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 resize-none focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-rose-400">Risk Factors / Weaknesses</Label>
+                    <textarea value={caRec.weaknesses || ''} onChange={e => setRec({ weaknesses: e.target.value })} rows={3}
+                      placeholder="e.g. First-generation promoter; sector cyclicality; single large customer."
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 resize-none focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-teal-400">Risk Mitigants</Label>
+                    <textarea value={caRec.risk_mitigants || ''} onChange={e => setRec({ risk_mitigants: e.target.value })} rows={3}
+                      placeholder="e.g. CGTMSE cover; collateral 1.5x FSV; escrow of receivables."
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 resize-none focus:outline-none focus:border-teal-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-slate-400">CA Remarks / Justification</Label>
+                    <textarea value={caRec.notes} onChange={e => setRec({ notes: e.target.value })} rows={3}
+                      placeholder="Overall justification for the recommendation..."
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 resize-none focus:outline-none focus:border-teal-500" />
+                  </div>
+                </div>
+
+                {/* Sanction covenants / conditions — editable list */}
                 <div className="space-y-2">
-                  <Label className="text-xs text-slate-400">CA Remarks / Conditions</Label>
-                  <textarea
-                    value={caRec.notes}
-                    onChange={e => setRec({ notes: e.target.value })}
-                    rows={4}
-                    placeholder="Enter any conditions, remarks, or justification for the recommendation..."
-                    className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 resize-none focus:outline-none focus:border-teal-500"
-                  />
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-slate-400">Sanction Covenants / Conditions</Label>
+                    <Button size="sm" variant="outline" className="border-teal-500/30 text-teal-400 text-xs h-7"
+                      onClick={() => setRec({ covenants: [...(caRec.covenants || []), ''] })}>
+                      <Plus size={12} className="mr-1" /> Add Covenant
+                    </Button>
+                  </div>
+                  {(caRec.covenants || []).map((cov, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 w-5 shrink-0">{idx + 1}.</span>
+                      <Input value={cov}
+                        onChange={e => { const n = [...(caRec.covenants || [])]; n[idx] = e.target.value; setRec({ covenants: n }); }}
+                        placeholder="e.g. Hypothecation to be perfected before first disbursement"
+                        className="bg-slate-950/50 border-slate-700 text-sm h-9" />
+                      <Button size="sm" variant="ghost" className="text-rose-400 h-8 px-1 shrink-0"
+                        onClick={() => setRec({ covenants: (caRec.covenants || []).filter((_, i) => i !== idx) })}>
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                  {(caRec.covenants || []).length === 0 && (
+                    <p className="text-[10px] text-slate-600">No covenants added. These appear as sanction conditions in the Credit Appraisal Note.</p>
+                  )}
                 </div>
               </div>
             </div>

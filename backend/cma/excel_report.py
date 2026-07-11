@@ -104,12 +104,14 @@ def _render_kv(ws, sec):
     for col in (1, 2):
         c = ws.cell(ws.max_row, col)
         c.font, c.fill = _HEADER_FONT, _HEADER_FILL
+    _WRAP = Alignment(horizontal="left", vertical="top", wrap_text=True)
     for k, v in sec["pairs"]:
         ws.append([k, v])
         ws.cell(ws.max_row, 1).font = _BOLD_FONT
-        ws.cell(ws.max_row, 2).alignment = _LEFT
-    ws.column_dimensions["A"].width = 28
-    ws.column_dimensions["B"].width = 42
+        ws.cell(ws.max_row, 1).alignment = Alignment(vertical="top")
+        ws.cell(ws.max_row, 2).alignment = _WRAP
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 80
 
 
 def build_cma_workbook(results: Dict[str, Any]) -> bytes:

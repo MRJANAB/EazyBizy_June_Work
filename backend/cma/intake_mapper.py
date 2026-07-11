@@ -199,6 +199,10 @@ class CARecommendation(BaseModel):
     rating: str = ""            # green / amber / red
     recommendation: str = ""    # Recommend / Conditional / Decline
     notes: str = ""
+    strengths: str = ""         # analyst's write-up of proposal strengths
+    weaknesses: str = ""        # risk factors / weaknesses
+    risk_mitigants: str = ""    # how the risks are mitigated
+    covenants: List[str] = []   # sanction conditions / covenants
 
 class CMAIntake(BaseModel):
     applicant: ApplicantProfile

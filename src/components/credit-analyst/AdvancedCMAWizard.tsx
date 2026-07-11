@@ -1441,7 +1441,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                 <div className="bg-slate-800/60 grid grid-cols-12 gap-2 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
                   <span className="col-span-4">Designation / Category</span>
                   <span className="text-right">Count</span>
-                  <span className="col-span-2 text-right">Salary / Head (₹)</span>
+                  <span className="col-span-2 text-right">Salary / Head (₹/mo)</span>
                   <span className="col-span-2 text-right">Increment %</span>
                   <span className="col-span-2 text-right">Monthly Cost</span>
                   <span></span>
@@ -1525,13 +1525,18 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
       case 'opex':
           return (
               <div className="space-y-6">
-                  <h3 className="text-xl font-bold">Step 8 — Operating Expenses</h3>
+                  <div>
+                    <h3 className="text-xl font-bold">Step 8 — Operating Expenses</h3>
+                    <p className="text-xs text-amber-400/90 mt-1">
+                      ⚠️ Enter each expense as a <b>MONTHLY</b> amount — the engine annualises it (×12) in all projections.
+                    </p>
+                  </div>
                   <InsightCard insights={insights} />
                   <div className="grid grid-cols-3 gap-4">
                       {Object.entries(formData.opex).map(([key, value]) => (
                           <div key={key} className="space-y-1">
-                              <Label className="capitalize text-xs font-semibold text-slate-500">{key.replace(/_/g, ' ')}</Label>
-                              <Input type="number" value={value as number} onChange={e => setFormData({...formData, opex: {...formData.opex, [key]: parseFloat(e.target.value) || 0}})} />
+                              <Label className="capitalize text-xs font-semibold text-slate-500">{key.replace(/_/g, ' ')} <span className="text-slate-600 normal-case">(₹/mo)</span></Label>
+                              <Input type="number" value={value as number} placeholder="₹ / month" onChange={e => setFormData({...formData, opex: {...formData.opex, [key]: parseFloat(e.target.value) || 0}})} />
                           </div>
                       ))}
                   </div>

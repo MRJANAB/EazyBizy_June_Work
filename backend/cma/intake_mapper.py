@@ -176,6 +176,30 @@ class PromoterNetWorth(BaseModel):
                 self.savings + self.mutual_funds + self.shares + self.gold + 
                 self.other_assets - self.liabilities)
 
+class CollateralItem(BaseModel):
+    type: str = ""
+    description: str = ""
+    market_value: float = 0
+    forced_sale_value: float = 0
+    owner: str = ""
+
+class Collateral(BaseModel):
+    primary_security: str = ""
+    collateral_items: List[CollateralItem] = []
+    cgtmse_covered: bool = False
+    cgtmse_coverage_pct: float = 0
+    insurance_arranged: bool = False
+
+class Guarantor(BaseModel):
+    name: str = ""
+    relation: str = ""
+    net_worth: float = 0
+
+class CARecommendation(BaseModel):
+    rating: str = ""            # green / amber / red
+    recommendation: str = ""    # Recommend / Conditional / Decline
+    notes: str = ""
+
 class CMAIntake(BaseModel):
     applicant: ApplicantProfile
     business: BusinessProfile
@@ -187,6 +211,9 @@ class CMAIntake(BaseModel):
     manpower: List[Manpower]
     opex: OperatingExpenses
     wc_norms: WCNorms
+    # Share of gross sales that is export turnover (rest is domestic). Drives the
+    # domestic/export split on Form II and export-receivable context for bankers.
+    export_sales_pct: float = 0
     depreciation_rates: Dict[str, float] = {
         "building": 5.0,
         "plant_machinery": 10.0,
@@ -197,7 +224,9 @@ class CMAIntake(BaseModel):
     }
     tax_rate: float = 25.0
     promoter_net_worth: PromoterNetWorth
-    guarantor: Optional[Dict[str, Any]] = None
+    guarantor: Optional[Guarantor] = None
+    collateral: Optional[Collateral] = None
+    ca_recommendation: Optional[CARecommendation] = None
     assumptions: Dict[str, float] = {
         "revenue_growth": 10.0,
         "cogs_growth": 5.0,

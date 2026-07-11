@@ -160,6 +160,7 @@ export interface CMAFormData {
   manpower: CMAManpower[];
   opex: CMAOperatingExpenses;
   wc_norms: CMAWCNorms;
+  export_sales_pct: number;
   depreciation_rates: Record<string, number>;
   tax_rate: number;
   promoter_net_worth: CMAPromoterNetWorth;
@@ -226,6 +227,7 @@ export const INITIAL_CMA_DATA: CMAFormData = {
     rm_holding_days: 60, wip_days: 15, fg_days: 30,
     receivable_days: 45, creditor_days: 30, cash_holding_days: 15
   },
+  export_sales_pct: 0,
   depreciation_rates: {
     building: 5, plant_machinery: 10, furniture: 10,
     vehicles: 15, computers: 40, office_equipment: 10

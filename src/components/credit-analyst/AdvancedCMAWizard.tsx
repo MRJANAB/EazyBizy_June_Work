@@ -1355,6 +1355,29 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                 )}
               </div>
 
+              {/* Export / domestic sales split */}
+              <div className="p-4 bg-slate-800/40 border border-slate-700 rounded-2xl">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Export Sales (% of turnover)</p>
+                    <p className="text-xs text-slate-400">Splits Gross Sales into Domestic vs Export on Form II. Leave 0 for a fully domestic unit.</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Input type="number" min={0} max={100}
+                      value={formData.export_sales_pct}
+                      onChange={e => setFormData({ ...formData, export_sales_pct: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                      className="w-24 bg-slate-950/50 border-slate-700 text-sm h-9 text-right" />
+                    <span className="text-slate-400 text-sm">%</span>
+                  </div>
+                </div>
+                {formData.export_sales_pct > 0 && totalMonthlyRev > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-700 flex justify-between text-xs">
+                    <span className="text-slate-400">Domestic ₹{(totalMonthlyRev * 12 * (1 - formData.export_sales_pct/100) / 100000).toFixed(1)}L / yr</span>
+                    <span className="text-teal-400">Export ₹{(totalMonthlyRev * 12 * formData.export_sales_pct/100 / 100000).toFixed(1)}L / yr</span>
+                  </div>
+                )}
+              </div>
+
               {/* Revenue summary grid */}
               {totalMonthlyRev > 0 && (
                 <div className="grid grid-cols-2 gap-4">

@@ -53,6 +53,20 @@ def generate_cma_report(intake_data: Dict[str, Any]) -> Dict[str, Any]:
             "business": intake.business.model_dump(),
             "loan": intake.loan.model_dump()
         },
+        "export_sales_pct": intake.export_sales_pct,
+        "promoter_net_worth": intake.promoter_net_worth.model_dump(),
+        "promoter_net_worth_total": intake.promoter_net_worth.net_worth,
+        "guarantor": intake.guarantor.model_dump() if intake.guarantor else None,
+        "collateral": intake.collateral.model_dump() if intake.collateral else None,
+        "ca_recommendation": intake.ca_recommendation.model_dump() if intake.ca_recommendation else None,
+        "project_cost_fixed_assets": (
+            intake.project_cost.land + intake.project_cost.building +
+            intake.project_cost.plant_machinery + intake.project_cost.electrical +
+            intake.project_cost.furniture + intake.project_cost.computers +
+            intake.project_cost.vehicles + intake.project_cost.office_equipment +
+            intake.project_cost.generator_ups
+        ),
+        "total_exposure": intake.means_of_finance.term_loan + intake.means_of_finance.working_capital_loan,
         "operating_statement": operating_statement,
         "depreciation_chart": calculate_depreciation_by_class(intake),
         "historical_operating_statement": historical_statement,

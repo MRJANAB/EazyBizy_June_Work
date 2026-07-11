@@ -225,7 +225,16 @@ def _ca_observations(results):
         rec = "CONDITIONAL - address the flagged item(s) before sanction."
     else:
         rec = "REVIEW - multiple parameters below benchmark; restructure advised."
-    rows.append(_r("OVERALL RECOMMENDATION", [rec, "", ""], style="bold", money=False))
+    rows.append(_r("OVERALL RECOMMENDATION (system)", [rec, "", ""], style="bold", money=False))
+
+    # Analyst's manual recommendation & notes (from the wizard scorecard step).
+    car = results.get("ca_recommendation")
+    if car and (car.get("recommendation") or car.get("notes")):
+        verdict = car.get("recommendation", "")
+        rating = car.get("rating", "")
+        obs("Analyst's Recommendation", verdict, rating.upper() if rating else "", "")
+        if car.get("notes"):
+            rows.append(_r("Analyst's Notes", [car.get("notes"), "", ""], money=False))
 
     cols = [("Value", ""), ("Benchmark", ""), ("Assessment", "")]
     return {"title": "CA Observations & Recommendation", "kind": "table", "columns": cols, "rows": rows}
@@ -238,8 +247,14 @@ def _operating_statement(results, n=5):
     def tl(o): return o.get("tl_interest", o.get("interest", 0))
     def wc(o): return o.get("wc_interest", 0)
 
+    exp_pct = (results.get("export_sales_pct", 0) or 0) / 100.0
+    dom = [round(g(o, "revenue") * (1 - exp_pct), 2) for o in ops]
+    exp = [round(g(o, "revenue") * exp_pct, 2) for o in ops]
+
     rows = [
         _r("1. Gross Sales / Sales & Services", [g(o, "revenue") for o in ops], "bold"),
+        _r("   i. Domestic Sales", dom),
+        _r("   ii. Export Sales", exp),
         _r("2. Net Sales", [g(o, "revenue") for o in ops], "bold"),
         _r("3. COST OF SALES", [""] * len(ops), "sub"),
         _r("   Raw Material / Consumables", [g(o, "cogs") for o in ops]),
@@ -544,6 +559,97 @@ def _sensitivity(results, n=5):
     return {"title": "Sensitivity Analysis", "kind": "table", "columns": cols, "rows": rows}
 
 
+def _promoter_net_worth(results):
+    """
+    Promoter's Net Worth Statement — the personal balance sheet a banker relies on
+    for the promoter guarantee. Straight from the intake (nothing computed).
+    """
+    pnw = results.get("promoter_net_worth", {}) or {}
+    rows = [
+        _r("A. ASSETS", [""], "sub"),
+        _r("Residential Property", [pnw.get("residential_property", 0)]),
+        _r("Commercial Property", [pnw.get("commercial_property", 0)]),
+        _r("Fixed Deposits", [pnw.get("fd", 0)]),
+        _r("Savings / Bank Balance", [pnw.get("savings", 0)]),
+        _r("Mutual Funds", [pnw.get("mutual_funds", 0)]),
+        _r("Shares / Securities", [pnw.get("shares", 0)]),
+        _r("Gold / Jewellery", [pnw.get("gold", 0)]),
+        _r("Other Assets", [pnw.get("other_assets", 0)]),
+        _r("Total Assets", [sum(pnw.get(k, 0) for k in
+            ("residential_property", "commercial_property", "fd", "savings",
+             "mutual_funds", "shares", "gold", "other_assets"))], "bold"),
+        _r("B. LIABILITIES", [""], "sub"),
+        _r("Total Liabilities", [pnw.get("liabilities", 0)]),
+        _r("NET WORTH (A - B)", [results.get("promoter_net_worth_total", 0)], "bold"),
+    ]
+    g = results.get("guarantor")
+    if g and g.get("name"):
+        rows.append(_r("GUARANTOR", [""], "sub"))
+        rows.append(_r(f"  {g.get('name','')} ({g.get('relation','')})",
+                       [g.get("net_worth", 0)]))
+    cols = [("Amount", "(Rs.)")]
+    return {"title": "Promoter's Net Worth Statement", "kind": "table", "columns": cols, "rows": rows}
+
+
+def _security_coverage(results):
+    """
+    Security & Collateral Coverage — primary (hypothecated assets financed) +
+    collateral offered, against total bank exposure, with the coverage ratios and
+    CGTMSE status a banker checks first. Uses the collateral the wizard collects.
+    """
+    col = results.get("collateral")
+    exposure = results.get("total_exposure", 0) or 0
+    primary = results.get("project_cost_fixed_assets", 0) or 0
+    bs = results.get("balance_sheet", [])
+    # Primary security on the WC side = hypothecation of stock + book debts only
+    # (cash / the balancing plug is not pledged security).
+    if bs:
+        ca1 = bs[0]["assets"]["current_assets"]
+        ca_y1 = ca1.get("stock", 0) + ca1.get("debtors", 0)
+    else:
+        ca_y1 = 0
+
+    items = (col or {}).get("collateral_items", []) if col else []
+    tot_mv = sum(i.get("market_value", 0) for i in items)
+    tot_fsv = sum(i.get("forced_sale_value", 0) for i in items)
+
+    rows = [
+        _r("A. PRIMARY SECURITY (hypothecation)", [""], "sub"),
+        _r("Fixed Assets financed (plant, machinery, etc.)", [primary]),
+        _r("Current Assets (stock + book debts), Yr 1", [round(ca_y1, 2)]),
+        _r("Total Primary Security", [round(primary + ca_y1, 2)], "bold"),
+    ]
+    if col and col.get("primary_security"):
+        rows.append(_r(f"  Description: {col.get('primary_security')}", [""]))
+
+    rows.append(_r("B. COLLATERAL SECURITY (offered)", [""], "sub"))
+    if items:
+        for i in items:
+            desc = f"  {i.get('type','')}: {i.get('description','')}".rstrip(": ")
+            rows.append(_r(desc + f"  [owner: {i.get('owner','-')}]",
+                           [i.get("market_value", 0)]))
+        rows.append(_r("Total Collateral - Market Value", [round(tot_mv, 2)], "bold"))
+        rows.append(_r("Total Collateral - Forced Sale Value (FSV)", [round(tot_fsv, 2)], "bold"))
+    else:
+        rows.append(_r("  No collateral pledged", [0]))
+
+    rows.append(_r("C. EXPOSURE & COVERAGE", [""], "sub"))
+    rows.append(_r("Total Bank Exposure (TL + WC)", [round(exposure, 2)], "bold"))
+    total_sec = primary + ca_y1 + tot_mv
+    rows.append(_r("Total Security (Primary + Collateral MV)", [round(total_sec, 2)], "bold"))
+    asset_cov = round(total_sec / exposure, 2) if exposure else 0
+    fsv_cov = round(tot_fsv / exposure, 2) if exposure else 0
+    rows.append(_r("Asset Coverage Ratio (Total Security / Exposure)", [f"{asset_cov:.2f}x"], "bold", money=False))
+    rows.append(_r("Collateral FSV Coverage (FSV / Exposure)", [f"{fsv_cov:.2f}x"], money=False))
+    if col:
+        cg = "Yes — {}%".format(col.get("cgtmse_coverage_pct", 0)) if col.get("cgtmse_covered") else "No"
+        rows.append(_r("CGTMSE Guarantee Cover", [cg], money=False))
+        rows.append(_r("Asset Insurance Arranged", ["Yes" if col.get("insurance_arranged") else "No"], money=False))
+
+    cols = [("Amount", "(Rs.)")]
+    return {"title": "Security & Collateral Coverage", "kind": "table", "columns": cols, "rows": rows}
+
+
 def _abf(results, n=5):
     """
     Assessed Bank Finance (ABF) sheet — the working-capital assessment banks
@@ -618,9 +724,10 @@ def _loan_schedule(results, n=5):
 
 # Short tab names (<=31 chars, Excel limit), in section order.
 _SHEET_NAMES = [
-    "Summary", "Form I - Borrower", "CA Observations", "Operating Statement",
-    "Balance Sheet", "Depreciation Chart", "Comparative Statement", "Ratio Analysis",
-    "Turnover Method", "MPBF", "Assessed Bank Finance", "TL Repayment Schedule",
+    "Summary", "Form I - Borrower", "Promoter Net Worth", "CA Observations",
+    "Operating Statement", "Balance Sheet", "Depreciation Chart",
+    "Comparative Statement", "Ratio Analysis", "Turnover Method", "MPBF",
+    "Assessed Bank Finance", "Security & Collateral", "TL Repayment Schedule",
     "Fund Flow Statement", "Cash Flow", "DSCR Analysis", "Breakeven Analysis",
     "Sensitivity Analysis",
 ]
@@ -628,9 +735,10 @@ _SHEET_NAMES = [
 
 def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Ordered CMA sections — the shared content for Excel and PDF."""
-    secs = [
+    ordered = [
         _summary(results),
         _form_i(results),
+        _promoter_net_worth(results),
         _ca_observations(results),
         _operating_statement(results),
         _balance_sheet(results),
@@ -640,6 +748,7 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
         _turnover(results),
         _mpbf(results),
         _abf(results),
+        _security_coverage(results),
         _loan_schedule(results),
         _fund_flow(results),
         _cash_flow(results),
@@ -647,6 +756,7 @@ def build_sections(results: Dict[str, Any]) -> List[Dict[str, Any]]:
         _breakeven(results),
         _sensitivity(results),
     ]
+    secs = [s for s in ordered if s is not None]
     for sec, name in zip(secs, _SHEET_NAMES):
         sec["sheet"] = name
     return secs

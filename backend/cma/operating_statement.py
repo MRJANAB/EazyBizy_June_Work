@@ -77,8 +77,14 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
 
         # CGTMSE annual guarantee fee — an operating cost when the loan is
         # CGTMSE-covered, charged on the term-loan opening balance for the year.
+        # Rate is the analyst-entered bank slab (cgtmse_fee_pct); falls back to
+        # the 1% default when unset/zero.
         cg = intake.collateral
-        cgtmse_fee = round(sched["tl_opening"] * CGTMSE_AGF_RATE, 2) if (cg and cg.cgtmse_covered) else 0.0
+        if cg and cg.cgtmse_covered:
+            fee_rate = (cg.cgtmse_fee_pct / 100.0) if cg.cgtmse_fee_pct else CGTMSE_AGF_RATE
+            cgtmse_fee = round(sched["tl_opening"] * fee_rate, 2)
+        else:
+            cgtmse_fee = 0.0
 
         gross_profit = current_revenue - current_cogs
         total_opex   = current_salary + current_opex + cgtmse_fee

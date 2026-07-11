@@ -163,6 +163,13 @@ def _ca_observations(results):
     dscr = summ.get("avg_dscr", 0)
     obs("Average DSCR", f"{dscr:.2f}", ">= 1.50 (min 1.25)",
         "Good" if dscr >= 1.5 else "Caution" if dscr >= 1.25 else "Concern")
+    # Minimum DSCR (weakest year) — bankers size repayment to the worst year.
+    dscrs = [r.get("dscr", 0) for r in ratios] if ratios else []
+    if dscrs:
+        min_dscr = min(dscrs)
+        min_yr = dscrs.index(min_dscr) + 1
+        obs("Minimum DSCR (weakest year)", f"{min_dscr:.2f} (Yr {min_yr})", ">= 1.20 (min 1.00)",
+            "Good" if min_dscr >= 1.2 else "Caution" if min_dscr >= 1.0 else "Concern")
     # Debt-Equity
     de = summ.get("max_debt_equity", 0)
     obs("Debt-Equity Ratio", f"{de:.2f}:1", "<= 2.0 (max 3.0)",
@@ -183,6 +190,16 @@ def _ca_observations(results):
     tol = rx[0].get("tol_tnw", 0) if rx else 0
     obs("TOL / TNW (Yr 1)", f"{tol:.2f}", "<= 3.0",
         "Good" if tol <= 3 else "Caution" if tol <= 4 else "Concern")
+    # Total Debt / EBITDA (Yr 1) — key leverage multiple for term-loan sizing.
+    if ops and bs:
+        ebitda1 = ops[0].get("ebitda", 0)
+        total_debt1 = bs[0]["liabilities"].get("term_loan", 0) + bs[0]["liabilities"].get("wc_loan", 0)
+        if ebitda1 > 0:
+            de_ebitda = total_debt1 / ebitda1
+            obs("Total Debt / EBITDA (Yr 1)", f"{de_ebitda:.2f}x", "<= 3.5x (max 4.5x)",
+                "Good" if de_ebitda <= 3.5 else "Caution" if de_ebitda <= 4.5 else "Concern")
+        else:
+            obs("Total Debt / EBITDA (Yr 1)", "N/A (EBITDA <= 0)", "<= 3.5x", "Concern")
     # MPBF vs WC sought
     if mpbf:
         m0 = mpbf[0]

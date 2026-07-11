@@ -863,6 +863,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
               collateral_items: [],
               cgtmse_covered: isCgtmse,
               cgtmse_coverage_pct: isCgtmse ? 75 : 0,
+              cgtmse_fee_pct: 1,
               insurance_arranged: false,
             },
           } : {}),
@@ -1779,7 +1780,7 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
             </div>
           );
       case 'collateral': {
-          const col = formData.collateral || { primary_security: '', collateral_items: [], cgtmse_covered: false, cgtmse_coverage_pct: 75, insurance_arranged: false };
+          const col = formData.collateral || { primary_security: '', collateral_items: [], cgtmse_covered: false, cgtmse_coverage_pct: 75, cgtmse_fee_pct: 1, insurance_arranged: false };
           const setCol = (patch: Partial<typeof col>) => setFormData({...formData, collateral: {...col, ...patch}});
           const totalMarketVal = col.collateral_items.reduce((a, c) => a + c.market_value, 0);
           const totalFSV       = col.collateral_items.reduce((a, c) => a + c.forced_sale_value, 0);
@@ -1870,6 +1871,14 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData 
                           {[50,75,85].map(p => <SelectItem key={p} value={String(p)}>{p}% (Up to ₹{p===85?'5L':p===75?'2Cr':'5Cr'})</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      <Label className="text-xs text-slate-400 pt-1">Annual Guarantee Fee (% p.a.)</Label>
+                      <div className="flex items-center gap-2">
+                        <Input type="number" step="0.01" min={0} max={5}
+                          value={col.cgtmse_fee_pct ?? 1}
+                          onChange={e => setCol({ cgtmse_fee_pct: Math.min(5, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                          className="bg-slate-950/50 border-slate-700 text-xs h-8 w-24 text-right" />
+                        <span className="text-[10px] text-slate-500">charged on TL outstanding; flows into the P&L (Form II)</span>
+                      </div>
                     </div>
                   )}
                 </div>

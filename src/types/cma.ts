@@ -174,6 +174,7 @@ export interface CMAFormData {
     collateral_items: CMACollateralItem[];
     cgtmse_covered: boolean;
     cgtmse_coverage_pct: number;
+    cgtmse_fee_pct?: number;
     insurance_arranged: boolean;
   };
   ca_recommendation?: {

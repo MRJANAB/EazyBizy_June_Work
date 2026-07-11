@@ -188,6 +188,7 @@ class Collateral(BaseModel):
     collateral_items: List[CollateralItem] = []
     cgtmse_covered: bool = False
     cgtmse_coverage_pct: float = 0
+    cgtmse_fee_pct: float = 1.0   # annual guarantee fee % p.a. (bank slab)
     insurance_arranged: bool = False
 
 class Guarantor(BaseModel):

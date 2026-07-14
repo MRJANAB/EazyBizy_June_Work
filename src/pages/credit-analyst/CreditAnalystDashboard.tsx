@@ -1609,6 +1609,7 @@ const CreditAnalystDashboard = () => {
 
       {selectedApplication && (
         <AdvancedCMAWizard
+          key={selectedApplication.id}
           isOpen={isCmaWizardOpen}
           onClose={() => setIsCmaWizardOpen(false)}
           applicationId={selectedApplication.id}

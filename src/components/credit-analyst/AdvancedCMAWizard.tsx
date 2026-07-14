@@ -875,7 +875,10 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData,
           } : {}),
         };
 
-        setFormData(prev => ({ ...prev, ...mappedData }));
+        // Rebuild from a clean base (not prev) so no field from a previously
+        // opened application can linger into this one — each application must
+        // produce its own report, never a copy of the last one.
+        setFormData({ ...INITIAL_CMA_DATA, ...mappedData });
         toast({ title: "Data Imported", description: "Applicant data has been loaded into the wizard." });
       }
     } catch (error: any) {
@@ -975,18 +978,26 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData,
       }
 
       const blob = await response.blob();
+      if (!blob || blob.size === 0) {
+        throw new Error("The server returned an empty file. Please try again.");
+      }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const extension = format === 'pdf' ? 'pdf' : format === 'excel' ? 'xlsx' : 'csv';
-      a.download = `CMA_Report_${applicationId}_${new Date().toISOString().split('T')[0]}.${extension}`;
+      const namePart = demoMode ? 'DEMO' : applicationId;
+      a.download = `CMA_Report_${namePart}_${new Date().toISOString().split('T')[0]}.${extension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      // Revoke on the next tick — revoking synchronously can abort the download
+      // in some browsers before it has actually started.
+      setTimeout(() => window.URL.revokeObjectURL(url), 4000);
 
       toast({ title: `CMA ${format.toUpperCase()} Generated`, description: "Your file has been downloaded." });
-      if (format === 'pdf') onClose();
+      // In demo mode keep the wizard open so the user can try other formats /
+      // review the on-screen figures; only auto-close for a real application.
+      if (format === 'pdf' && !demoMode) onClose();
     } catch (error: any) {
       console.error("CMA Export Error:", error);
       toast({

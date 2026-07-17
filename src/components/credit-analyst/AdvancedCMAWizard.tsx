@@ -1017,6 +1017,12 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData,
   };
 
   const handleSaveDraft = async () => {
+    // Demo mode has no backing DB row (applicationId is `demo-<scheme>`), so
+    // there is nothing to persist — don't attempt a write that would 0-row.
+    if (demoMode) {
+      toast({ title: "Demo mode", description: "Saving is disabled in the Live Demo — this is a read-only sample." });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const { data: existing } = await supabase
@@ -1025,16 +1031,21 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData,
         .eq('id', applicationId)
         .single();
       const merged = { ...(existing?.project_report_inputs as any || {}), cma_data: formData };
-      const { error } = await supabase
+      const { data: saved, error } = await supabase
         .from('loan_applications')
         .update({
             project_report_inputs: merged,
             cma_data: formData,
             updated_at: new Date().toISOString()
         })
-        .eq('id', applicationId);
+        .eq('id', applicationId)
+        .select('id');
 
       if (error) throw error;
+      // RLS returns 0 rows (no error) when no UPDATE policy matches — surface it.
+      if (!saved || saved.length === 0) {
+        throw new Error("Draft not saved — you may not have permission to update this application. Ensure the credit-analyst UPDATE policy is applied to the database.");
+      }
 
       toast({ title: "Draft Saved", description: "CMA progress has been saved to the database." });
     } catch (error: any) {

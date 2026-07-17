@@ -644,17 +644,26 @@ const CreditAnalystDashboard = () => {
     setDecisionLoadingByApp((prev) => ({ ...prev, [applicationId]: true }));
 
     try {
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from("loan_applications")
         .update({
           decision_status: decision,
           reviewed_at: new Date().toISOString(),
           reviewed_by: user?.id ?? null,
         })
-        .eq("id", applicationId);
+        .eq("id", applicationId)
+        .select("id");
 
       if (error) {
         throw error;
+      }
+      // RLS silently returns 0 rows (no error) when no UPDATE policy matches.
+      // Treat that as a real failure instead of a false success.
+      if (!updated || updated.length === 0) {
+        throw new Error(
+          "Decision could not be saved — you may not have permission to update this application. " +
+          "Ensure the credit-analyst UPDATE policy is applied to the database.",
+        );
       }
 
       setSelectedApplication((prev) => {

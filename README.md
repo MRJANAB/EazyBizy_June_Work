@@ -1,7 +1,7 @@
 # EazyBizy — Government Loan Assistance Platform
 
-> **Version:** 3.2.0
-> **Date:** 29 May 2026
+> **Version:** 3.3.0
+> **Date:** 18 July 2026
 > **Status:** Production Ready
 
 ---
@@ -11,6 +11,64 @@
 EazyBizy is a full-stack fintech platform that helps businesses apply for government loan schemes (PMEGP, Mudra, MSME, CGTMSE). It includes a multi-step GTAB application wizard, a full Credit Analyst (CA) workstation with 16-step CMA report generation, an admin panel, an AI chatbot, and a learning module.
 
 **Stack:** React + TypeScript · Vite · Supabase · Tailwind CSS · shadcn/ui · Python FastAPI (CMA backend)
+
+---
+
+## What Changed in v3.3.0 (18 July 2026)
+
+Focus of this release: making the **Credit Analyst CMA report genuinely bankable** — computed and presented exactly the way an Indian bank's credit officer recomputes it (RBI / Tandon / Nayak conventions) — plus a public Live Demo, and a set of RLS / reliability fixes.
+
+### Bankable CMA Engine (RBI-format, single source of truth)
+
+The report is now built from **one shared section builder** — `backend/cma/report_sections.py` `build_sections(results)` — consumed identically by the Excel (`excel_report.py`), PDF (`pdf_report.py`) and CSV (`csv_report.py`) renderers. **Change a section once → it propagates to all three formats**, so PDF, Excel and CSV are guaranteed replicas.
+
+**20 ordered sections** covering the standard bank CMA form set: Executive Summary, Form I (Particulars of Borrower), Promoter's Net Worth, CA Observations & Recommendation, Credit Appraisal Note, Operating Statement (Form II), Balance Sheet (Form III), Depreciation Chart (WDV), Comparative Statement (Form IV), Ratio Analysis, Turnover Method (Nayak), MPBF (Tandon I & II), Assessed Bank Finance (ABF), Security & Collateral Coverage, Term-Loan Repayment Schedule, Fund Flow (Form VI), Cash Flow (Form V), DSCR, Break-Even (Form VII), Sensitivity.
+
+**Engine correctness (as a CA / banker recomputes it):**
+
+| Area | Treatment |
+|---|---|
+| Term loan | Reducing-balance interest, equal-principal instalments over (tenure − moratorium); interest accrues during moratorium |
+| DSCR | (PAT + Depreciation + Preliminary write-off + TL interest) / (TL principal + TL interest) — WC interest correctly excluded |
+| MPBF | Tandon Method I & II on chargeable current assets (excludes surplus cash) |
+| Balance sheet | Always tallies (cash as residual); RM/WIP/FG valued at proper cost bases; flags funding gaps |
+| Operating statement | COGS from unit costs (not margin); salary fixed with increments; WDV depreciation; CGTMSE guarantee fee flows through EBITDA |
+
+**Banker-grade refinements (v3.3.0):**
+
+- **Current Portion of Term Loan (CPTL)** now included in current liabilities for the current ratio & NWC, and shown as its own line in **Form III** and **Form IV** (term loan shown net of current portion — a classified balance sheet). The current ratio is now **identical** across CA Observations, Ratio Analysis and the Balance Sheet — no contradictory figures for a banker to catch.
+- **Inventory holding period** measured against COGS (not sales), so it isn't understated by the gross margin.
+- **Preliminary / pre-operative expenditure amortised over 5 years** (Sec 35D) — a non-cash below-EBITDA charge, added back in DSCR cash accruals and released from the balance sheet, with cash-flow and fund-flow reconciliation preserved. Shown as "Less: Preliminary Expenses Written Off" in Form II and the DSCR add-back.
+- New analyst inputs wired end-to-end (frontend → Pydantic intake → report): export/domestic sales split, CGTMSE guarantee-fee rate, Collateral & Guarantor, and an editable **Credit Appraisal Note** (strengths / weaknesses / risk mitigants / sanction covenants).
+
+Deliberately kept conservative (bankable as-is): constant gross margin across years (banks strike out margin-expansion assumptions); promoter unsecured loans treated as quasi-equity subject to a subordination covenant.
+
+### Public Live Demo — one approved sample per loan scheme
+
+"View Live Demo" on the Credit Analyst dashboard opens a scheme picker with **six distinct, engine-verified, APPROVED (RECOMMEND) sample proposals** — Mudra Kishor, Mudra Tarun, Mudra TarunPlus, PMEGP, CGTMSE, and MSME PSU. Each is a genuinely different business (garments, food processing, CNC auto-components, handicrafts, plastics moulding, precision engineering) calibrated to a realistic DSCR (2.6–4.1). Source: `src/lib/cmaDemoData.ts`.
+
+- **PDF** is public but **watermarked** ("EAZYBIZY DEMO", diagonal stamp).
+- **Excel / CSV are admin-only** — buttons locked for non-admins (frontend) **and** the backend returns `403` for `excel`/`csv` on the demo path so the lock can't be bypassed.
+
+### Reliability & Security Fixes
+
+| Fix | Detail |
+|---|---|
+| Delete didn't persist | Added RLS **DELETE** policy for credit analysts (`20260711120000_credit_analyst_delete_policy.sql`); frontend now `.select()`s the deleted row and surfaces an honest error instead of a silent RLS no-op |
+| Approvals / drafts didn't persist | Added RLS **UPDATE** policy for credit analysts (`20260718120000_credit_analyst_update_policy.sql`); approve/reject and Save Draft now detect 0-row RLS no-ops |
+| Infinite loading spinner | Fixed `useCreditAnalystAuth` deadlock (was `await`-ing `getUser()` inside `onAuthStateChange`); now uses `getSession()`, defers the callback, and has an 8s watchdog |
+| "Same report every time" | Download URL is cache-busted (`_t` param + `no-store` on request and response); the report always renders fresh from the posted data |
+| Every application looked like "Rajesh Food Products" | Removed the demo-data seeding from the GTAB intake form (`INITIAL_FORM_DATA` and the `PersonalInfoStep` auto-fill effect); new applications start blank |
+| Download reliability | Blob URL revoked after a delay (was aborting downloads in some browsers); empty-response guard |
+
+### ⚠️ Migrations to apply (Supabase → SQL Editor)
+
+These two RLS policies **must be run against the live database** or credit analysts can't delete/approve:
+
+- `supabase/migrations/20260711120000_credit_analyst_delete_policy.sql` (DELETE)
+- `supabase/migrations/20260718120000_credit_analyst_update_policy.sql` (UPDATE)
+
+A one-time cleanup script for old seeded demo rows is provided at `supabase/cleanup_seeded_demo_applications.sql` (manual — not a migration).
 
 ---
 
@@ -142,8 +200,12 @@ EazyBizy/
 │   └── types/               # TypeScript types (cma.ts, gtab.ts, dpr.ts)
 ├── backend/
 │   ├── api/                 # FastAPI routes (cma.py, report.py)
-│   ├── cma/                 # CMA engine: intake_mapper, operating_statement, balance_sheet, ratios, cashflow, mpbf
-│   ├── pdf/                 # PDF builder (builder.py) and CMA PDF generator (cma_generator.py)
+│   ├── cma/                 # CMA engine + report:
+│   │                        #   engine: intake_mapper, operating_statement, balance_sheet, ratios,
+│   │                        #           cashflow, fund_flow, mpbf, loan_schedule, depreciation,
+│   │                        #           breakeven, sensitivity, historical
+│   │                        #   report: report_sections.py (single source) → excel_report / pdf_report / csv_report
+│   ├── pdf/                 # Legacy PDF builder (superseded by cma/pdf_report.py)
 │   ├── calculations/        # Income statement, DSCR, loan schedule, depreciation, working capital
 │   ├── schemes/             # PMEGP, Mudra, MSME, CGTMSE scheme logic and router
 │   └── models/              # Pydantic input schema
@@ -182,6 +244,7 @@ EazyBizy/
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 3.3.0 | 18 July 2026 | Bankable CMA engine (20-section RBI/Tandon/Nayak report from a single shared source → identical PDF/Excel/CSV); banker-grade refinements (CPTL in current ratio + Form III/IV, inventory@COGS, Sec-35D preliminary write-off); public Live Demo with 6 approved per-scheme samples (watermarked PDF, admin-locked Excel/CSV); RLS delete + update policies; auth-deadlock spinner fix; download cache-bust; removed GTAB "Rajesh" demo seeding |
 | 3.2.0 | 29 May 2026 | CA workstation 16-step expansion, break-even/sensitivity/scorecard/collateral, security fixes (path traversal, error leakage), backend bug fixes (mpbf KeyError, sales KeyError, Pydantic 422 block), Supabase migration for CA columns |
 | 3.1.0 | 24 May 2026 | AI engine, CMA advisory panel, backend calculation overhaul, schemes API, GTAB WC step expansion |
 | 3.0.0 | 15 May 2026 | CMA reconciliation refactor, Application Preview step, theme overhaul, git setup |

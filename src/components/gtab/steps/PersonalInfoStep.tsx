@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,23 +21,6 @@ interface PersonalInfoStepProps {
   formData: GTABFormData;
   updateFormData: (updates: Partial<GTABFormData>) => void;
 }
-
-// Demo defaults — auto-applied when form is blank (e.g. first visit)
-const DEMO_PERSONAL: Partial<GTABFormData> = {
-  first_name: 'Rajesh',
-  middle_name: '',
-  last_name: 'Kumar',
-  gender: 'male',
-  education: 'graduate',
-  social_category: 'general',
-};
-const DEMO_PROMOTER = {
-  fathers_name: 'Ramesh Kumar',
-  date_of_birth: '1985-06-15',
-  pan_number: 'ABCPK1234F',
-  aadhar_number: '987654321012',
-  years_experience: 5,
-};
 
 const SectionTitle = ({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
   <div className="flex items-start gap-3 sm:gap-4">
@@ -72,38 +54,6 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
     });
   };
 
-  // Auto-fill demo data when fields are empty (new form or blank draft)
-  useEffect(() => {
-    const formPatch: Partial<GTABFormData> = {};
-    const promoterPatch: Partial<typeof pri.promoter> = {};
-
-    if (!formData.first_name) formPatch.first_name = DEMO_PERSONAL.first_name;
-    if (!formData.last_name)  formPatch.last_name  = DEMO_PERSONAL.last_name;
-    if (!pri?.promoter?.fathers_name)  promoterPatch.fathers_name  = DEMO_PROMOTER.fathers_name;
-    if (!pri?.promoter?.date_of_birth) promoterPatch.date_of_birth = DEMO_PROMOTER.date_of_birth;
-    if (!pri?.promoter?.pan_number)    promoterPatch.pan_number    = DEMO_PROMOTER.pan_number;
-    if (!pri?.promoter?.aadhar_number) promoterPatch.aadhar_number = DEMO_PROMOTER.aadhar_number;
-    if (!pri?.promoter?.years_experience && pri?.promoter?.years_experience !== 0) {
-      promoterPatch.years_experience = DEMO_PROMOTER.years_experience;
-    }
-
-    const hasPatch = Object.keys(formPatch).length > 0;
-    const hasPromoterPatch = Object.keys(promoterPatch).length > 0;
-
-    if (hasPatch || hasPromoterPatch) {
-      updateFormData({
-        ...formPatch,
-        ...(hasPromoterPatch ? {
-          project_report_inputs: {
-            ...pri,
-            promoter: { ...pri.promoter, ...promoterPatch },
-          },
-        } : {}),
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <div className="mx-auto max-w-none space-y-4 sm:space-y-6">
 
@@ -124,7 +74,7 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
                 className={fieldCls}
                 value={formData.first_name}
                 onChange={(e) => updateFormData({ first_name: e.target.value })}
-                placeholder="Rajesh"
+                placeholder="First name"
               />
             </div>
 
@@ -150,7 +100,7 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
                 className={fieldCls}
                 value={formData.last_name}
                 onChange={(e) => updateFormData({ last_name: e.target.value })}
-                placeholder="Kumar"
+                placeholder="Last name"
               />
             </div>
           </div>

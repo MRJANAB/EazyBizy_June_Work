@@ -960,10 +960,16 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData,
       // In demo mode the PDF is watermarked (demo=true). Admin Excel/CSV go via
       // the normal path (no demo flag) so they receive clean files.
       const demoFlag = demoMode && format === 'pdf' ? '&demo=true' : '';
-      const response = await fetch(`${apiUrl}/api/cma/download?format=${format}${demoFlag}`, {
+      // Cache-buster: the URL is otherwise identical for every download, so a
+      // browser/proxy cache could serve a stale file ("same report always").
+      // A unique param + no-store guarantees the current formData is rendered.
+      const bust = `&_t=${Date.now()}`;
+      const response = await fetch(`${apiUrl}/api/cma/download?format=${format}${demoFlag}${bust}`, {
         method: 'POST',
+        cache: 'no-store',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
         body: JSON.stringify(formData),

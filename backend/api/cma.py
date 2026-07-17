@@ -58,7 +58,10 @@ async def download_cma(payload: CMAIntake, format: str = "pdf", demo: bool = Fal
                 media_type="application/pdf",
                 headers={
                     "Content-Disposition": f"attachment; filename={filename_base}.pdf",
-                    "Access-Control-Expose-Headers": "Content-Disposition"
+                    "Access-Control-Expose-Headers": "Content-Disposition",
+                    # Each download is generated fresh from the posted data — never
+                    # let a browser/proxy serve a cached (stale) report.
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
                 }
             )
             
@@ -85,7 +88,8 @@ async def download_cma(payload: CMAIntake, format: str = "pdf", demo: bool = Fal
                 media_type=content_type,
                 headers={
                     "Content-Disposition": f"attachment; filename={filename_base}.{extension}",
-                    "Access-Control-Expose-Headers": "Content-Disposition"
+                    "Access-Control-Expose-Headers": "Content-Disposition",
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
                 }
             )
         else:

@@ -339,14 +339,20 @@ def _balance_sheet(results, n=5):
     def L(b, k): return b["liabilities"].get(k, 0)
     def CA(b, k): return b["assets"]["current_assets"].get(k, 0)
 
+    # Current liabilities INCLUDE the current portion of the term loan (CPTL),
+    # exactly as the Ratio Analysis section computes them — so the current ratio
+    # shown here reconciles with the one in Ratio Analysis (no double figure).
+    def CL(b): return L(b, "wc_loan") + L(b, "creditors") + L(b, "cptl")
+
     rows = [
         _r("CURRENT LIABILITIES", [""] * len(bs), "sub"),
         _r("  Working Capital Bank Borrowing", [L(b, "wc_loan") for b in bs]),
         _r("  Sundry Creditors (Trade)", [L(b, "creditors") for b in bs]),
-        _r("  TOTAL CURRENT LIABILITIES", [L(b, "wc_loan") + L(b, "creditors") for b in bs], "bold"),
+        _r("  Current Portion of Term Loan (CPTL)", [L(b, "cptl") for b in bs]),
+        _r("  TOTAL CURRENT LIABILITIES", [CL(b) for b in bs], "bold"),
         _r("TERM LIABILITIES", [""] * len(bs), "sub"),
-        _r("  Term Loan", [L(b, "term_loan") for b in bs]),
-        _r("  TOTAL TERM LIABILITIES", [L(b, "term_loan") for b in bs], "bold"),
+        _r("  Term Loan (net of current portion)", [L(b, "term_loan") - L(b, "cptl") for b in bs]),
+        _r("  TOTAL TERM LIABILITIES", [L(b, "term_loan") - L(b, "cptl") for b in bs], "bold"),
         _r("TOTAL OUTSIDE LIABILITIES", [L(b, "wc_loan") + L(b, "creditors") + L(b, "term_loan") for b in bs], "bold"),
         _r("NET WORTH", [""] * len(bs), "sub"),
         _r("  Capital & Reserves", [L(b, "net_worth") for b in bs]),
@@ -366,8 +372,8 @@ def _balance_sheet(results, n=5):
         _r("OTHER / INTANGIBLE ASSETS", [b["assets"].get("other_assets", 0) for b in bs]),
         _r("TOTAL ASSETS", [b["assets"]["total"] for b in bs], "bold"),
         _r("Tangible Net Worth", [L(b, "net_worth") - b["assets"].get("other_assets", 0) for b in bs]),
-        _r("Net Working Capital", [CA(b, "total") - (L(b, "wc_loan") + L(b, "creditors")) for b in bs]),
-        _r("Current Ratio", [round(CA(b, "total") / (L(b, "wc_loan") + L(b, "creditors")), 2) if (L(b, "wc_loan") + L(b, "creditors")) else 0 for b in bs], money=False),
+        _r("Net Working Capital", [CA(b, "total") - CL(b) for b in bs]),
+        _r("Current Ratio", [round(CA(b, "total") / CL(b), 2) if CL(b) else 0 for b in bs], money=False),
         _r("Difference [Assets - Liabilities]", [b.get("check", 0) for b in bs]),
     ]
     return {"title": "Balance Sheet (Form III)", "kind": "table", "columns": cols, "rows": rows}
@@ -409,7 +415,8 @@ def _comparative(results, n=5):
         _r("B. CURRENT LIABILITIES", [""] * len(bs), "sub"),
         _r("  6. Sundry Creditors", [L(b, "creditors") for b in bs]),
         _r("  7. WC Bank Borrowing", [L(b, "wc_loan") for b in bs]),
-        _r("  TOTAL CURRENT LIABILITIES", [L(b, "creditors") + L(b, "wc_loan") for b in bs], "bold"),
+        _r("  8. Instalments of Term Loan due within 1 yr (CPTL)", [L(b, "cptl") for b in bs]),
+        _r("  TOTAL CURRENT LIABILITIES", [L(b, "creditors") + L(b, "wc_loan") + L(b, "cptl") for b in bs], "bold"),
     ]
     return {"title": "Form IV - Comparative Statement of Current Assets & Liabilities", "kind": "table", "columns": cols, "rows": rows}
 

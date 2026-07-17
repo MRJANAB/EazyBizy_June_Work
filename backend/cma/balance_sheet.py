@@ -98,6 +98,9 @@ def calculate_balance_sheet(intake: CMAIntake, operating_projections: List[Dict[
             "liabilities": {
                 "net_worth": round(current_net_worth, 2),
                 "term_loan": round(current_term_loan, 2),
+                # Current portion of the term loan (instalments due within the
+                # next 12 months) — classified as a current liability by banks.
+                "cptl": round(proj.get('tl_principal', 0.0), 2),
                 "wc_loan": round(wc_loan, 2),
                 "creditors": round(creditors, 2),
                 "total": round(total_liabilities, 2)

@@ -1,39 +1,45 @@
--- Documents for credit appraisal:
---   1. New document types a CA/banker asks for (CIBIL, quotations, Udyam,
---      GST returns, net-worth certificate, pollution NOC, implementation plan).
---   2. Let credit analysts VIEW uploaded documents (table) and DOWNLOAD the
---      underlying files (storage) — previously only the owner and admins could,
---      so the Credit Analyst page could never show a borrower's documents.
+-- Let credit analysts DOWNLOAD the documents applicants uploaded, so the
+-- Credit Analyst "Documents" tab can show and download them.
+--
+-- This deployment stores documents in loan_applications.project_report_inputs
+-- .uploaded_documents (JSON) with the files in the private storage buckets
+-- 'loan-documents' / 'profile-documents'. The CA already has SELECT on
+-- loan_applications, so the ONLY thing missing is read access to the storage
+-- objects. (The optional user_loan_documents table policy below is applied only
+-- if that table exists — some deployments don't have it and use JSON instead.)
+--
+-- NOTE: the loan_document_type enum is NOT required in JSON mode — document
+-- types are plain string keys there — so no ALTER TYPE is needed here.
 --
 -- Apply in Supabase → SQL Editor.
 
--- ── 1. New loan_document_type enum values ───────────────────────────────────
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'udyam_registration';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'gst_returns';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'cibil_report';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'project_quotation';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'machinery_quotation';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'net_worth_certificate';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'pollution_noc';
-ALTER TYPE public.loan_document_type ADD VALUE IF NOT EXISTS 'implementation_schedule';
-
--- ── 2a. Credit analysts can read the document records ───────────────────────
-CREATE POLICY "Credit analysts can view all loan documents"
-ON public.user_loan_documents FOR SELECT
-USING (
-  public.has_role(auth.uid(), 'credit_analyst'::app_role)
-  OR public.has_role(auth.uid(), 'admin'::app_role)
-);
-
--- ── 2b. Credit analysts (and admins) can DOWNLOAD the files from storage ────
--- The loan-documents bucket is private and was owner-only; this lets the
--- reviewing analyst read (download / sign) any file in that bucket.
+-- ── Storage: analysts & admins can read (download / sign) uploaded files ─────
+DROP POLICY IF EXISTS "Analysts and admins can read loan documents storage" ON storage.objects;
 CREATE POLICY "Analysts and admins can read loan documents storage"
 ON storage.objects FOR SELECT
 USING (
-  bucket_id = 'loan-documents'
+  bucket_id IN ('loan-documents', 'profile-documents')
   AND (
     public.has_role(auth.uid(), 'credit_analyst'::app_role)
     OR public.has_role(auth.uid(), 'admin'::app_role)
   )
 );
+
+-- ── Table (only if user_loan_documents exists): analysts can read records ────
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'user_loan_documents'
+  ) THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Credit analysts can view all loan documents" ON public.user_loan_documents';
+    EXECUTE $p$
+      CREATE POLICY "Credit analysts can view all loan documents"
+      ON public.user_loan_documents FOR SELECT
+      USING (
+        public.has_role(auth.uid(), 'credit_analyst'::app_role)
+        OR public.has_role(auth.uid(), 'admin'::app_role)
+      )
+    $p$;
+  END IF;
+END $$;

@@ -75,15 +75,20 @@ def calculate_balance_sheet(intake: CMAIntake, operating_projections: List[Dict[
         # NOT the surplus balancing cash below).
         min_cash  = (cost_of_production / 365) * intake.wc_norms.cash_holding_days
 
+        # Intangible / deferred assets, net of the preliminary-expense write-off
+        # charged to the P&L so far (the amortised portion leaves the balance
+        # sheet; contingency stays). Keeps the BS consistent with the P&L.
+        other_assets_net = max(other_assets - proj.get('prelim_written_off', 0.0), 0.0)
+
         # ── LIABILITIES side total ────────────────────────────────────────────
         total_liabilities = current_net_worth + current_term_loan + wc_loan + creditors
 
         # ── Cash & bank = balancing figure (residual) ─────────────────────────
-        non_cash_assets = current_fixed_assets + other_assets + stock + debtors
+        non_cash_assets = current_fixed_assets + other_assets_net + stock + debtors
         cash = total_liabilities - non_cash_assets
 
         total_current_assets = stock + debtors + cash
-        total_assets = current_fixed_assets + total_current_assets + other_assets
+        total_assets = current_fixed_assets + total_current_assets + other_assets_net
 
         # Chargeable current assets for MPBF (excludes surplus cash plug).
         wc_chargeable_ca = stock + debtors + min_cash
@@ -108,7 +113,7 @@ def calculate_balance_sheet(intake: CMAIntake, operating_projections: List[Dict[
                     "cash": round(cash, 2),
                     "total": round(total_current_assets, 2)
                 },
-                "other_assets": round(other_assets, 2),
+                "other_assets": round(other_assets_net, 2),
                 "total": round(total_assets, 2)
             },
             # Working-capital figures used for MPBF (chargeable CA excludes surplus cash).

@@ -69,7 +69,9 @@ def calculate_cashflow(intake: CMAIntake,
         d_wc_loan   = wc_loan   - prev["wc_loan"]         # 0 (revolving, constant)
         d_fixed     = fixed     - prev["fixed"]
 
-        cash_accruals = proj["pat"] + proj["depreciation"]
+        # Non-cash add-backs: depreciation AND the preliminary-expense write-off
+        # (the latter is why other_assets shrinks on the balance sheet each year).
+        cash_accruals = proj["pat"] + proj["depreciation"] + proj.get("prelim_amortisation", 0.0)
         wc_change     = d_creditors - d_stock - d_debtors
         operating     = cash_accruals + wc_change
         capex         = d_fixed + proj["depreciation"]    # gross capex (~0 after start)

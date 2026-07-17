@@ -44,6 +44,7 @@ def calculate_fund_flow(intake: CMAIntake,
 
         net_profit = o.get("pat", 0)
         dep        = o.get("depreciation", 0)
+        prelim_amort = o.get("prelim_amortisation", 0)   # non-cash add-back
 
         # Equity infusion (movement in net worth beyond retained profit).
         d_capital = (net_worth - prev["net_worth"]) - net_profit
@@ -54,7 +55,7 @@ def calculate_fund_flow(intake: CMAIntake,
         # Capex (gross fixed-asset additions; ~0 in projection years).
         capex = max((fixed - prev["fixed"]) + dep, 0.0)
 
-        sources = net_profit + dep + max(d_capital, 0.0) + increase_term
+        sources = net_profit + dep + prelim_amort + max(d_capital, 0.0) + increase_term
         uses    = capex + decrease_term + max(-d_capital, 0.0)
         lt_surplus = sources - uses
 

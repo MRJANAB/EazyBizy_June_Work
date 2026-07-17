@@ -36,6 +36,18 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
         intake.opex.insurance + intake.opex.professional_fees + intake.opex.misc
     ) * 12
 
+    # Preliminary & pre-operative expenditure written off over 5 years (Sec 35D
+    # convention: 1/5th p.a.). Non-cash below-EBITDA charge — added back in the
+    # DSCR cash accruals. Contingency is a capital buffer and is NOT amortised.
+    prelim_base = (
+        intake.project_cost.preliminary_expenses +
+        intake.project_cost.registration_license +
+        intake.project_cost.consultancy_fees +
+        intake.project_cost.marketing_launch
+    )
+    prelim_amort_annual = prelim_base / 5.0
+    prelim_written_off = 0.0
+
     # Assumptions
     rev_growth  = intake.assumptions.get("revenue_growth", 10.0) / 100
     # BUG 1 FIX: COGS grows from unit-cost base (same rate as revenue = production volume),
@@ -93,10 +105,16 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
         # WDV depreciation for this year (declines as assets age).
         depreciation = dep_schedule[year - 1]["depreciation"]
 
-        pbt  = ebitda - depreciation - total_interest
+        # Preliminary-expense write-off for this year (capped at the unamortised
+        # balance so it never over-writes-off).
+        prelim_amort = min(prelim_amort_annual, max(prelim_base - prelim_written_off, 0.0))
+        prelim_written_off += prelim_amort
+
+        pbt  = ebitda - depreciation - prelim_amort - total_interest
         tax  = max(0, pbt * (intake.tax_rate / 100))
         pat  = pbt - tax
-        cash_accruals = pat + depreciation
+        # Depreciation AND preliminary write-off are non-cash — both added back.
+        cash_accruals = pat + depreciation + prelim_amort
 
         projections.append({
             "year":               year,
@@ -109,6 +127,8 @@ def calculate_operating_statement(intake: CMAIntake, years: int = 5) -> List[Dic
             "cgtmse_fee":         round(cgtmse_fee, 2),
             "ebitda":             round(ebitda, 2),
             "depreciation":       round(depreciation, 2),
+            "prelim_amortisation": round(prelim_amort, 2),
+            "prelim_written_off":  round(prelim_written_off, 2),   # cumulative
             "interest":           round(total_interest, 2),   # TL + WC (total finance cost)
             "tl_interest":        round(tl_interest, 2),       # term-loan portion only
             "wc_interest":        round(wc_interest, 2),       # working-capital portion

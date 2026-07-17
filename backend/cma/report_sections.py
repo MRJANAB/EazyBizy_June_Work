@@ -319,6 +319,10 @@ def _operating_statement(results, n=5):
         _r("6. Operating Profit before Interest", [g(o, "ebitda") - g(o, "depreciation") for o in ops], "bold"),
         _r("7. Interest on Working Capital", [wc(o) for o in ops]),
         _r("   Interest on Term Loan", [tl(o) for o in ops]),
+    ]
+    if any(g(o, "prelim_amortisation") for o in ops):
+        rows.append(_r("   Less: Preliminary Expenses Written Off", [g(o, "prelim_amortisation") for o in ops]))
+    rows += [
         _r("8. Operating Profit after Interest (PBT)", [g(o, "pbt") for o in ops], "bold"),
         _r("9. Provision for Tax", [g(o, "tax") for o in ops]),
         _r("10. NET PROFIT AFTER TAX", [g(o, "pat") for o in ops], "bold"),
@@ -560,12 +564,16 @@ def _dscr(results, n=5):
     cols = proj_columns(results, n)
     ops = results.get("operating_statement", [])[:n]
     rat = results.get("ratios", [])[:n]
-    total_a = [o.get("pat", 0) + o.get("depreciation", 0) + o.get("tl_interest", 0) for o in ops]
+    total_a = [o.get("pat", 0) + o.get("depreciation", 0) + o.get("prelim_amortisation", 0) + o.get("tl_interest", 0) for o in ops]
     total_b = [o.get("tl_interest", 0) + o.get("tl_principal", 0) for o in ops]
     rows = [
         _r("A. CASH ACCRUALS (Sources)", [""] * len(ops), "sub"),
         _r("Net Profit After Tax", [o.get("pat", 0) for o in ops]),
         _r("Add: Depreciation", [o.get("depreciation", 0) for o in ops]),
+    ]
+    if any(o.get("prelim_amortisation", 0) for o in ops):
+        rows.append(_r("Add: Preliminary Expenses Written Off", [o.get("prelim_amortisation", 0) for o in ops]))
+    rows += [
         _r("Add: Interest on Term Loan", [o.get("tl_interest", 0) for o in ops]),
         _r("Total (A)", total_a, "bold"),
         _r("B. DEBT OBLIGATIONS (Uses)", [""] * len(ops), "sub"),

@@ -9,10 +9,15 @@ def calculate_ratios(intake: CMAIntake, operating_projections: List[Dict[str, An
         bs = balance_sheets[i]
         
         # Current Ratio = Current Assets / Current Liabilities
-        # Current Liabilities = Creditors + WC Loan + (Current portion of Term Loan - ignored for simplicity)
+        # Current Liabilities = Creditors + WC Loan + Current Portion of Term Loan
+        # (CPTL = the term-loan instalments falling due within the next 12 months).
+        # Banks ALWAYS include CPTL in current liabilities, so we compute it the
+        # same way — a current ratio that ignores CPTL is one the bank will
+        # recompute lower, which erodes trust in the whole file.
+        cptl = op.get('tl_principal', 0.0)
         current_assets = bs['assets']['current_assets']['total']
-        current_liabilities = bs['liabilities']['creditors'] + bs['liabilities']['wc_loan']
-        
+        current_liabilities = bs['liabilities']['creditors'] + bs['liabilities']['wc_loan'] + cptl
+
         current_ratio = current_assets / current_liabilities if current_liabilities > 0 else 0
         
         # Quick Ratio = (Current Assets - Stock) / Current Liabilities
@@ -83,7 +88,8 @@ def calculate_ratios_extended(intake: CMAIntake,
         net_block   = A.get("fixed_assets", 0)
         total_assets = A.get("total", 0)
         ca_total    = CA.get("total", 0)
-        current_liab = L.get("creditors", 0) + L.get("wc_loan", 0)
+        cptl        = op.get("tl_principal", 0)   # current maturity of term debt
+        current_liab = L.get("creditors", 0) + L.get("wc_loan", 0) + cptl
         nwc         = ca_total - current_liab
         stock       = CA.get("stock", 0)
         capital_employed = tnw + term_liab
@@ -115,8 +121,10 @@ def calculate_ratios_extended(intake: CMAIntake,
             "ca_turnover":           _safe_div(sales, ca_total),
             "wc_turnover":           _safe_div(sales, nwc),
             "capital_turnover":      _safe_div(sales, tnw),
-            # Turnover periods (days) — CMA RATIOS sheet
-            "inventory_days":        _safe_div(stock * 365, sales),
+            # Turnover periods (days) — CMA RATIOS sheet.
+            # Inventory holding is measured against COST (COGS), not sales — the
+            # bank convention — so it isn't understated by the sales margin.
+            "inventory_days":        _safe_div(stock * 365, op.get("cogs", 0)),
             "collection_days":       _safe_div(CA.get("debtors", 0) * 365, sales),
             "credit_period_days":    _safe_div(L.get("creditors", 0) * 365, op.get("cogs", 0)),
             # Growth (YoY)

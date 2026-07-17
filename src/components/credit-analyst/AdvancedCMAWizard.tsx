@@ -1193,11 +1193,31 @@ export const AdvancedCMAWizard = ({ isOpen, onClose, applicationId, initialData,
           const mofGap   = liveMetrics.totalProjectCost - mofTotal;
           const wcLoan   = mof.working_capital_loan || 0;
           // Functional setState so these never read a stale closure of formData.
+          // Balances Means of Finance to Project Cost in BOTH directions:
+          //   • short  → promoter equity is topped up to fill the gap
+          //   • excess → the term loan is trimmed so sources don't exceed cost
+          // (promoter can't go negative, so a promoter-only plug can't fix an
+          //  over-funded sheet — which is why the old button looked "dead").
           const autoBalance = () => setFormData(prev => {
             const pc = Object.values(prev.project_cost).reduce((a, b) => a + (b || 0), 0);
             const m = prev.means_of_finance;
-            const newPromoter = Math.max(0, pc - (m.term_loan || 0) - (m.subsidy || 0) - (m.unsecured_loans || 0) - (m.other_funding || 0));
-            return { ...prev, means_of_finance: { ...m, promoter_contribution: newPromoter } };
+            const otherFixed = (m.subsidy || 0) + (m.unsecured_loans || 0) + (m.other_funding || 0);
+            let termLoan = m.term_loan || 0;
+            let promoter = pc - otherFixed - termLoan;
+            if (promoter < 0) {
+              // Sources already exceed project cost → trim the term loan to fit
+              // and set the promoter margin to the residual (>= 0).
+              termLoan = Math.max(0, pc - otherFixed);
+              promoter = Math.max(0, pc - otherFixed - termLoan);
+            }
+            return {
+              ...prev,
+              means_of_finance: {
+                ...m,
+                term_loan: Math.round(termLoan),
+                promoter_contribution: Math.round(promoter),
+              },
+            };
           });
           const syncTermLoan = () => setFormData(prev => ({
             ...prev, means_of_finance: { ...prev.means_of_finance, term_loan: prev.loan.amount }

@@ -33,6 +33,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCreditAnalystAuth } from "@/hooks/useCreditAnalystAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { AdvancedCMAWizard } from "@/components/credit-analyst/AdvancedCMAWizard";
+import { ApplicationDocuments } from "@/components/credit-analyst/ApplicationDocuments";
 import { CMA_DEMO_SCHEMES, type DemoScheme } from "@/lib/cmaDemoData";
 
 interface LoanApplication {
@@ -1343,6 +1344,7 @@ const CreditAnalystDashboard = () => {
                       { id: "business", label: "Business Details" },
                       { id: "loan", label: "Loan Details" },
                       { id: "financials", label: "Financials" },
+                      { id: "documents", label: "Documents" },
                       { id: "actions", label: "Evaluation Actions" }
                     ].map((tab) => (
                       <button
@@ -1562,6 +1564,19 @@ const CreditAnalystDashboard = () => {
                             </CardContent>
                           </Card>
                         )}
+                    </div>
+                  )}
+
+                  {activeTab === "documents" && (
+                    <div className="space-y-8">
+                      <Card className="border border-slate-800 bg-slate-900/50 shadow-2xl rounded-2xl overflow-hidden">
+                        <CardHeader className="bg-slate-950/30 border-b border-slate-800 py-4">
+                          <CardTitle className="text-xs font-black uppercase tracking-[0.2em] text-teal-500/80">Applicant Documents</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                          <ApplicationDocuments applicationId={selectedApplication.id} />
+                        </CardContent>
+                      </Card>
                     </div>
                   )}
 

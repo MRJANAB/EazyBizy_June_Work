@@ -112,36 +112,87 @@ interface DocumentRow {
   uploadedAt: string | null;
 }
 
+// Full document set a CA / banker verifies before sanction. All are optional —
+// the applicant uploads whatever is available; the Credit Analyst reviews and
+// downloads them on the Credit Analyst page.
 const baseDocumentRows: Array<Pick<DocumentRow, "id" | "name" | "description" | "documentType">> = [
   {
     id: 1,
     name: "Aadhaar Card",
-    description: "Government issued identity proof",
+    description: "Government issued identity proof (KYC)",
     documentType: "aadhaar_card",
   },
   {
     id: 2,
     name: "PAN Card",
-    description: "Permanent Account Number proof",
+    description: "Permanent Account Number proof (KYC)",
     documentType: "pan_card",
   },
   {
     id: 3,
-    name: "Bank Statement",
-    description: "Latest 3 months bank statement",
+    name: "Bank Statement (6–12 months)",
+    description: "Latest 6 to 12 months bank account statement",
     documentType: "bank_statement",
   },
   {
     id: 4,
-    name: "Income Proof",
-    description: "Salary slip or ITR document",
+    name: "Income Tax Returns (last 3 years)",
+    description: "ITR with computation for the last 3 years, if available",
     documentType: "itr",
   },
   {
     id: 5,
-    name: "Business Registration",
-    description: "Business license or registration proof",
-    documentType: "business_registration",
+    name: "Udyam Registration",
+    description: "Udyam / MSME registration certificate",
+    documentType: "udyam_registration",
+  },
+  {
+    id: 6,
+    name: "GST Returns",
+    description: "Recent GST returns / GSTR filings, if registered",
+    documentType: "gst_returns",
+  },
+  {
+    id: 7,
+    name: "CIBIL Report",
+    description: "Credit bureau (CIBIL) report of the promoter / firm",
+    documentType: "cibil_report",
+  },
+  {
+    id: 8,
+    name: "Project Report / Quotations",
+    description: "Detailed project report and vendor quotations",
+    documentType: "project_quotation",
+  },
+  {
+    id: 9,
+    name: "Machinery Quotations",
+    description: "Proforma invoices / quotations for plant & machinery",
+    documentType: "machinery_quotation",
+  },
+  {
+    id: 10,
+    name: "Land / Building Ownership Documents",
+    description: "Ownership deed, rent agreement or lease for the premises",
+    documentType: "property_documents",
+  },
+  {
+    id: 11,
+    name: "CA Net Worth Certificate",
+    description: "Promoter net-worth certificate from a Chartered Accountant",
+    documentType: "net_worth_certificate",
+  },
+  {
+    id: 12,
+    name: "Pollution / NOC",
+    description: "Pollution control consent / NOC, if applicable to the activity",
+    documentType: "pollution_noc",
+  },
+  {
+    id: 13,
+    name: "Project Implementation Schedule",
+    description: "Timeline / phasing plan for setting up the unit",
+    documentType: "implementation_schedule",
   },
 ];
 

@@ -910,6 +910,14 @@ export type Database = {
         | "employment_letter"
         | "address_proof"
         | "photo"
+        | "udyam_registration"
+        | "gst_returns"
+        | "cibil_report"
+        | "project_quotation"
+        | "machinery_quotation"
+        | "net_worth_certificate"
+        | "pollution_noc"
+        | "implementation_schedule"
         | "other"
     }
     CompositeTypes: {
@@ -1114,6 +1122,14 @@ export const Constants = {
         "employment_letter",
         "address_proof",
         "photo",
+        "udyam_registration",
+        "gst_returns",
+        "cibil_report",
+        "project_quotation",
+        "machinery_quotation",
+        "net_worth_certificate",
+        "pollution_noc",
+        "implementation_schedule",
         "other",
       ],
     },

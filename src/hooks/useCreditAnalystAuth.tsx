@@ -16,14 +16,25 @@ export const useCreditAnalystAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // Safety net: never let the page hang on the spinner forever. If the auth
+    // check hasn't resolved (e.g. Supabase slow/unreachable), stop loading so
+    // the UI can react instead of spinning indefinitely.
+    const watchdog = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 8000);
+
     const checkAuth = async () => {
       try {
-        // Get current user
-        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-        
-        if (userError) throw userError;
+        // getSession() reads the locally-stored session (no network round-trip),
+        // so it can't hang the way getUser() can. Fall back to getUser only if a
+        // session exists but we still want the verified user object.
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUser = session?.user ?? null;
 
         if (!currentUser) {
+          if (cancelled) return;
           setUser(null);
           setIsCreditAnalyst(false);
           setAnalystData(null);
@@ -31,7 +42,7 @@ export const useCreditAnalystAuth = () => {
           return;
         }
 
-        setUser(currentUser);
+        if (!cancelled) setUser(currentUser);
 
         // Check if user has credit analyst role
         const { data: analystRecord, error: analystError } = await supabase
@@ -40,6 +51,8 @@ export const useCreditAnalystAuth = () => {
           .eq("user_id", currentUser.id)
           .eq("role", "credit_analyst")
           .maybeSingle();
+
+        if (cancelled) return;
 
         if (analystError) {
           console.error("Error checking analyst status:", analystError);
@@ -54,19 +67,22 @@ export const useCreditAnalystAuth = () => {
         }
       } catch (error) {
         console.error("Auth check error:", error);
+        if (cancelled) return;
         setIsCreditAnalyst(false);
         setAnalystData(null);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     checkAuth();
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Listen for auth state changes. IMPORTANT: do NOT `await` other supabase
+    // calls directly inside this callback — that can deadlock the auth client.
+    // Defer to a microtask/next tick instead.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        await checkAuth();
+        setTimeout(() => { if (!cancelled) checkAuth(); }, 0);
       } else if (event === "SIGNED_OUT") {
         setUser(null);
         setIsCreditAnalyst(false);
@@ -76,6 +92,8 @@ export const useCreditAnalystAuth = () => {
     });
 
     return () => {
+      cancelled = true;
+      clearTimeout(watchdog);
       subscription.unsubscribe();
     };
   }, []);

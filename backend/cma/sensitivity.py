@@ -15,14 +15,18 @@ from typing import List, Dict, Any
 from .intake_mapper import CMAIntake
 
 
-def _recompute(rev, cogs, salary, other_opex, dep, tl_int, wc_int, tl_principal, tax_rate):
+def _recompute(rev, cogs, salary, other_opex, dep, tl_int, wc_int, tl_principal, tax_rate,
+               cgtmse_fee=0.0, prelim_amort=0.0):
+    # Mirror the main operating statement EXACTLY so the base case ties to the
+    # projection: the CGTMSE fee sits in operating cost (inside EBITDA) and the
+    # preliminary write-off is a non-cash charge below EBITDA, added back in DSCR.
     gross  = rev - cogs
-    ebitda = gross - salary - other_opex
-    pbt    = ebitda - dep - (tl_int + wc_int)
+    ebitda = gross - salary - other_opex - cgtmse_fee
+    pbt    = ebitda - dep - prelim_amort - (tl_int + wc_int)
     tax    = max(0.0, pbt * tax_rate / 100.0)
     pat    = pbt - tax
     denom  = tl_int + tl_principal
-    dscr   = (pat + dep + tl_int) / denom if denom else 0.0
+    dscr   = (pat + dep + prelim_amort + tl_int) / denom if denom else 0.0
     return round(pat, 2), round(dscr, 2)
 
 
@@ -50,6 +54,7 @@ def calculate_sensitivity(intake: CMAIntake,
             pat, dscr = _recompute(
                 rev, cogs, o.get("salary", 0), o.get("other_opex", 0),
                 o.get("depreciation", 0), tl_in, wc_in, o.get("tl_principal", 0), tax_rate,
+                cgtmse_fee=o.get("cgtmse_fee", 0), prelim_amort=o.get("prelim_amortisation", 0),
             )
             rows.append({
                 "year": o.get("year"),

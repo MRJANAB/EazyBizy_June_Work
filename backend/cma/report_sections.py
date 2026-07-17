@@ -170,9 +170,11 @@ def _ca_observations(results):
         min_yr = dscrs.index(min_dscr) + 1
         obs("Minimum DSCR (weakest year)", f"{min_dscr:.2f} (Yr {min_yr})", ">= 1.20 (min 1.00)",
             "Good" if min_dscr >= 1.2 else "Caution" if min_dscr >= 1.0 else "Concern")
-    # Debt-Equity
+    # Debt-Equity (total interest-bearing debt incl. WC borrowing / net worth).
+    # Labelled distinctly from the Ratio Analysis "Debt-Equity Ratio" (which is
+    # term debt / tangible net worth) so the two figures aren't mistaken.
     de = summ.get("max_debt_equity", 0)
-    obs("Debt-Equity Ratio", f"{de:.2f}:1", "<= 2.0 (max 3.0)",
+    obs("Debt-Equity (Total Debt incl. WC / Net Worth)", f"{de:.2f}:1", "<= 2.0 (max 3.0)",
         "Good" if de <= 2 else "Caution" if de <= 3 else "Concern")
     # Promoter contribution
     pc = summ.get("promoter_pct", 0)
@@ -437,7 +439,7 @@ def _ratios(results, n=5):
         _r("Current Ratio", c("current_ratio"), money=False),
         _r("Quick Ratio", c("quick_ratio"), money=False),
         _r("SOLVENCY", [""] * len(rx), "sub"),
-        _r("Debt-Equity Ratio", c("debt_equity"), money=False),
+        _r("Debt-Equity Ratio (Term Debt / TNW)", c("debt_equity"), money=False),
         _r("TOL / TNW", c("tol_tnw"), money=False),
         _r("TTL / TNW", c("ttl_tnw"), money=False),
         _r("Interest Coverage Ratio", c("interest_coverage"), money=False),
@@ -469,7 +471,9 @@ def _turnover(results, n=5):
     cc = [round(0.05 * t, 2) for t in turnover]
     e = [round(b[i] - cc[i], 2) for i in range(len(b))]
     f = [round(b[i] - nwc[i], 2) for i in range(len(b))]
-    mpbf = [round(min(e[i], f[i]), 2) for i in range(len(b))]
+    # MPBF floored at 0: once the firm's own NWC exceeds the turnover norm, the
+    # eligible bank finance under the Nayak method is nil, not negative.
+    mpbf = [round(max(0.0, min(e[i], f[i])), 2) for i in range(len(b))]
     rows = [
         _r("A. Turnover", turnover, "bold"),
         _r("B. 25% of Turnover", b),

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, Save, Factory, Wrench, Store, Sprout, Layers3, CreditCard, Banknote, ShieldCheck, Landmark, BadgePercent, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -384,6 +384,19 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
       loadApplication(applicationId);
     }
   }, [applicationId]);
+
+  // Autosave a half-filled report on every edit (debounced) so nothing is lost
+  // on logout/close. saveProgress writes localStorage always + Supabase if
+  // logged in, so the draft is restored on return.
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (isLoading) return;                       // don't clobber during initial load
+    clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      void saveProgress(false, currentStep, formData, { silent: true });
+    }, 1500);
+    return () => clearTimeout(autosaveTimer.current);
+  }, [formData, currentStep, isLoading]);
 
   useEffect(() => {
     if (applicationId) return;

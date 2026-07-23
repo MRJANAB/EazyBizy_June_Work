@@ -116,8 +116,12 @@ export function advisePromoterMargin(formData: GTABFormData): Advisory | null {
     tone: "warn",
     message: `Promoter margin is ${current.toFixed(1)}% — below the ${minPct}% this scheme expects. A thin margin is a common rejection reason.`,
   };
+  // PMEGP/Mudra/CGTMSE fix the term-loan split from their subsidy rules, so a
+  // manual bank-finance % change is ignored by the report — only offer the
+  // one-click apply for schemes that actually honour the user's term_loan_pct.
+  const schemeHonoursTlPct = ["normal_msme", "msme_psu", "msme_loan", "other_scheme"].includes(formData.loan_scheme);
   // Only offer apply if lowering the bank-finance % actually helps and differs from now.
-  if (suggestedTlPct < plan.termLoanBankFinancePct) {
+  if (schemeHonoursTlPct && suggestedTlPct < plan.termLoanBankFinancePct) {
     base.message += ` Lowering Bank Finance on Fixed Capital to ${suggestedTlPct}% lifts your margin to about ${minPct}%.`;
     base.apply = {
       label: `Use ${suggestedTlPct}% bank finance`,

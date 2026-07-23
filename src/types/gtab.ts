@@ -476,6 +476,10 @@ export interface GTABFormData {
   // Page 3: Business & Loan Details
   business_type: GTABBusinessType;
   business_duration_months: number;
+  // Existing-business only — audited current financials (Step 3)
+  existing_annual_turnover: number;
+  existing_annual_profit: number;
+  existing_monthly_emi: number;
   business_entity_name: string;
   type_of_business: string;
   industry_type: GTABIndustryType;
@@ -617,6 +621,9 @@ export const INITIAL_FORM_DATA: GTABFormData = {
   // ── Step 3: Business & Loan Details ──────────────────────────────────────
   business_type: 'new_business',
   business_duration_months: 0,
+  existing_annual_turnover: 0,
+  existing_annual_profit: 0,
+  existing_monthly_emi: 0,
   business_entity_name: '',
   type_of_business: 'food_processing',
   industry_type: 'manufacturing',

@@ -588,6 +588,23 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(biz)
     NL(story, 5)
 
+    # Existing-business audited snapshot — only shown when it's an existing
+    # business and the applicant supplied figures on Step 3.
+    _ex_turnover = float(inp.get("existing_annual_turnover", 0) or 0)
+    _ex_profit   = float(inp.get("existing_annual_profit", 0) or 0)
+    _ex_emi      = float(inp.get("existing_monthly_emi", 0) or 0)
+    if "existing" in str(_biz_status).lower() and (_ex_turnover or _ex_profit or _ex_emi):
+        H2("A2a. Existing Business — Current Financials", story)
+        exbiz = Table([
+            ["Field","Details","Field","Details"],
+            ["Last FY Turnover",   f"Rs. {r(_ex_turnover)}",  "Last FY Net Profit", f"Rs. {r(_ex_profit)}"],
+            ["Existing Loan EMI",  f"Rs. {r(_ex_emi)} / mo",  "Net Margin",
+                (f"{(_ex_profit / _ex_turnover * 100):.1f}%" if _ex_turnover else "—")],
+        ], colWidths=[35*mm,50*mm,35*mm,50*mm])
+        exbiz.setStyle(BTS())
+        story.append(exbiz)
+        NL(story, 5)
+
     H2("A3. Product / Service Portfolio", story)
     prod_rows = [["Category / Product Description","Monthly Qty","Avg Price (Rs.)","Revenue (Rs./Mo)","Mix %"]]
     for p in cma.get("products", []):

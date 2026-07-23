@@ -109,17 +109,57 @@ const BusinessLoanDetailsStep = ({ formData, updateFormData }: BusinessLoanDetai
             </div>
 
             {formData.business_type === "existing_business" && (
-              <div className="space-y-2">
-                <Label>How long in business? (Months) *</Label>
-                <Input
-                  type="number"
-                  className="h-12 rounded-xl"
-                  value={formData.business_duration_months || ""}
-                  onChange={(e) => updateFormData({ business_duration_months: parseInt(e.target.value) || 0 })}
-                  placeholder="e.g. 24"
-                  min={0}
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label>How long in business? (Months) *</Label>
+                  <Input
+                    type="number"
+                    className="h-12 rounded-xl"
+                    value={formData.business_duration_months || ""}
+                    onChange={(e) => updateFormData({ business_duration_months: parseInt(e.target.value) || 0 })}
+                    placeholder="e.g. 24"
+                    min={0}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs text-teal-800">
+                    Existing business — enter last financial year's audited figures. These appear in the report so the banker sees your track record.
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Last FY Annual Turnover (₹) *</Label>
+                  <Input
+                    type="number"
+                    className="h-12 rounded-xl"
+                    value={formData.existing_annual_turnover || ""}
+                    onChange={(e) => updateFormData({ existing_annual_turnover: parseFloat(e.target.value) || 0 })}
+                    placeholder="e.g. 2400000"
+                    min={0}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Last FY Net Profit (₹) *</Label>
+                  <Input
+                    type="number"
+                    className="h-12 rounded-xl"
+                    value={formData.existing_annual_profit || ""}
+                    onChange={(e) => updateFormData({ existing_annual_profit: parseFloat(e.target.value) || 0 })}
+                    placeholder="e.g. 300000"
+                    min={0}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Existing Loan EMI / month (₹)</Label>
+                  <Input
+                    type="number"
+                    className="h-12 rounded-xl"
+                    value={formData.existing_monthly_emi || ""}
+                    onChange={(e) => updateFormData({ existing_monthly_emi: parseFloat(e.target.value) || 0 })}
+                    placeholder="0 if none"
+                    min={0}
+                  />
+                </div>
+              </>
             )}
 
             <div className="space-y-2">

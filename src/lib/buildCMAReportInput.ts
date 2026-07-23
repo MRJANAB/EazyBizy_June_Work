@@ -219,6 +219,9 @@ export function buildCMAReportInput(formData: GTABFormData): object {
       msme_number:              ri.business.msme_number || '',
       bank_name:                ri.loan.bank_name      || '',
       business_duration_months: Number(formData.business_duration_months || 0),
+      existing_annual_turnover: formData.business_type === 'existing_business' ? Number(formData.existing_annual_turnover || 0) : 0,
+      existing_annual_profit:   formData.business_type === 'existing_business' ? Number(formData.existing_annual_profit || 0) : 0,
+      existing_monthly_emi:     formData.business_type === 'existing_business' ? Number(formData.existing_monthly_emi || 0) : 0,
       scheme_label:             (formData.loan_scheme === 'other_scheme' && formData.loan_scheme_other)
                                   ? formData.loan_scheme_other
                                   : '',

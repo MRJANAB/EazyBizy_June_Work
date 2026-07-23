@@ -8,6 +8,8 @@ import {
 import { IndianRupee, Wallet, Users, Activity, Lightbulb } from "lucide-react";
 import { GTABFormData } from "@/types/gtab";
 import { getStep7Tips } from "@/lib/caGuidance";
+import { CASuggestionTip } from "@/components/gtab/CASuggestionTip";
+import { adviseOpexToRevenue } from "@/lib/caAdvisory";
 import { numberToWords } from "@/lib/numberToWords";
 
 interface MonthlyExpensesStepProps {
@@ -132,6 +134,8 @@ const MonthlyExpensesStep = ({ formData, updateFormData }: MonthlyExpensesStepPr
     <div className="mx-auto max-w-none space-y-4 sm:space-y-8">
       <Card className="gtab-card-light rounded-[0.9rem] border shadow-sm sm:rounded-2xl">
         <CardContent className="space-y-6 p-4 sm:space-y-10 sm:p-8">
+
+          <CASuggestionTip advisories={[adviseOpexToRevenue(formData)]} onApply={updateFormData} />
 
           {/* ── Rent ─────────────────────────────────────────────────────────── */}
           <SectionTitle icon={Users} title="Fixed Monthly Costs — Rent & Salary"

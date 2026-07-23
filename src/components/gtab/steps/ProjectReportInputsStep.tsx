@@ -17,6 +17,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import AIAssistBadge from "@/components/AIAssistPanel";
 import { GTABFormData, NATURE_OF_BUSINESS_OPTIONS, PRODUCT_SUGGESTIONS, ProjectReportCompetitor, ProjectReportInputs, ProjectReportProductCategory } from "@/types/gtab";
 import { getFinancingPlan, getBankFinancePctBand } from "@/lib/projectReport";
+import { CASuggestionTip } from "@/components/gtab/CASuggestionTip";
+import { advisePromoterMargin } from "@/lib/caAdvisory";
 import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
 import { getStep9Tips } from "@/lib/caGuidance";
 
@@ -521,6 +523,8 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             title="3. Loan Structure & Interest Assumptions"
             subtitle="These values drive the Repayment Schedule, DSCR and Interest calculations in the bank report."
           />
+
+          <CASuggestionTip advisories={[advisePromoterMargin(formData)]} onApply={updateFormData} />
 
           {(() => {
             // ── Scheme-based presets ────────────────────────────────────────

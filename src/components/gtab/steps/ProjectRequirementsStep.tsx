@@ -10,6 +10,8 @@ import DynamicIndustryFields from "@/components/gtab/fields/DynamicIndustryField
 import { getStep5Tips } from "@/lib/caGuidance";
 import { getFinancingPlan } from "@/lib/projectReport";
 import { numberToWords } from "@/lib/numberToWords";
+import { CASuggestionTip } from "@/components/gtab/CASuggestionTip";
+import { adviseProjectCostCeiling, adviseLandBuildingShare, advisePromoterMargin } from "@/lib/caAdvisory";
 
 // ── Format helpers ─────────────────────────────────────────────────────────────
 const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
@@ -173,6 +175,11 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
 
       <Card className="gtab-card-light rounded-[0.9rem] border shadow-sm sm:rounded-2xl">
         <CardContent className="space-y-6 p-4 sm:space-y-10 sm:p-8">
+
+          <CASuggestionTip
+            advisories={[adviseProjectCostCeiling(formData), adviseLandBuildingShare(formData), advisePromoterMargin(formData)]}
+            onApply={updateFormData}
+          />
 
           {/* ── Fixed Capital (Infrastructure) ─────────────────────────────── */}
           <SectionTitle

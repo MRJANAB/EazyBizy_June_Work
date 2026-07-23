@@ -394,34 +394,21 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
           />
 
           <CATip tips={[
-            "PAN and Aadhaar are mandatory for KYC verification by the bank. Ensure they match the applicant's identity proof.",
-            "Years of Experience helps the bank assess promoter capability. Even 1-2 years in the same trade counts.",
+            "Name, DOB, PAN, Aadhaar and Years of Experience were captured in Step 1 (KYC) — they flow into this report automatically. No need to re-enter.",
             "Previous employment shows income history — leave blank if self-employed/homemaker.",
           ]} />
 
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+            Identity & KYC — {report.promoter.fathers_name ? `${report.promoter.fathers_name}, ` : ""}
+            {report.promoter.date_of_birth ? `DOB ${report.promoter.date_of_birth}, ` : ""}
+            {report.promoter.pan_number ? `PAN ${report.promoter.pan_number}, ` : ""}
+            {Number(report.promoter.years_experience || formData.years_experience || 0) > 0
+              ? `${report.promoter.years_experience || formData.years_experience} yrs experience`
+              : "experience not set"}
+            {" — "}edit in Step 1 if needed.
+          </div>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
-            <div className="space-y-2">
-              <Label>Father's Name</Label>
-              <Input className="h-11 rounded-xl" value={report.promoter.fathers_name} onChange={(e) => updateSection("promoter", { fathers_name: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Date of Birth</Label>
-              <Input type="date" className="h-11 rounded-xl" value={report.promoter.date_of_birth} onChange={(e) => updateSection("promoter", { date_of_birth: e.target.value })} />
-            </div>
-            <NumberField
-              label="Years of Experience in this Trade / Business"
-              value={report.promoter.years_experience || Number(formData.years_experience || 0)}
-              onChange={(value) => updateSection("promoter", { years_experience: value })}
-              placeholder="e.g. 3"
-            />
-            <div className="space-y-2">
-              <Label>PAN Number</Label>
-              <Input className="h-11 rounded-xl uppercase" value={report.promoter.pan_number} onChange={(e) => updateSection("promoter", { pan_number: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" />
-            </div>
-            <div className="space-y-2">
-              <Label>Aadhaar Number</Label>
-              <Input className="h-11 rounded-xl" value={report.promoter.aadhar_number} onChange={(e) => updateSection("promoter", { aadhar_number: e.target.value })} placeholder="XXXX-XXXX-5678" />
-            </div>
             <div className="space-y-2">
               <Label>Previous Employer</Label>
               <Input className="h-11 rounded-xl" value={report.promoter.previous_employer} onChange={(e) => updateSection("promoter", { previous_employer: e.target.value })} />

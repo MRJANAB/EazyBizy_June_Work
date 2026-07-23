@@ -118,6 +118,8 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
                 type="date"
                 className={fieldCls}
                 value={pri?.promoter?.date_of_birth || ""}
+                min="1940-01-01"
+                max={new Date().toISOString().split("T")[0]}
                 onChange={(e) => updatePromoter({ date_of_birth: e.target.value })}
               />
             </div>

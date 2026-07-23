@@ -78,10 +78,16 @@ const SCHEME_TL_BAND: Record<string, [number, number]> = {
   other_scheme:    [60, 90],
 };
 
+// Allowed [min, max] band for Bank Finance on Fixed Capital %, per scheme.
+// The UI uses this so the input can't be set below the scheme minimum (e.g.
+// normal MSME can't go under 70%) — keeping the shown % and the calc in sync.
+export const getBankFinancePctBand = (formData: GTABFormData): [number, number] =>
+  SCHEME_TL_BAND[formData.loan_scheme] ?? [0, 100];
+
 export const getBankFinancePct = (formData: GTABFormData) => {
   const merged  = mergeProjectReportInputs(formData.project_report_inputs);
   const raw     = Number(merged.dpr.term_loan_pct || 75);
-  const band    = SCHEME_TL_BAND[formData.loan_scheme] ?? [0, 100];
+  const band    = getBankFinancePctBand(formData);
   return clamp(raw, band[0], band[1]);
 };
 

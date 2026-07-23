@@ -120,17 +120,17 @@ const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
               </p>
             </div>
 
-            <div className="p-6 rounded-xl bg-secondary/10 border border-secondary/20">
-              <div className="flex items-center gap-2 text-secondary mb-2">
+            <div className="p-6 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <div className="flex items-center gap-2 text-amber-600 mb-2">
                 <IndianRupee className="w-5 h-5" />
-                <span className="text-sm font-medium">{`Promoter's Contribution (${Number(promoterEquityPct).toFixed(1)}%)`}</span>
+                <span className="text-sm font-semibold">{`Promoter's Contribution (${Number(promoterEquityPct).toFixed(1)}%)`}</span>
               </div>
 
-              <p className="text-2xl font-bold">
+              <p className="text-2xl font-bold text-amber-700">
                 {formatCurrency(totals.margin_money)}
               </p>
 
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-amber-700/70 mt-1">
                 Own Equity Investment
               </p>
             </div>

@@ -400,7 +400,7 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
               onChange={(v) => updateFormData({ furniture_cost: v })}
             />
             <CurrencyInput
-              label="Electrification / Internal Wiring / Power Backup (₹)"
+              label="Electrification / Internal Wiring / Power Backup — one-time (₹)"
               value={formData.electrification_cost}
               onChange={(v) => updateFormData({ electrification_cost: v })}
               hint="Internal wiring, meter, generator, stabiliser"
@@ -411,7 +411,7 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
               onChange={(v) => updateFormData({ racks_storage_cost: v })}
             />
             <CurrencyInput
-              label={isAgriculture ? "Farm Vehicle / Transport (₹)" : "Transport / Vehicle / Loading Cost (₹)"}
+              label={isAgriculture ? "Farm Vehicle / Transport — one-time (₹)" : "Transport / Vehicle / Loading Cost — one-time (₹)"}
               value={formData.transportation_cost}
               onChange={(v) => updateFormData({ transportation_cost: v })}
             />

@@ -16,7 +16,7 @@ import { AlertTriangle, Briefcase, Building2, Boxes, CheckCircle2, CircleHelp, F
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import AIAssistBadge from "@/components/AIAssistPanel";
 import { GTABFormData, NATURE_OF_BUSINESS_OPTIONS, PRODUCT_SUGGESTIONS, ProjectReportCompetitor, ProjectReportInputs, ProjectReportProductCategory } from "@/types/gtab";
-import { getFinancingPlan } from "@/lib/projectReport";
+import { getFinancingPlan, getBankFinancePctBand } from "@/lib/projectReport";
 import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
 import { getStep9Tips } from "@/lib/caGuidance";
 
@@ -201,7 +201,10 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
   };
 
   const handleBankFinancePctChange = (value: number) => {
-    const clampedValue = Math.min(Math.max(value, 0), 100);
+    // Floor to the scheme band minimum (e.g. normal MSME ≥ 70%) so the shown %
+    // and the term-loan calc always agree — 69% silently became 70% before.
+    const [bandMin, bandMax] = getBankFinancePctBand(formData);
+    const clampedValue = Math.min(Math.max(value, bandMin), bandMax);
     updateReport({
       dpr: {
         ...report.dpr,
@@ -607,8 +610,11 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                   </div>
                   <div className="space-y-2">
                     <Label>Bank Finance on Fixed Capital %</Label>
-                    <Input type="number" className="h-11 rounded-xl" value={report.dpr.term_loan_pct || 75} min={0} max={100}
-                      onChange={(e) => handleBankFinancePctChange(Number(e.target.value))} />
+                    <Input type="number" className="h-11 rounded-xl" value={report.dpr.term_loan_pct || 75}
+                      min={getBankFinancePctBand(formData)[0]} max={getBankFinancePctBand(formData)[1]}
+                      onChange={(e) => updateReport({ dpr: { ...report.dpr, term_loan_pct: Math.min(Number(e.target.value), getBankFinancePctBand(formData)[1]) } })}
+                      onBlur={(e) => handleBankFinancePctChange(Number(e.target.value))} />
+                    <p className="text-xs text-muted-foreground">Min {getBankFinancePctBand(formData)[0]}% for this scheme (applied when you click away)</p>
                     <div className="flex gap-1 flex-wrap">
                       {[isPMEGP ? [65, 75, 85, 90] : isMudra ? [80, 85, 90] : [70, 75, 80]][0].map(v => (
                         <button key={v} type="button"
@@ -1175,14 +1181,14 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                         <Label>{isAgriculture ? "Crop / Activity" : "Service Name"} *</Label>
                         <Input className="h-11 rounded-xl" value={item.category} onChange={(e) => updateServiceRevenue(item.id, { category: e.target.value })} placeholder={isAgriculture ? "e.g. Wheat" : "e.g. Hair Cut"} />
                       </div>
-                      <NumberField label="Rate (Rs.)" value={Number(item.avg_price) || 0} onChange={(v) => updateServiceRevenue(item.id, { avg_price: v })} placeholder="200" />
-                      <NumberField label="Qty / Sessions per Month" value={Number(item.units_monthly) || 0} onChange={(v) => updateServiceRevenue(item.id, { units_monthly: v })} placeholder="100" />
+                      <NumberField label={`Rate per ${item.billing_unit || "Unit"} (Rs.)`} value={Number(item.avg_price) || 0} onChange={(v) => updateServiceRevenue(item.id, { avg_price: v })} placeholder="200" />
+                      <NumberField label={`${item.billing_unit || "Unit"}s per Month`} value={Number(item.units_monthly) || 0} onChange={(v) => updateServiceRevenue(item.id, { units_monthly: v })} placeholder="100" />
                       <div className="space-y-1.5">
                         <Label>Billing Unit</Label>
                         <Select value={item.billing_unit || "Month"} onValueChange={(v) => updateServiceRevenue(item.id, { billing_unit: v })}>
                           <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {["Day","Month","Session","Client","Project","Hour","Kg","Quintal"].map(u => <SelectItem key={u} value={u}>Per {u}</SelectItem>)}
+                            {["Session","Client","Project","Unit","Kg","Quintal"].map(u => <SelectItem key={u} value={u}>Per {u}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>

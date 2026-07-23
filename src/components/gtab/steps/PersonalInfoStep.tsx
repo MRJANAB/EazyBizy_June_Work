@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { User, GraduationCap, ShieldCheck } from "lucide-react";
-import AIAssistBadge from "@/components/AIAssistPanel";
 import {
   GTABFormData,
   GENDER_OPTIONS,
@@ -68,7 +67,6 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
             <div className="space-y-2">
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <FieldLabel required>First Name</FieldLabel>
-                <AIAssistBadge variant="inline" fieldLabel="First Name" tooltip="AI assistance" onApply={(t) => updateFormData({ first_name: t })} />
               </div>
               <Input
                 className={fieldCls}
@@ -81,7 +79,6 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
             <div className="space-y-2">
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <FieldLabel>Middle Name</FieldLabel>
-                <AIAssistBadge variant="inline" fieldLabel="Middle Name" tooltip="Optional" onApply={(t) => updateFormData({ middle_name: t })} />
               </div>
               <Input
                 className={fieldCls}
@@ -94,7 +91,6 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
             <div className="space-y-2">
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <FieldLabel required>Last Name</FieldLabel>
-                <AIAssistBadge variant="inline" fieldLabel="Last Name" tooltip="AI assistance" onApply={(t) => updateFormData({ last_name: t })} />
               </div>
               <Input
                 className={fieldCls}

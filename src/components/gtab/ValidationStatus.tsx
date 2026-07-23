@@ -13,6 +13,7 @@ interface ValidationStatusProps {
   validation: GTABValidationResult;
   currentStep: number;
   formData?: GTABFormData;
+  onNavigate?: (step: number) => void;   // jump to the step that fixes an issue
 }
 
 // Score colour band
@@ -226,7 +227,7 @@ function buildPositives(formData: GTABFormData | undefined, validation: GTABVali
   return good;
 }
 
-export function ValidationStatus({ validation, currentStep, formData }: ValidationStatusProps) {
+export function ValidationStatus({ validation, currentStep, formData, onNavigate }: ValidationStatusProps) {
   // Step 3 — scheme eligibility
   const showSchemeCard = currentStep === 3;
   // Step 10 — full credit score coach
@@ -324,7 +325,11 @@ export function ValidationStatus({ validation, currentStep, formData }: Validati
               </p>
             </div>
           </div>
-          <Badge className={`${band.color} bg-white/80 border-0 font-bold text-sm px-3 py-1`}>{band.label}</Badge>
+          <Badge
+            onClick={() => { const first = actions[0]; if (first && onNavigate) onNavigate(first.step); }}
+            className={`${band.color} bg-white/80 border-0 font-bold text-sm px-3 py-1 ${actions.length && onNavigate ? "cursor-pointer hover:bg-white" : ""}`}
+            title={actions.length ? "Go to the first issue to fix" : undefined}
+          >{band.label}{actions.length && onNavigate ? " →" : ""}</Badge>
         </div>
 
         {/* Progress bars */}
@@ -384,14 +389,19 @@ export function ValidationStatus({ validation, currentStep, formData }: Validati
                 <p className="text-sm font-semibold text-red-800">{action.issue}</p>
                 <Badge className="bg-red-100 text-red-700 border-red-200 shrink-0 font-bold">+{action.points} pts</Badge>
               </div>
-              <div className="flex items-start gap-2 bg-white/70 rounded-lg p-3">
+              <button
+                type="button"
+                onClick={() => onNavigate?.(action.step)}
+                disabled={!onNavigate}
+                className={`w-full text-left flex items-start gap-2 bg-white/70 rounded-lg p-3 ${onNavigate ? "cursor-pointer hover:bg-white transition-colors" : ""}`}
+              >
                 <ArrowRight className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-red-700 mb-0.5">{action.stepLabel}</p>
+                  <p className="text-xs font-bold text-red-700 mb-0.5">{action.stepLabel} {onNavigate && <span className="underline">— Fix this</span>}</p>
                   <p className="text-xs text-red-700">{action.fix}</p>
-                  {action.section && <p className="text-xs text-red-500 mt-0.5 italic">→ Scroll to: {action.section}</p>}
+                  {action.section && <p className="text-xs text-red-500 mt-0.5 italic">→ {action.section}</p>}
                 </div>
-              </div>
+              </button>
             </div>
           ))}
         </div>
@@ -412,14 +422,19 @@ export function ValidationStatus({ validation, currentStep, formData }: Validati
                 <p className="text-sm font-semibold text-amber-800">{action.issue}</p>
                 <Badge className="bg-amber-100 text-amber-700 border-amber-200 shrink-0 font-bold">+{action.points} pts</Badge>
               </div>
-              <div className="flex items-start gap-2 bg-white/70 rounded-lg p-3">
+              <button
+                type="button"
+                onClick={() => onNavigate?.(action.step)}
+                disabled={!onNavigate}
+                className={`w-full text-left flex items-start gap-2 bg-white/70 rounded-lg p-3 ${onNavigate ? "cursor-pointer hover:bg-white transition-colors" : ""}`}
+              >
                 <ArrowRight className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-amber-700 mb-0.5">{action.stepLabel}</p>
+                  <p className="text-xs font-bold text-amber-700 mb-0.5">{action.stepLabel} {onNavigate && <span className="underline">— Fix this</span>}</p>
                   <p className="text-xs text-amber-700">{action.fix}</p>
-                  {action.section && <p className="text-xs text-amber-500 mt-0.5 italic">→ Field: {action.section}</p>}
+                  {action.section && <p className="text-xs text-amber-500 mt-0.5 italic">→ {action.section}</p>}
                 </div>
-              </div>
+              </button>
             </div>
           ))}
         </div>

@@ -1422,7 +1422,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
 
       {/* Validation Status */}
       <div className="mt-4">
-        <ValidationStatus validation={validation} currentStep={currentStep} formData={formData} />
+        <ValidationStatus validation={validation} currentStep={currentStep} formData={formData} onNavigate={(s) => setCurrentStep(clampStep(s))} />
       </div>
 
       {/* Navigation Buttons */}

@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { MapPin, Phone, Building2 } from "lucide-react";
-import AIAssistBadge from "@/components/AIAssistPanel";
 
 import { GTABFormData, REGISTRATION_OPTIONS, INDIAN_STATES } from "@/types/gtab";
 
@@ -49,7 +48,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Address Line 1 *</Label>
-                <AIAssistBadge variant="inline" fieldLabel="Address Line 1" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ address_line_1: t })} />
               </div>
               <Input
                 className="h-12 rounded-xl"
@@ -62,7 +60,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Address Line 2</Label>
-                <AIAssistBadge variant="inline" fieldLabel="Address Line 2" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ address_line_2: t })} />
               </div>
               <Input
                 className="h-12 rounded-xl"
@@ -77,7 +74,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>City *</Label>
-                  <AIAssistBadge variant="inline" fieldLabel="City" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ city: t })} />
                 </div>
                 <Input
                   className="h-12 rounded-xl"
@@ -90,7 +86,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>District</Label>
-                  <AIAssistBadge variant="inline" fieldLabel="District" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ district: t })} />
                 </div>
                 <Input
                   className="h-12 rounded-xl"
@@ -122,7 +117,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Pincode *</Label>
-                  <AIAssistBadge variant="inline" fieldLabel="Pincode" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ pincode: t })} />
                 </div>
                 <Input
                   className="h-12 rounded-xl"
@@ -191,7 +185,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Contact Mobile Number *</Label>
-                <AIAssistBadge variant="inline" fieldLabel="Contact Mobile Number" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ contact_mobile: t.replace(/\D/g, "").slice(0,10) })} />
               </div>
               <Input
                 className="h-12 rounded-xl"
@@ -211,7 +204,6 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Email ID *</Label>
-                <AIAssistBadge variant="inline" fieldLabel="Email ID" tooltip="AI assistance coming soon" onApply={(t) => updateFormData({ contact_email: t })} />
               </div>
               <Input
                 type="email"

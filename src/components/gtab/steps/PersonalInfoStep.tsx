@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -114,13 +115,15 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
             </div>
             <div className="space-y-2">
               <FieldLabel required>Date of Birth</FieldLabel>
-              <Input
-                type="date"
-                className={`${fieldCls} [color-scheme:dark]`}
+              <DatePicker
+                dark
+                className="h-12 rounded-[0.9rem] px-4 text-base"
                 value={pri?.promoter?.date_of_birth || ""}
-                min="1940-01-01"
-                max={new Date().toISOString().split("T")[0]}
-                onChange={(e) => updatePromoter({ date_of_birth: e.target.value })}
+                onChange={(v) => updatePromoter({ date_of_birth: v })}
+                placeholder="Select date of birth"
+                fromYear={1940}
+                toYear={new Date().getFullYear()}
+                disableFuture
               />
             </div>
           </div>

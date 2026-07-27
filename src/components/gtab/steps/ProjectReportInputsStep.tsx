@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { numberToWords } from "@/lib/numberToWords";
@@ -421,11 +422,11 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             </div>
             <div className="space-y-2">
               <Label>Employment From</Label>
-              <Input type="date" className="h-11 rounded-xl" value={report.promoter.employment_from} onChange={(e) => updateSection("promoter", { employment_from: e.target.value })} />
+              <DatePicker className="h-11 rounded-xl" value={report.promoter.employment_from} onChange={(v) => updateSection("promoter", { employment_from: v })} placeholder="Start date" toYear={new Date().getFullYear()} disableFuture />
             </div>
             <div className="space-y-2">
               <Label>Employment To</Label>
-              <Input type="date" className="h-11 rounded-xl" value={report.promoter.employment_to} onChange={(e) => updateSection("promoter", { employment_to: e.target.value })} />
+              <DatePicker className="h-11 rounded-xl" value={report.promoter.employment_to} onChange={(v) => updateSection("promoter", { employment_to: v })} placeholder="End date" toYear={new Date().getFullYear()} disableFuture />
             </div>
           </div>
 
@@ -486,7 +487,7 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             )}
             <div className="space-y-2">
               <Label>Commencement Date</Label>
-              <Input type="date" className="h-11 rounded-xl" value={report.business.commencement_date} onChange={(e) => updateSection("business", { commencement_date: e.target.value })} />
+              <DatePicker className="h-11 rounded-xl" value={report.business.commencement_date} onChange={(v) => updateSection("business", { commencement_date: v })} placeholder="Business start date" />
             </div>
             <div className="space-y-2">
               <Label>GST Number</Label>

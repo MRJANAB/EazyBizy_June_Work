@@ -94,7 +94,7 @@ const ApplicationPreview = ({ formData, applicationId, onSubmit, onEnsureSaved, 
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="mx-auto w-full max-w-none space-y-5">
 
       {/* Header */}
       <div className="text-center space-y-1 pb-2">

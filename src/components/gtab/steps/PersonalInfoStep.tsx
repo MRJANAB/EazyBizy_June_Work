@@ -59,7 +59,7 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
 
       {/* ── Owner Name Card ────────────────────────────────────────────────── */}
       <Card className="gtab-card-dark overflow-hidden rounded-[1rem] border border-[#163149] bg-[#111827] text-slate-100 shadow-[0_18px_44px_rgba(0,0,0,0.24)] sm:rounded-2xl">
-        <CardContent className="space-y-7 p-5 sm:space-y-8 sm:p-8">
+        <CardContent className="space-y-5 p-5 sm:space-y-7 sm:p-8">
 
           <SectionTitle icon={User} title="Owner / Promoter Name" subtitle="Full legal name as per Aadhaar / PAN" />
 
@@ -193,7 +193,7 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
 
       {/* ── KYC Card ──────────────────────────────────────────────────────── */}
       <Card className="gtab-card-dark overflow-hidden rounded-[1rem] border border-[#163149] bg-[#111827] text-slate-100 shadow-[0_18px_44px_rgba(0,0,0,0.24)] sm:rounded-2xl">
-        <CardContent className="space-y-7 p-5 sm:space-y-8 sm:p-8">
+        <CardContent className="space-y-5 p-5 sm:space-y-7 sm:p-8">
 
           <SectionTitle
             icon={ShieldCheck}

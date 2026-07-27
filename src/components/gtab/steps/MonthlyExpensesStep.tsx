@@ -131,9 +131,9 @@ const MonthlyExpensesStep = ({ formData, updateFormData }: MonthlyExpensesStepPr
   ].filter(Boolean) as string[];
 
   return (
-    <div className="mx-auto max-w-none space-y-4 sm:space-y-8">
+    <div className="mx-auto max-w-none space-y-4 sm:space-y-6">
       <Card className="gtab-card-light rounded-[0.9rem] border shadow-sm sm:rounded-2xl">
-        <CardContent className="space-y-6 p-4 sm:space-y-10 sm:p-8">
+        <CardContent className="space-y-5 p-4 sm:space-y-7 sm:p-8">
 
           <CASuggestionTip advisories={[adviseOpexToRevenue(formData)]} onApply={updateFormData} />
 

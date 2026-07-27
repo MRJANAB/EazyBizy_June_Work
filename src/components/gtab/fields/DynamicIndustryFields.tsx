@@ -651,7 +651,7 @@ const DynamicIndustryFields = ({
 
   return (
     <Card className="rounded-[0.9rem] border shadow-sm sm:rounded-2xl">
-      <CardContent className="space-y-6 p-4 sm:space-y-10 sm:p-8">
+      <CardContent className="space-y-5 p-4 sm:space-y-7 sm:p-8">
         {industryType === "manufacturing" && (
           <ManufacturingFields {...props} />
         )}

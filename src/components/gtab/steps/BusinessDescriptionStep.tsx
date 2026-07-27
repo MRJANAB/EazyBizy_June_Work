@@ -137,9 +137,9 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
   }, [formData, updateFormData]);
 
   return (
-    <div className="mx-auto max-w-none space-y-4 sm:space-y-8">
+    <div className="mx-auto max-w-none space-y-4 sm:space-y-6">
       <Card className="gtab-card-light rounded-[0.9rem] border shadow-sm sm:rounded-2xl">
-        <CardContent className="space-y-6 p-4 sm:space-y-10 sm:p-8">
+        <CardContent className="space-y-5 p-4 sm:space-y-7 sm:p-8">
 
           {/* AI Default Banner */}
           <div className="flex items-center justify-between rounded-xl border border-[#00C2D1]/25 bg-[#00C2D1]/8 px-4 py-3">

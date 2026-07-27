@@ -32,6 +32,7 @@ import ProjectReportInputsStep from "./steps/ProjectReportInputsStep";
 import ApplicationPreview from "./ApplicationPreview";
 import { ValidationStatus } from "./ValidationStatus";
 import AIInsightPanel from "./AIInsightPanel";
+import BankabilityBar from "./BankabilityBar";
 
 const STEPS = [
   { id: 1, title: "KYC Details", icon: "👤" },
@@ -1027,6 +1028,30 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
   const progress = (currentStep / STEPS.length) * 100;
   const totals = calculateTotals();
 
+  // Per-step completeness (raw inputs only — banker-critical fields per step).
+  // Drives the ✓ / amber-gap markers in the stepper.
+  const isStepComplete = (id: number): boolean => {
+    const p = formData.project_report_inputs?.promoter;
+    switch (id) {
+      case 1: return !!(formData.first_name && formData.last_name && p?.pan_number && p?.aadhar_number && p?.date_of_birth);
+      case 2: return !!(formData.address_line_1 && formData.city && formData.state && formData.pincode && formData.contact_mobile?.length === 10);
+      case 3: return !!(formData.business_entity_name && formData.loan_scheme && formData.type_of_business);
+      case 4: return !!(formData.business_description || formData.products_services);
+      case 5: return Number(totals.total_project_cost) > 0 || (formData.plant_machinery?.length ?? 0) > 0;
+      case 6: return Number(totals.total_project_cost) > 0;
+      case 7: return Number(totals.total_monthly_expenses) > 0;
+      case 8: return true; // working capital is optional at input stage
+      case 9: {
+        const r = formData.project_report_inputs;
+        return (r?.revenue?.product_categories?.length ?? 0) > 0
+          || Number(r?.dpr?.selling_price_per_unit || 0) > 0
+          || Number(r?.dpr?.selling_price_per_kg || 0) > 0;
+      }
+      case 10: return true;
+      default: return false;
+    }
+  };
+
   const renderStep = () => {
     switch (currentStep) {
       case 1:
@@ -1383,6 +1408,8 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
             const isActive   = step.id === currentStep;
             const isDone     = step.id < currentStep;
             const isFuture   = step.id > currentStep;
+            const isComplete = isStepComplete(step.id);
+            const isGap      = isDone && !isComplete; // visited but missing required data
 
             return (
               <button
@@ -1406,12 +1433,15 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
                   className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-medium transition-all
                     ${isActive
                       ? "border-[#15b8aa] bg-[#15b8aa] text-white shadow-[0_0_0_3px_rgba(21,184,170,0.25)]"
-                      : isDone
-                        ? "border-[#35d4c6] bg-[#35d4c6]/15 text-[#0f9f96] hover:bg-[#35d4c6]/30"
-                        : "border-gray-300 bg-white text-gray-500 hover:border-[#35d4c6] hover:text-[#15b8aa]"
+                      : isComplete
+                        ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25"
+                        : isGap
+                          ? "border-amber-400 bg-amber-50 text-amber-600 hover:bg-amber-100"
+                          : "border-gray-300 bg-white text-gray-500 hover:border-[#35d4c6] hover:text-[#15b8aa]"
                     }`}
+                  title={isGap ? "Some required details are missing" : undefined}
                 >
-                  {isDone ? <Check className="w-4 h-4" /> : step.id}
+                  {isComplete ? <Check className="w-4 h-4" /> : step.id}
                 </div>
                 <span
                   className={`gtab-step-label mt-2 block w-full max-w-[104px] whitespace-normal text-center sm:max-w-[112px] lg:max-w-[92px] ${
@@ -1425,6 +1455,13 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
           })}
         </div>
       </div>
+
+      {/* Bankability strip — live figures a banker checks first (money steps) */}
+      {currentStep >= 5 && currentStep <= 9 && (
+        <div className="mt-4">
+          <BankabilityBar formData={formData} />
+        </div>
+      )}
 
       {/* Form Content */}
       <div className="mt-4 min-w-0 sm:mt-8">

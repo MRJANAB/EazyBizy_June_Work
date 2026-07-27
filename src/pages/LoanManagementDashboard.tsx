@@ -2908,7 +2908,7 @@ const LoanManagementDashboard = () => {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5 2xl:grid-cols-10">
+                <div className="grid gap-4 [perspective:1400px] sm:grid-cols-2 xl:grid-cols-5 2xl:grid-cols-10">
                   {applicationFlowSteps.map((step) => {
                     const isCompleted = step.status === "completed";
                     const isActive = step.status === "active";
@@ -2916,19 +2916,30 @@ const LoanManagementDashboard = () => {
                     return (
                       <article
                         key={step.step}
-                        className={`flex min-h-[250px] flex-col items-center rounded-[1.65rem] border px-4 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:min-h-[300px] ${
+                        className={`group relative flex min-h-[250px] flex-col items-center overflow-hidden rounded-[1.65rem] border px-4 py-5 text-center transition-all duration-300 ease-out [transform-style:preserve-3d] will-change-transform hover:-translate-y-2.5 hover:[transform:perspective(900px)_rotateX(6deg)_scale(1.035)] sm:min-h-[300px] ${
                           isCompleted
-                            ? "border-[#2fd0e8]/22 bg-[linear-gradient(180deg,rgba(16,55,86,0.82),rgba(11,42,72,0.88))] shadow-[0_12px_35px_rgba(0,194,209,0.08)]"
-                            : "border-[#2fd0e8]/26 bg-[linear-gradient(180deg,rgba(16,52,82,0.92),rgba(10,37,67,0.92))] shadow-[0_14px_36px_rgba(0,194,209,0.12)]"
+                            ? "border-[#2fd0e8]/25 bg-[linear-gradient(155deg,rgba(18,60,94,0.92),rgba(9,36,64,0.94))] shadow-[0_18px_40px_-12px_rgba(0,194,209,0.28)] hover:shadow-[0_38px_74px_-18px_rgba(0,194,209,0.55)]"
+                            : "border-[#f5d778]/45 bg-[linear-gradient(155deg,rgba(24,66,98,0.96),rgba(13,46,80,0.96))] shadow-[0_20px_48px_-12px_rgba(212,175,55,0.34)] ring-1 ring-[#f5d778]/20 hover:shadow-[0_42px_82px_-18px_rgba(212,175,55,0.5)]"
                         }`}
                       >
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-full border text-lg font-medium ${isCompleted ? "border-[#49d9ef]/40 bg-[#113650] text-white shadow-[0_0_20px_rgba(0,194,209,0.18)]" : "border-[#49d9ef]/55 bg-[#123755] text-[#d4faff] shadow-[0_0_22px_rgba(0,194,209,0.14)]"}`}>
-                          {isCompleted ? <Check className="h-5 w-5" /> : step.step}
+                        {/* top light sheen for glassy depth */}
+                        <span className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),transparent)]" />
+                        {/* pulsing ring on the active step */}
+                        {isActive && (
+                          <span className="pointer-events-none absolute inset-0 animate-pulse rounded-[1.65rem] ring-1 ring-[#f5d778]/40" />
+                        )}
+
+                        <div className={`relative flex h-14 w-14 items-center justify-center rounded-2xl border text-lg font-bold transition-transform duration-300 group-hover:scale-110 group-hover:[transform:translateZ(34px)] ${
+                          isCompleted
+                            ? "border-[#49d9ef]/45 bg-[linear-gradient(145deg,#1a4f72,#0d2f4c)] text-white shadow-[0_10px_22px_rgba(0,194,209,0.35),inset_0_1px_0_rgba(255,255,255,0.25)]"
+                            : "border-[#f5d778]/60 bg-[linear-gradient(145deg,#d4af37,#a9821f)] text-[#1a1205] shadow-[0_10px_24px_rgba(212,175,55,0.5),inset_0_1px_0_rgba(255,255,255,0.4)]"
+                        }`}>
+                          {isCompleted ? <Check className="h-6 w-6" /> : step.step}
                         </div>
-                        <p className="mt-5 text-base font-semibold text-white sm:mt-6 sm:text-lg">Step {step.step}</p>
-                        <p className="mt-3 text-base leading-7 text-slate-100 sm:text-[1.05rem] sm:leading-9">{step.title}</p>
-                        <p className="mt-auto break-words pt-6 text-xs text-slate-400 sm:pt-8 sm:text-sm">{step.timestamp}</p>
-                        <div className={`mt-6 inline-flex rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] ${isCompleted ? "border-[#2cd39f]/24 bg-[#123f3c] text-[#8ff0c5]" : "border-[#32d4ea]/24 bg-[#123750] text-[#a8f7ff]"}`}>
+                        <p className="relative mt-5 text-base font-semibold text-white sm:mt-6 sm:text-lg">Step {step.step}</p>
+                        <p className="relative mt-3 text-base leading-7 text-slate-100 sm:text-[1.05rem] sm:leading-9">{step.title}</p>
+                        <p className="relative mt-auto break-words pt-6 text-xs text-slate-400 sm:pt-8 sm:text-sm">{step.timestamp}</p>
+                        <div className={`relative mt-6 inline-flex rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] ${isCompleted ? "border-[#2cd39f]/30 bg-[#123f3c] text-[#8ff0c5]" : "border-[#f5d778]/40 bg-[#3a2f12] text-[#f7e39c]"}`}>
                           {isCompleted ? "Completed" : "In Progress"}
                         </div>
                       </article>

@@ -349,8 +349,7 @@ const Dashboard = () => {
                   ACCOUNT OVERVIEW
                 </p>
                 <h1 className="mt-2.5 max-w-4xl text-[2.15rem] font-semibold leading-[1.04] text-white sm:text-[2.75rem] xl:text-[3rem]">
-                  Welcome back to EazyBizy{" "}
-                  <span className="inline-block align-top">👋</span>
+                  Welcome back to EazyBizy
                 </h1>
                 <p className="mt-2.5 max-w-3xl text-[0.95rem] leading-6 text-slate-300 xl:text-base">
                   Manage MSME loans, track approval progress, and access your financial workflow

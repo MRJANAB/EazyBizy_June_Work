@@ -302,7 +302,13 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
         technical_aspects_text: data.technical_aspects_text || "",
         financial_aspects_text: data.financial_aspects_text || "",
       };
-      window.localStorage.setItem(getNarrativeDraftKey(id), JSON.stringify(draft));
+      const payload = JSON.stringify(draft);
+      window.localStorage.setItem(getNarrativeDraftKey(id), payload);
+      // Also mirror to the user-scoped key so the "Resume Draft" flow (which reads
+      // the user.id key, not the appId key) always sees the latest edits.
+      if (user?.id && id && id !== user.id) {
+        window.localStorage.setItem(getNarrativeDraftKey(null), payload);
+      }
     } catch {
       // Ignore storage failures to avoid blocking submit flow.
     }
@@ -342,20 +348,23 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
     if (typeof window === "undefined") return;
     try {
       const stepToStore = clampStep(step);
-      window.localStorage.setItem(
-        getApplicationDraftKey(id),
-        JSON.stringify({
-          currentStep: stepToStore,
-          formData: {
-            ...data,
-            project_report_inputs: data.project_report_inputs,
-          },
-          updatedAt: new Date().toISOString(),
-          progressPercentage: Math.round((stepToStore / STEPS.length) * 100),
-          stepTitle: STEPS[stepToStore - 1]?.title || "",
-          isIndustryConfirmed,
-        }),
-      );
+      const payload = JSON.stringify({
+        currentStep: stepToStore,
+        formData: {
+          ...data,
+          project_report_inputs: data.project_report_inputs,
+        },
+        updatedAt: new Date().toISOString(),
+        progressPercentage: Math.round((stepToStore / STEPS.length) * 100),
+        stepTitle: STEPS[stepToStore - 1]?.title || "",
+        isIndustryConfirmed,
+      });
+      window.localStorage.setItem(getApplicationDraftKey(id), payload);
+      // Also mirror to the user-scoped key so "Resume Draft" (which reads the
+      // user.id key, not the appId key) restores the latest edits after logout.
+      if (user?.id && id && id !== user.id) {
+        window.localStorage.setItem(getApplicationDraftKey(null), payload);
+      }
     } catch {
       // Local draft backup is best effort only.
     }
@@ -1360,7 +1369,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
       <div className="bg-white pb-2 sm:pb-0">
         <div className="mt-2 flex items-center justify-between gap-4 pl-4 sm:mt-3 sm:pl-10">
           <h2 className="min-w-0 text-3xl font-extrabold leading-tight text-gray-900">
-            {STEPS[currentStep - 1].icon} {STEPS[currentStep - 1].title}
+            {STEPS[currentStep - 1].title}
           </h2>
           <span className="shrink-0 pr-0 text-lg font-medium text-gray-500 sm:pr-8" style={{ fontFamily: "'DM Sans', sans-serif", letterSpacing: '0.01em' }}>
             Step {currentStep} of {STEPS.length}

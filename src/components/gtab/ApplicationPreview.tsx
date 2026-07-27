@@ -330,10 +330,9 @@ const ApplicationPreview = ({ formData, applicationId, onSubmit, onEnsureSaved, 
           onClick={onSubmit}
           disabled={isSaving || isCMALoading}
           size="lg"
-          variant="outline"
-          className="gap-2 border-gray-300 font-semibold px-8 text-base"
+          className="gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8 text-base shadow-[0_12px_24px_rgba(16,185,129,0.30)] transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-60"
         >
-          <FileText className="w-5 h-5" />
+          {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileText className="w-5 h-5" />}
           {isSaving ? "Submitting…" : "Submit Application"}
         </Button>
       </div>

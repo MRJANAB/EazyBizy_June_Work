@@ -116,7 +116,7 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
               <FieldLabel required>Date of Birth</FieldLabel>
               <Input
                 type="date"
-                className={fieldCls}
+                className={`${fieldCls} [color-scheme:dark]`}
                 value={pri?.promoter?.date_of_birth || ""}
                 min="1940-01-01"
                 max={new Date().toISOString().split("T")[0]}

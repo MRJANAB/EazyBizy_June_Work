@@ -164,7 +164,7 @@ const BusinessLoanDetailsStep = ({ formData, updateFormData }: BusinessLoanDetai
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Name of Business Entity *</Label>
+                <Label>Name of Business Entity <span className="text-red-500">*</span></Label>
                 <AIAssistBadge variant="inline" fieldLabel="Name of Business Entity" tooltip="AI can suggest a suitable business name" onApply={(t) => updateFormData({ business_entity_name: t })} />
               </div>
               <Input

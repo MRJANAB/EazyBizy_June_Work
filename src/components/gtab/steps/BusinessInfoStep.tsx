@@ -17,6 +17,8 @@ interface BusinessInfoStepProps {
   updateFormData: (updates: Partial<GTABFormData>) => void;
 }
 
+const Req = () => <span className="ml-0.5 text-red-500">*</span>;
+
 const SectionTitle = ({ icon: Icon, title, subtitle }) => (
   <div className="flex items-start gap-3">
     <div className="bg-primary/10 p-2 rounded-xl">
@@ -47,7 +49,7 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Address Line 1 *</Label>
+                <Label>Address Line 1 <Req /></Label>
               </div>
               <Input
                 className="h-12 rounded-xl"
@@ -73,7 +75,7 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>City *</Label>
+                  <Label>City <Req /></Label>
                 </div>
                 <Input
                   className="h-12 rounded-xl"
@@ -96,7 +98,7 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
               </div>
 
               <div className="space-y-2">
-                <Label>State *</Label>
+                <Label>State <Req /></Label>
                 <Select
                   value={formData.state}
                   onValueChange={(value) => updateFormData({ state: value })}
@@ -116,7 +118,7 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Pincode *</Label>
+                  <Label>Pincode <Req /></Label>
                 </div>
                 <Input
                   className="h-12 rounded-xl"
@@ -148,7 +150,7 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
 
             <div className="space-y-2">
-              <Label>Type of Registration *</Label>
+              <Label>Type of Registration <Req /></Label>
               <Select
                 value={formData.registration_type}
                 onValueChange={(value: any) =>
@@ -184,9 +186,11 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Contact Mobile Number *</Label>
+                <Label>Contact Mobile Number <Req /></Label>
               </div>
               <Input
+                type="tel"
+                inputMode="numeric"
                 className="h-12 rounded-xl"
                 value={formData.contact_mobile}
                 onChange={(e) =>
@@ -199,11 +203,14 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
                 placeholder="10-digit mobile number"
                 maxLength={10}
               />
+              {formData.contact_mobile && formData.contact_mobile.length !== 10 && (
+                <p className="text-xs text-amber-500">Mobile number must be exactly 10 digits.</p>
+              )}
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Email ID *</Label>
+                <Label>Email ID <Req /></Label>
               </div>
               <Input
                 type="email"
@@ -214,6 +221,9 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
                 }
                 placeholder="your@email.com"
               />
+              {formData.contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contact_email) && (
+                <p className="text-xs text-amber-500">Enter a valid email, e.g. name@gmail.com</p>
+              )}
             </div>
 
           </div>

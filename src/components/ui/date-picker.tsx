@@ -72,6 +72,16 @@ export function DatePicker({
             if (d) onChange(format(d, "yyyy-MM-dd"));
             setOpen(false);
           }}
+          // react-day-picker's default stylesheet isn't loaded, so scope the
+          // dropdown-caption styling here (hide the sr-only labels + duplicate
+          // caption text, style the native month/year selects).
+          classNames={{
+            caption_dropdowns: "flex justify-center gap-2",
+            vhidden: "sr-only",
+            caption_label: "sr-only",
+            dropdown:
+              "rounded-md border border-input bg-background px-2 py-1 text-sm font-medium outline-none focus:ring-2 focus:ring-ring",
+          }}
           initialFocus
         />
       </PopoverContent>

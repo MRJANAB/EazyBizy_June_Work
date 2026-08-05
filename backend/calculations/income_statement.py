@@ -173,14 +173,16 @@ def calculate_income_statement(
         yr  = i + 1
         cap = capacities[i] if i < len(capacities) else capacities[-1]
 
-        # BUG 9 FIX: Revenue Year 1 = cap[0] × rev_100; Year N = Year(N-1) × (1 + rev_g)
-        if i == 0:
-            rev = R(annual_rev_100 * cap)
-        else:
-            rev = R(result[i - 1]["revenue"] * (1 + rev_g))
+        # Revenue must follow the SAME volume ramp as COGS (capacity[i]) plus price
+        # growth (rev_g). Y1 (i=0) = cap[0] × rev_100 → matches the product-table
+        # single source of truth. Earlier code grew revenue by rev_g only, so it
+        # under-ran the capacity ramp that COGS follows → margins collapsed.
+        rev = R(annual_rev_100 * cap * (1 + rev_g) ** i)
 
-        # BUG 1 FIX: RM scales with capacity from unit-cost base (NOT from revenue × margin%)
-        cogs      = R(rm_at_100pct * cap)
+        # RM scales with capacity (volume) AND compounds by cost inflation (exp_g),
+        # mirroring revenue's price growth so gross margin stays realistic rather
+        # than expanding every year on flat unit costs.
+        cogs      = R(rm_at_100pct * cap * (1 + exp_g) ** i)
         # BUG 2 FIX: When user enters absolute marketing cost, compound it by exp_g so it
         # appears correctly in the "marketing" output key (and therefore in the PDF).
         # If no absolute amount, fall back to industry default ratio applied to revenue.

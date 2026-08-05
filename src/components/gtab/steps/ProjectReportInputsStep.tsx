@@ -1158,11 +1158,13 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
 
               {report.revenue.product_categories.map((item, index) => {
                 const monthlyRevenue = Number(item.fixed_revenue) || Number(item.units_monthly || 0) * Number(item.avg_price || 0);
+                const activeMonths   = Math.min(Math.max(Number(item.number_of_months) || 12, 1), 12);
+                const annualRevenue  = monthlyRevenue * activeMonths;
                 return (
                   <div key={item.id} className="rounded-xl border bg-card p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold">{isAgriculture ? "Revenue Line" : "Service"} #{index + 1}
-                        {monthlyRevenue > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">Rs. {monthlyRevenue.toLocaleString("en-IN")}/mo</span>}
+                        {monthlyRevenue > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">Rs. {monthlyRevenue.toLocaleString("en-IN")}/mo × {activeMonths} mo</span>}
                       </span>
                       <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 text-destructive hover:bg-destructive/10 text-xs" onClick={() => removeProductCategory(item.id)}>
                         <Trash2 className="w-3.5 h-3.5" /> Remove
@@ -1185,17 +1187,22 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                         </Select>
                       </div>
                       <NumberField label="Months / Year" value={Number(item.number_of_months) || 12} min={1} max={12} onChange={(v) => updateServiceRevenue(item.id, { number_of_months: v })} />
-                      <NumberField label="Monthly Revenue (Auto)" value={monthlyRevenue} onChange={() => undefined} disabled />
+                      <NumberField label="Annual Revenue (Auto)" value={annualRevenue} onChange={() => undefined} disabled />
                     </div>
                   </div>
                 );
               })}
 
               {report.revenue.product_categories.length > 0 && (() => {
-                const total = report.revenue.product_categories.reduce((s, i) => s + (Number(i.fixed_revenue) || Number(i.units_monthly||0)*Number(i.avg_price||0)), 0);
-                return total > 0 ? (
+                const annual = report.revenue.product_categories.reduce((s, i) => {
+                  const monthly = Number(i.fixed_revenue) || Number(i.units_monthly||0)*Number(i.avg_price||0);
+                  const months  = Math.min(Math.max(Number(i.number_of_months) || 12, 1), 12);
+                  return s + monthly * months;
+                }, 0);
+                return annual > 0 ? (
                   <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 font-semibold">
-                    Total Monthly: Rs. {total.toLocaleString("en-IN")} → Annual: Rs. {(total*12).toLocaleString("en-IN")}
+                    Total Annual Revenue: Rs. {annual.toLocaleString("en-IN")}
+                    <span className="ml-2 font-normal text-teal-700">(avg Rs. {Math.round(annual/12).toLocaleString("en-IN")}/mo)</span>
                   </div>
                 ) : null;
               })()}

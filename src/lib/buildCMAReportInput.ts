@@ -22,23 +22,36 @@ function resolveNatureLabel(industryType: string, value: string): string {
   return options.find((o) => o.value === value)?.label ?? value;
 }
 
-/** Aggregate total monthly revenue from Step 9 service revenue lines. */
+// Effective monthly revenue = annual ÷ 12, where annual = line monthly ×
+// number_of_months (honours seasonal businesses). Backend multiplies this by
+// 12, so annual stays correct. ponytail: bridge kept here to leave backend ×12
+// contract untouched; move months into the payload if the API ever needs it.
+const monthsFactor = (item: { number_of_months?: number }) =>
+  Math.min(Math.max(Number(item.number_of_months) || 12, 1), 12) / 12;
+
+/** Aggregate effective monthly revenue from Step 9 service lines (seasonal-aware). */
 function getServiceMonthlyRevenue(formData: GTABFormData): number {
   const cats = formData.project_report_inputs?.revenue?.product_categories ?? [];
   return cats.reduce((sum, item) => {
     const monthly = Number(item.fixed_revenue) || (Number(item.units_monthly || 0) * Number(item.avg_price || 0));
-    return sum + monthly;
+    return sum + monthly * monthsFactor(item);
   }, 0);
 }
 
-/** Aggregate total monthly revenue from Step 9 trading product lines. */
+/** Aggregate effective monthly revenue from Step 9 trading lines (seasonal-aware). */
 function getTradingMonthlyRevenue(formData: GTABFormData): number {
   const cats = formData.project_report_inputs?.revenue?.product_categories ?? [];
   return cats.reduce((sum, item) => {
     const qty   = Number(item.quantity_sold || item.units_monthly || 0);
     const price = Number(item.selling_price || item.avg_price || 0);
-    return sum + qty * price;
+    return sum + qty * price * monthsFactor(item);
   }, 0);
+}
+
+// self-check: 8-month line @10k/mo → effective monthly 6 667 → backend ×12 = 80k/yr
+if (import.meta.env?.DEV) {
+  const fd = { project_report_inputs: { revenue: { product_categories: [{ fixed_revenue: 10000, number_of_months: 8 }] } } } as unknown as GTABFormData;
+  console.assert(Math.round(getServiceMonthlyRevenue(fd) * 12) === 80000, "revenue annualization broken");
 }
 
 /** Aggregate monthly COGS from Step 9 trading product lines (purchase_price × qty).

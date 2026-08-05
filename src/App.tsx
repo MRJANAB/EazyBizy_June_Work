@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,36 +7,39 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-route
 import { AuthProvider } from "@/hooks/useAuth";
 import { RouteHistoryTracker } from "@/hooks/useBackNavigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import LoanManagementDashboard from "./pages/LoanManagementDashboard";
-import LoanDetails from "./pages/LoanDetails";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
-import Learning from "./pages/Learning";
-import LearningAccessGate from "./components/learning/LearningAccessGate (1)";
-import LearningSegmentModules from "./pages/LearningSegmentModules";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import CreditAnalystDashboard from "./pages/credit-analyst/CreditAnalystDashboard";
-import ConsultantDashboard from "./pages/consultant/ConsultantDashboard";
-import NotFound from "./pages/NotFound";
-import SignupPage from "./pages/SignupPage";
-import LoanSchemes from "./pages/LoanSchemes";
-import Features from "./pages/Features";
-import HowItWorks from "./pages/HowItWorks";
-import About from "./pages/About";
-import MudraLoan from "./pages/MudraLoan";
-import PMEGP from "./pages/PMEGP";
-import MSMELoan from "./pages/MSMELoan";
-import OtherSchemes from "./pages/OtherScheme";
-import Contact from "./pages/Contact";
-import FAQ from "./pages/FAQ";
-import Terms from "./pages/Term";
-import Privacy from "./pages/Privacy";
 import ChatBot from "./components/ChatBot";
+
+// Route pages are lazy-loaded so each becomes its own chunk (heavy deps like
+// apexcharts on the loan dashboard split out of the main bundle).
+const Index = lazy(() => import("./pages/Index"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const LoanManagementDashboard = lazy(() => import("./pages/LoanManagementDashboard"));
+const LoanDetails = lazy(() => import("./pages/LoanDetails"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Learning = lazy(() => import("./pages/Learning"));
+const LearningAccessGate = lazy(() => import("./components/learning/LearningAccessGate (1)"));
+const LearningSegmentModules = lazy(() => import("./pages/LearningSegmentModules"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const CreditAnalystDashboard = lazy(() => import("./pages/credit-analyst/CreditAnalystDashboard"));
+const ConsultantDashboard = lazy(() => import("./pages/consultant/ConsultantDashboard"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const SignupPage = lazy(() => import("./pages/SignupPage"));
+const LoanSchemes = lazy(() => import("./pages/LoanSchemes"));
+const Features = lazy(() => import("./pages/Features"));
+const HowItWorks = lazy(() => import("./pages/HowItWorks"));
+const About = lazy(() => import("./pages/About"));
+const MudraLoan = lazy(() => import("./pages/MudraLoan"));
+const PMEGP = lazy(() => import("./pages/PMEGP"));
+const MSMELoan = lazy(() => import("./pages/MSMELoan"));
+const OtherSchemes = lazy(() => import("./pages/OtherScheme"));
+const Contact = lazy(() => import("./pages/Contact"));
+const FAQ = lazy(() => import("./pages/FAQ"));
+const Terms = lazy(() => import("./pages/Term"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 
 const queryClient = new QueryClient();
 
@@ -59,6 +62,7 @@ const App = () => (
         <RouteHistoryTracker />
         <ScrollToTop />
         <AuthProvider>
+          <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#07111f]"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#22d3ee]" /></div>}>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
@@ -175,6 +179,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           <ChatBot />
         </AuthProvider>
       </BrowserRouter>

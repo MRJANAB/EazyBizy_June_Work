@@ -54,17 +54,15 @@ export const getProjectCostBreakdown = (formData: GTABFormData) => {
     Number(formData.transportation_cost || 0) +
     Number(formData.other_initial_expenditure || 0);
 
-  // CA tally rule: Total Project Cost must equal Total Means of Finance.
-  // MoF spreads the FULL working-capital requirement (promoter WC margin + WC
-  // bank loan), so project cost must include the full WC — not just the
-  // promoter's margin share, which left it short by the WC loan amount.
-  const workingCapitalInProjectCost = includesWorkingCapital ? monthlyWorkingCapital : 0;
-
+  // CA convention (matches backend schemes/router.py): Total Project Cost =
+  // Fixed Capital + promoter's WC margin. The WC bank loan is a REVOLVING
+  // facility, shown separately and NOT part of project cost. Project MoF then
+  // tallies as: promoter contribution + term loan (+ subsidy) = project cost.
   return {
     fixedAssetCost,
     monthlyWorkingCapital,
     promoterWorkingCapitalContribution,
-    totalProjectCost: Number((fixedAssetCost + workingCapitalInProjectCost).toFixed(2)),
+    totalProjectCost: Number((fixedAssetCost + promoterWorkingCapitalContribution).toFixed(2)),
   };
 };
 
@@ -142,9 +140,11 @@ export const getFinancingPlan = (formData: GTABFormData) => {
     ? Number(((termLoanAmount / totalProjectCost) * 100).toFixed(2))
     : 0;
 
-  // Invariant: Project Cost must equal Means of Finance (promoter + all loans).
-  if (import.meta.env?.DEV && Math.abs(totalProjectCost - totalFundingBase) > 1) {
-    console.warn("[projectReport] Project cost ≠ Means of Finance", { totalProjectCost, totalFundingBase });
+  // Invariant: Project Cost = project Means of Finance = promoter contribution +
+  // term loan (WC bank loan is a separate revolving facility, excluded).
+  const projectMeansOfFinance = Number((promoterContribution + termLoanAmount).toFixed(2));
+  if (import.meta.env?.DEV && Math.abs(totalProjectCost - projectMeansOfFinance) > 1) {
+    console.warn("[projectReport] Project cost ≠ Means of Finance", { totalProjectCost, projectMeansOfFinance });
   }
 
   return {

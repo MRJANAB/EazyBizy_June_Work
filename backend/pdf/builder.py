@@ -301,6 +301,8 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _is_pmegp  = "pmegp" in _scheme_raw.lower()
     _is_mudra  = "mudra" in _scheme_raw.lower()
     _is_cgtmse = "cgtmse" in _scheme_raw.lower()
+    # Subsidy row label: PMEGP margin money vs MSME state capital subsidy.
+    _subsidy_label = "Govt Subsidy — PMEGP" if _is_pmegp else "State Capital Subsidy"
     scheme_note = ""
     if _is_pmegp:
         mm_pct = cma.get("margin_money_pct", 0)
@@ -463,7 +465,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         fin = Table([
             ["Source (Fixed Project Funding)", "Amount (Rs.)", "% of Fixed Cost"],
             ["Promoter's Equity (Cash)",       rs(_exec_promoter_cash),  pof(_exec_promoter_cash,  _exec_fin_total)],
-            ["Govt Subsidy — PMEGP",           rs(_exec_margin_money),   pof(_exec_margin_money,   _exec_fin_total)],
+            [_subsidy_label,                   rs(_exec_margin_money),   pof(_exec_margin_money,   _exec_fin_total)],
             ["Term Loan from Bank",            rs(pc["term_loan"]),      pof(pc["term_loan"],      _exec_fin_total)],
             ["TOTAL (Fixed Project Cost)",     rs(_exec_fin_total),      "100.0%"],
         ], colWidths=[95*mm,45*mm,30*mm])
@@ -685,7 +687,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         mof_rows = [
             ["Source","Amount (Rs.)","% of Fixed Cost"],
             ["Equity Capital (Promoter Cash)",      rs(_b2_promoter_cash),  pof(_b2_promoter_cash,  finance_total_a)],
-            ["Govt Subsidy — PMEGP (Margin Money)", rs(_b2_margin_money),   pof(_b2_margin_money,   finance_total_a)],
+            [f"{_subsidy_label}{' (Margin Money)' if _is_pmegp else ''}", rs(_b2_margin_money),   pof(_b2_margin_money,   finance_total_a)],
             ["Term Loan from Bank",                 rs(pc["term_loan"]),    pof(pc["term_loan"],    finance_total_a)],
             ["SUB-TOTAL (Fixed Project Cost)",      rs(finance_total_a),    "100.0%"],
         ]
@@ -767,12 +769,19 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "Formula: Term Loan D:E = TL / promoter fixed equity. "
         "Total leverage = total debt / total promoter contribution.",
         ST["small"]))
-    if _b2_margin_money:
+    if _b2_margin_money and _is_pmegp:
         NL(story, 3)
         story.append(Paragraph(
             f"<b>Margin Money Note:</b> Margin Money of Rs.{_b2_margin_money:,.0f} is held as TDR "
             "for 3 years as per PMEGP guidelines. "
             "Interest is charged on the full outstanding balance during the lock-in period.",
+            ST["small"],
+        ))
+    elif _b2_margin_money:
+        NL(story, 3)
+        story.append(Paragraph(
+            f"<b>Subsidy Note:</b> State capital subsidy of Rs.{_b2_margin_money:,.0f} on fixed assets "
+            "is treated as a source of finance, reducing the amount split between promoter and bank.",
             ST["small"],
         ))
     NL(story, 5)
@@ -1348,7 +1357,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  (a) Owners' Funds","","","","","",""],
         ["  Equity / Promoter Capital"]  + [r(pb["equity"])                for pb in pbs],
         *(
-            [["  Govt Subsidy (PMEGP TDR)"] + [r(pb.get("margin_money",0)) for pb in pbs]]
+            [[("  Govt Subsidy (PMEGP TDR)" if _is_pmegp else "  Govt Subsidy (Capital)")] + [r(pb.get("margin_money",0)) for pb in pbs]]
             if any(pb.get("margin_money", 0) for pb in pbs) else []
         ),
         ["  Reserves & Surplus"]         + [r(_display_reserve(pb))        for pb in pbs],

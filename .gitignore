@@ -46,3 +46,6 @@ pnpm-debug.log*
 *.sln
 *.sw?
 Thumbs.db
+
+memory/
+samples/

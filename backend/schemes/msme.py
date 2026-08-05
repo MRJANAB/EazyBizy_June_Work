@@ -33,24 +33,45 @@ def calculate_msme_finance(fixed_project_cost: float, data) -> dict:
     -------
     dict with promoter_amount, term_loan, margin_money (0), and metadata.
     """
-    tl_pct   = float(getattr(getattr(data, "assumptions", None), "term_loan_pct", 75) or 75) / 100
-    wc_pct   = float(getattr(getattr(data, "assumptions", None), "wc_loan_pct",   60) or 60) / 100
-    int_rate = float(getattr(getattr(data, "assumptions", None), "interest_rate_pct", 10.5) or 10.5)
+    a        = getattr(data, "assumptions", None)
+    tl_pct   = float(getattr(a, "term_loan_pct", 75) or 75) / 100
+    wc_pct   = float(getattr(a, "wc_loan_pct",   60) or 60) / 100
+    int_rate = float(getattr(a, "interest_rate_pct", 10.5) or 10.5)
+    sub_pct  = float(getattr(a, "capital_subsidy_pct", 0) or 0) / 100
 
-    term_loan       = round(fixed_project_cost * tl_pct)
-    promoter_amount = round(fixed_project_cost - term_loan)
+    # Capital-investment subsidy on FIXED ASSETS only (land + building + P&M),
+    # excluding preliminary / pre-operative / contingency / fixtures.
+    p = getattr(data, "project", None)
+    machinery = sum(float(m.quantity) * float(m.unit_price) for m in getattr(p, "machinery_items", []) or []) \
+        + float(getattr(p, "tools_installation", 0) or 0)
+    fixed_assets = float(getattr(p, "land_cost", 0) or 0) + float(getattr(p, "building_cost", 0) or 0) + machinery
+    subsidy = round(fixed_assets * sub_pct)
+
+    # Subsidy is a source of finance → reduces the amount to be split by debt:equity.
+    # Term loan on the fixed side only (WC margin stays promoter-funded).
+    net             = max(fixed_project_cost - subsidy, 0)
+    term_loan       = round(net * tl_pct)
+    promoter_amount = round(fixed_project_cost - subsidy - term_loan)
+
+    # Promoter minimum: 10% of fixed project cost. If breached, top up promoter,
+    # reduce term loan (keeps promoter + subsidy + term loan = fixed_project_cost).
+    floor = round(fixed_project_cost * 0.10)
+    if promoter_amount < floor:
+        promoter_amount = floor
+        term_loan       = round(fixed_project_cost - subsidy - promoter_amount)
 
     return {
         "promoter_amount":  promoter_amount,
         "promoter_pct":     round(promoter_amount / fixed_project_cost * 100, 1) if fixed_project_cost else 0,
         "term_loan":        term_loan,
-        "term_loan_pct":    round(tl_pct * 100, 1),
-        "margin_money":     0,
-        "margin_money_pct": 0,
+        "term_loan_pct":    round(term_loan / fixed_project_cost * 100, 1) if fixed_project_cost else 0,
+        "margin_money":     subsidy,
+        "margin_money_pct": round(subsidy / fixed_project_cost * 100, 1) if fixed_project_cost else 0,
         "wc_loan_pct":      round(wc_pct * 100, 1),
         "interest_rate_pct": int_rate,
         "note": (
-            "Standard MSME bank finance — no central subsidy. "
-            "State-level subsidies (if applicable) to be applied separately."
+            f"Standard MSME bank finance with {round(sub_pct*100,1)}% state capital subsidy on fixed assets."
+            if subsidy else
+            "Standard MSME bank finance — no central subsidy."
         ),
     }

@@ -618,6 +618,16 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                     </div>
                   </div>
 
+                  {formData.loan_scheme === "normal_msme" && (
+                    <div className="space-y-2">
+                      <Label>State Capital Subsidy % (optional)</Label>
+                      <Input type="number" className="h-11 rounded-xl" value={report.dpr.capital_subsidy_pct || 0}
+                        min={0} max={35}
+                        onChange={(e) => updateReport({ dpr: { ...report.dpr, capital_subsidy_pct: Math.min(Math.max(Number(e.target.value), 0), 35) } })} />
+                      <p className="text-xs text-muted-foreground">On fixed assets (land + building + P&amp;M). A source of finance — reduces the amount split by debt:equity. 0 = none.</p>
+                    </div>
+                  )}
+
                   {/* Term Loan Amount (read-only computed) */}
                   <div className="space-y-2">
                     <Label>Term Loan Amount (Calculated)</Label>

@@ -275,6 +275,7 @@ export function buildCMAReportInput(formData: GTABFormData): object {
       // ── Loan structure ──────────────────────────────────────────────────
       term_loan_pct:          Number(dpr.term_loan_pct               || 75),
       wc_loan_pct:            Number(dpr.wc_loan_pct                 || 60),
+      capital_subsidy_pct:    Number(dpr.capital_subsidy_pct         || 0),
       interest_rate_pct:      Number(ri.loan.interest_rate_pct       || 10.5),
       tenure_months:          Number(ri.loan.tenure_months           || 60),
       moratorium_months:      Number(ri.loan.moratorium_months       || 0),

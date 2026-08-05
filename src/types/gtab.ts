@@ -184,6 +184,7 @@ export interface ProjectReportInputs {
     term_loan_pct:              number;   // % of fixed capital financed by TL
     promoter_equity_pct:        number;   // % of project cost from promoter
     wc_loan_pct:                number;   // % of WC financed by bank
+    capital_subsidy_pct:        number;   // MSME state capital subsidy % on fixed assets (0 = none)
     contingency_pct:            number;   // contingency on P&M as %
     loan_tenure_years:          number;
     moratorium_years:           number;
@@ -331,6 +332,7 @@ export const createInitialProjectReportInputs = (): ProjectReportInputs => ({
     term_loan_pct:              75,
     promoter_equity_pct:        25,
     wc_loan_pct:                60,
+    capital_subsidy_pct:        0,
     contingency_pct:            0,
     contingency_rate_pct:       0,
     loan_tenure_years:          5,

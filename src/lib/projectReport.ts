@@ -54,11 +54,17 @@ export const getProjectCostBreakdown = (formData: GTABFormData) => {
     Number(formData.transportation_cost || 0) +
     Number(formData.other_initial_expenditure || 0);
 
+  // CA tally rule: Total Project Cost must equal Total Means of Finance.
+  // MoF spreads the FULL working-capital requirement (promoter WC margin + WC
+  // bank loan), so project cost must include the full WC — not just the
+  // promoter's margin share, which left it short by the WC loan amount.
+  const workingCapitalInProjectCost = includesWorkingCapital ? monthlyWorkingCapital : 0;
+
   return {
     fixedAssetCost,
     monthlyWorkingCapital,
     promoterWorkingCapitalContribution,
-    totalProjectCost: Number((fixedAssetCost + promoterWorkingCapitalContribution).toFixed(2)),
+    totalProjectCost: Number((fixedAssetCost + workingCapitalInProjectCost).toFixed(2)),
   };
 };
 
@@ -135,6 +141,11 @@ export const getFinancingPlan = (formData: GTABFormData) => {
   const totalBankFinancePct = totalProjectCost
     ? Number(((termLoanAmount / totalProjectCost) * 100).toFixed(2))
     : 0;
+
+  // Invariant: Project Cost must equal Means of Finance (promoter + all loans).
+  if (import.meta.env?.DEV && Math.abs(totalProjectCost - totalFundingBase) > 1) {
+    console.warn("[projectReport] Project cost ≠ Means of Finance", { totalProjectCost, totalFundingBase });
+  }
 
   return {
     fixedAssetCost,

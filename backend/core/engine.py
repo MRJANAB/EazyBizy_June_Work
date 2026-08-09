@@ -1561,11 +1561,13 @@ def validate_cma_dpr(inp, cma, dpr):
 
     # ── 1. Means of Finance reconciliation ───────────────────────────
     pc = dpr.get("project_cost", {})
+    # WC bank loan is a revolving facility — NOT part of the project Means of
+    # Finance, which reconciles to Total Project Cost (= fixed + WC margin).
+    # promoter_contribution already includes the promoter's WC margin.
     promoter  = float(cma.get("promoter_contribution", pc.get("equity_capital", 0)) or 0)
     term_loan = float(cma.get("term_loan", pc.get("term_loan", 0)) or 0)
-    wc_loan   = float(cma.get("working_capital_loan", pc.get("wc_loan", 0)) or 0)
     margin    = float(cma.get("margin_money", pc.get("margin_money", 0)) or 0)
-    mof_sum   = R(promoter + term_loan + wc_loan + margin, 2)
+    mof_sum   = R(promoter + term_loan + margin, 2)
     proj_cost = float(cma.get("total_project_cost", pc.get("total_project_cost", 0)) or 0)
     if proj_cost > 0 and abs(mof_sum - proj_cost) > 100:
         warnings.append(
@@ -1584,16 +1586,17 @@ def validate_cma_dpr(inp, cma, dpr):
             )
 
     # ── FIX 5: Debt-equity ratio formula consistency ──────────────────
+    # D:E = total bank debt (term loan + WC loan) / promoter's TOTAL equity
+    # contribution (fixed equity + WC margin) — same formula the report stores.
     de_ratio  = float(pc.get("debt_equity_ratio", 0) or 0)
     tl_pc     = float(pc.get("term_loan", 0) or 0)
-    wc_pc     = float(pc.get("wc_loan", 0) or 0)
-    eq_pc     = float(pc.get("equity_capital", 0) or 0)
+    wc_debt   = float(cma.get("working_capital_loan", pc.get("wc_loan", 0)) or 0)
+    eq_pc     = float(cma.get("promoter_contribution", pc.get("total_promoter_contribution", pc.get("equity_capital", 0))) or 0)
     if eq_pc > 0 and de_ratio > 0:
-        expected_de = R((tl_pc + wc_pc) / eq_pc, 2)
+        expected_de = R((tl_pc + wc_debt) / eq_pc, 2)
         if abs(de_ratio - expected_de) > 0.15:
             warnings.append(
-                f"VALIDATOR[D:E]: Stored D:E ratio ({de_ratio}) ≠ (TL+WC)/Equity ({expected_de}). "
-                "WC loan may be excluded from numerator."
+                f"VALIDATOR[D:E]: Stored D:E ratio ({de_ratio}) ≠ (TL+WC)/Equity ({expected_de})."
             )
 
     # ── 2. Balance Sheet check ────────────────────────────────────────

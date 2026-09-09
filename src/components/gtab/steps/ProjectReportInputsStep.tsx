@@ -382,20 +382,48 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                   ? "No physical collateral required. CGTMSE guarantee covers upto 75-85% of loan default."
                   : "Hypothecation of business assets (stock, equipment, receivables). Personal guarantee of promoter.";
 
-            // ── Live EMI computation (CA standard reducing balance formula) ──
+            // ── Live loan schedule preview — mirrors backend/calculations/loan_schedule.py
+            // EXACTLY (half-yearly equal-principal, reducing balance) so this preview
+            // never disagrees with the actual generated report. The backend does NOT
+            // use the EMI formula — it amortises fixed-capital term loans as equal
+            // half-yearly principal instalments, with interest recalculated on the
+            // declining balance each half-year.
             const loanAmt   = financingPlan.termLoanAmount;
             const rate      = Number(report.loan.interest_rate_pct || 10.5);
             const tenure    = Number(report.loan.tenure_months || 60);
             const morat     = Number(report.loan.moratorium_months || 0);
-            const r         = rate / 100 / 12;
-            const nRepay    = tenure - morat;
-            const emi       = (loanAmt > 0 && r > 0 && nRepay > 0)
-              ? Math.round(loanAmt * r * Math.pow(1 + r, nRepay) / (Math.pow(1 + r, nRepay) - 1))
-              : 0;
-            const totalPayable   = emi * nRepay;
-            const totalInterest  = Math.round(Math.max(totalPayable - loanAmt, 0));
-            const moratInterest  = morat > 0 ? Math.round(loanAmt * r * morat) : 0;
-            const grandInterest  = totalInterest + moratInterest;
+            const annualRate = rate / 100;
+            const tenureYears     = Math.ceil(tenure / 12);
+            const moratoriumYears = Math.ceil(morat / 12);
+            const repayYears      = Math.max(tenureYears - moratoriumYears, 1);
+            const halfInst  = loanAmt > 0 ? Math.round((loanAmt / (repayYears * 2)) * 100) / 100 : 0;
+
+            let balance = loanAmt;
+            let totalInterest = 0;
+            let moratInterest = 0;
+            for (let yr = 1; yr <= tenureYears && loanAmt > 0; yr++) {
+              const opening = Math.round(balance * 100) / 100;
+              let ih1: number, ih2: number, repaid: number, closing: number;
+              if (yr <= moratoriumYears) {
+                ih1 = Math.round(opening * annualRate / 2 * 100) / 100;
+                ih2 = Math.round(opening * annualRate / 2 * 100) / 100;
+                repaid = 0;
+                closing = opening;
+                moratInterest += ih1 + ih2;
+              } else {
+                ih1 = Math.round(opening * annualRate / 2 * 100) / 100;
+                const mid = Math.round(Math.max(opening - halfInst, 0) * 100) / 100;
+                ih2 = Math.round(mid * annualRate / 2 * 100) / 100;
+                repaid = Math.round(halfInst * 2 * 100) / 100;
+                closing = Math.round(Math.max(opening - repaid, 0) * 100) / 100;
+              }
+              totalInterest += ih1 + ih2;
+              balance = closing;
+            }
+            totalInterest = Math.round(totalInterest);
+            moratInterest = Math.round(moratInterest);
+            const nRepay         = repayYears * 12;
+            const grandInterest  = totalInterest;
             const debtEquity     = financingPlan.promoterContribution > 0
               ? (financingPlan.totalBankFinance / financingPlan.promoterContribution).toFixed(2)
               : "N/A";
@@ -572,16 +600,16 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                   </div>
                 </div>
 
-                {/* ── Live EMI Calculator ─────────────────────────────────── */}
-                {emi > 0 && (
+                {/* ── Live Loan Repayment Preview ─────────────────────────── */}
+                {loanAmt > 0 && (
                   <div className="rounded-xl bg-[#0f1f35] border border-primary/30 p-4 space-y-3">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                      Live EMI & Repayment Preview (CA Reducing Balance Method)
+                      Live Repayment Preview (Half-Yearly Equal-Principal, Reducing Balance — matches your generated report exactly)
                     </p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {[
-                        { label: "Monthly EMI", value: `₹${emi.toLocaleString("en-IN")}`, color: "text-primary" },
-                        { label: `Total Interest (${nRepay} months)`, value: `₹${totalInterest.toLocaleString("en-IN")}`, color: "text-amber-400" },
+                        { label: "Half-Yearly Instalment (Principal)", value: `₹${halfInst.toLocaleString("en-IN")}`, color: "text-primary" },
+                        { label: `Total Interest (${repayYears}-yr repayment)`, value: `₹${totalInterest.toLocaleString("en-IN")}`, color: "text-amber-400" },
                         { label: morat > 0 ? `Moratorium Interest (${morat}mo)` : "Processing Fee", value: morat > 0 ? `₹${moratInterest.toLocaleString("en-IN")}` : `₹${processingFeeAmt.toLocaleString("en-IN")}`, color: "text-slate-300" },
                         { label: "Total Cost of Loan", value: `₹${(grandInterest + processingFeeAmt).toLocaleString("en-IN")}`, color: "text-red-400" },
                       ].map(({ label, value, color }) => (
@@ -813,30 +841,62 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                     </p>
                   </div>
 
-                  {/* Bank WC % with Tandon presets */}
+                  {/* WC Finance Method — varies bank-to-bank, never hardcode one */}
                   <div className="space-y-2">
-                    <Label>Bank WC Finance %</Label>
-                    <Input type="number" className="h-11 rounded-xl"
-                      value={report.dpr.wc_loan_pct || 60} min={0} max={100}
-                      onChange={(e) => updateSection("dpr", { wc_loan_pct: Number(e.target.value) })} />
-                    <div className="flex gap-1 flex-wrap">
-                      {[
-                        { v: 60, label: "60%" },
-                        { v: 65, label: "65%" },
-                        { v: 75, label: "75% (Tandon)" },
-                        { v: 80, label: "80% (Mudra)" },
-                      ].map(({ v, label }) => (
-                        <button key={v} type="button"
-                          onClick={() => updateSection("dpr", { wc_loan_pct: v })}
-                          className={`px-2 py-0.5 rounded text-xs font-medium border transition ${wcBankPct === v ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Tandon Method I = 75%. Method II = 66.7%.</p>
+                    <Label>WC Bank-Finance Method</Label>
+                    <Select value={report.dpr.wc_finance_method || "simple_margin"}
+                      onValueChange={(v: "simple_margin" | "drawing_power") => updateSection("dpr", { wc_finance_method: v })}>
+                      <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="simple_margin">Simple Margin Method</SelectItem>
+                        <SelectItem value="drawing_power">Drawing Power Method</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">Ask your bank which method they use to assess your CC/OD limit.</p>
                   </div>
 
-                  <div />
+                  {report.dpr.wc_finance_method === "drawing_power" ? (
+                    <div className="space-y-2">
+                      <Label>Bank's Margin % (Drawing Power)</Label>
+                      <Input type="number" className="h-11 rounded-xl"
+                        value={report.dpr.wc_margin_pct || 25} min={0} max={100}
+                        onChange={(e) => updateSection("dpr", { wc_margin_pct: Number(e.target.value) })} />
+                      <div className="flex gap-1 flex-wrap">
+                        {[15, 20, 25, 30, 40].map(v => (
+                          <button key={v} type="button"
+                            onClick={() => updateSection("dpr", { wc_margin_pct: v })}
+                            className={`px-2 py-0.5 rounded text-xs font-medium border transition ${Number(report.dpr.wc_margin_pct) === v ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
+                            {v}%
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        DP = (Stock + Debtors) × (1 − Margin%) − Creditors. Common convention: 25%. Enter what your bank actually applies.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label>Bank WC Finance %</Label>
+                      <Input type="number" className="h-11 rounded-xl"
+                        value={report.dpr.wc_loan_pct || 60} min={0} max={100}
+                        onChange={(e) => updateSection("dpr", { wc_loan_pct: Number(e.target.value) })} />
+                      <div className="flex gap-1 flex-wrap">
+                        {[
+                          { v: 60, label: "60%" },
+                          { v: 65, label: "65%" },
+                          { v: 75, label: "75% (Tandon)" },
+                          { v: 80, label: "80% (Mudra)" },
+                        ].map(({ v, label }) => (
+                          <button key={v} type="button"
+                            onClick={() => updateSection("dpr", { wc_loan_pct: v })}
+                            className={`px-2 py-0.5 rounded text-xs font-medium border transition ${wcBankPct === v ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">Tandon Method I = 75%. Method II = 66.7%.</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* ── WC Breakdown Calculator ──────────────────────────────── */}
@@ -1363,7 +1423,17 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
               placeholder="e.g. 5"
               max={25}
             />
+            <NumberField
+              label="Promoter Drawings % of PAT (optional)"
+              value={report.dpr.promoter_drawings_pct || 0}
+              onChange={(value) => updateSection("dpr", { promoter_drawings_pct: Math.min(Math.max(value, 0), 100) })}
+              placeholder="0 = full retention"
+              max={100}
+            />
           </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Drawings reduce Reserves &amp; Surplus / net worth on the Balance Sheet, but never DSCR or cash accruals — a bank checks debt-service capacity before the promoter's personal withdrawal. 0% assumes full profit retention (common conservative assumption for a new project's first 5 years).
+          </p>
           <p className="text-xs text-muted-foreground -mt-2">
             Cost-overrun buffer added on top of machinery cost before depreciation — CA standard is 5–10% for new equipment purchases. 0 = none.
           </p>

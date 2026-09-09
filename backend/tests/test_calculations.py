@@ -260,6 +260,71 @@ class TestWorkingCapital:
                 f"Year {yr['year']}: bank_loan + margin ≠ total"
             )
 
+    def test_default_method_is_simple_margin(self):
+        from calculations.working_capital import calculate_wc_by_year
+        data = _make_data()
+        wc = calculate_wc_by_year(data, SCHEME_PMEGP)
+        for yr in wc:
+            assert yr["wc_finance_method"] == "simple_margin"
+
+    def test_drawing_power_never_exceeds_total_wc(self):
+        from calculations.working_capital import calculate_wc_by_year
+        data = _make_data(assumptions=_make_assumptions(
+            wc_finance_method="drawing_power", wc_margin_pct=25.0,
+        ))
+        wc = calculate_wc_by_year(data, SCHEME_PMEGP)
+        for yr in wc:
+            assert yr["bank_loan"] <= yr["total"] + 1
+            assert abs(yr["bank_loan"] + yr["margin"] - yr["total"]) < 1
+
+    def test_drawing_power_matches_formula_exactly(self):
+        from calculations.working_capital import calculate_wc_by_year
+        data = _make_data(assumptions=_make_assumptions(
+            wc_finance_method="drawing_power", wc_margin_pct=25.0,
+        ))
+        wc = calculate_wc_by_year(data, SCHEME_PMEGP)
+        for yr in wc:
+            margin = 0.25
+            dp = max(
+                (yr["rm_stock"] + yr["wip"] + yr["fg"]) * (1 - margin)
+                + yr["debtors"] * (1 - margin)
+                - yr["creditors"],
+                0,
+            )
+            expected_bank_loan = min(dp, yr["total"])
+            assert abs(yr["bank_loan"] - expected_bank_loan) < 1, (
+                f"Year {yr['year']}: bank_loan {yr['bank_loan']} != DP formula {expected_bank_loan}"
+            )
+
+    def test_higher_margin_pct_reduces_drawing_power(self):
+        from calculations.working_capital import calculate_wc_by_year
+        data_low  = _make_data(assumptions=_make_assumptions(wc_finance_method="drawing_power", wc_margin_pct=10.0))
+        data_high = _make_data(assumptions=_make_assumptions(wc_finance_method="drawing_power", wc_margin_pct=40.0))
+        wc_low  = calculate_wc_by_year(data_low,  SCHEME_PMEGP)
+        wc_high = calculate_wc_by_year(data_high, SCHEME_PMEGP)
+        for lo, hi in zip(wc_low, wc_high):
+            assert hi["bank_loan"] <= lo["bank_loan"], (
+                "A higher bank margin % must never increase Drawing Power"
+            )
+
+    def test_drawing_power_and_simple_margin_can_genuinely_differ(self):
+        """Prove the two methods aren't coincidentally producing the same
+        number — with a real creditor balance, DP and simple-margin should
+        diverge for the same underlying WC requirement."""
+        from calculations.working_capital import calculate_wc_by_year
+        data_simple = _make_data(assumptions=_make_assumptions(
+            wc_finance_method="simple_margin", wc_loan_pct=60.0, creditor_days=30,
+        ))
+        data_dp = _make_data(assumptions=_make_assumptions(
+            wc_finance_method="drawing_power", wc_margin_pct=25.0, creditor_days=30,
+        ))
+        wc_simple = calculate_wc_by_year(data_simple, SCHEME_PMEGP)
+        wc_dp     = calculate_wc_by_year(data_dp,     SCHEME_PMEGP)
+        assert any(
+            abs(s["bank_loan"] - d["bank_loan"]) > 1
+            for s, d in zip(wc_simple, wc_dp)
+        ), "Simple Margin and Drawing Power should generally produce different bank finance"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Income Statement
@@ -308,6 +373,47 @@ class TestIncomeStatement:
             assert income[i]["revenue"] >= income[i-1]["revenue"], (
                 f"Year {income[i]['year']}: revenue should not decrease with positive growth"
             )
+
+    def test_zero_drawings_by_default_matches_full_retention(self):
+        """Default promoter_drawings_pct=0 -> reserves grow by exactly PAT
+        each year (no silent change to the pre-existing behaviour)."""
+        income = self._get_income()
+        cumulative = 0.0
+        for yr in income:
+            cumulative += yr["pat"]
+            assert abs(yr["reserves_surplus"] - cumulative) < 1
+
+    def test_drawings_reduce_reserves_but_not_cash_accruals(self):
+        """CA rule: Closing Reserves = Opening + PAT - Drawings. Drawings
+        come out AFTER cash accruals are measured (DSCR must not see them)."""
+        no_draw = self._get_income(promoter_drawings_pct=0.0)
+        with_draw = self._get_income(promoter_drawings_pct=50.0)
+        for a, b in zip(no_draw, with_draw):
+            # cash_accruals (PAT+Dep) is a pre-drawings, operations-only figure —
+            # must be identical regardless of the drawings assumption.
+            assert abs(a["cash_accruals"] - b["cash_accruals"]) < 1
+            # PAT itself is also unaffected (drawings aren't a P&L expense).
+            assert abs(a["pat"] - b["pat"]) < 1
+        # But reserves (net worth) must genuinely be lower with drawings,
+        # in a profitable year.
+        for a, b in zip(no_draw, with_draw):
+            if a["pat"] > 0:
+                assert b["reserves_surplus"] < a["reserves_surplus"]
+
+    def test_drawings_never_apply_to_a_loss_year(self):
+        """Can't draw against a loss — drawings = max(PAT, 0) x pct."""
+        income = self._get_income(promoter_drawings_pct=100.0)
+        for yr in income:
+            if yr["pat"] < 0:
+                assert yr["drawings"] == 0
+
+    def test_full_drawings_of_100pct_pat_freezes_reserves(self):
+        """100% drawings on every profitable year -> reserves should never
+        exceed the highest single year's contribution (nothing compounds)."""
+        income = self._get_income(promoter_drawings_pct=100.0)
+        for yr in income:
+            expected_reserves_delta = max(yr["pat"], 0) - yr["drawings"]
+            assert abs(expected_reserves_delta) < 1  # drawings ~= pat when pat > 0
 
     def test_monthly_annual_cogs_reconcile(self):
         from calculations.depreciation import calculate_depreciation

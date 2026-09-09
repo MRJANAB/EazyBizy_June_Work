@@ -92,6 +92,9 @@ def calculate_income_statement(
     tax_rate     = float(getattr(assum, "tax_rate_pct", _DEFAULT_TAX_RATE * 100) or (_DEFAULT_TAX_RATE * 100)) / 100
     if tax_rate <= 0:
         tax_rate = _DEFAULT_TAX_RATE
+    # CA: Closing Reserves = Opening Reserves + PAT − Drawings. 0 = full
+    # retention (conservative default for a new project), never invented.
+    drawings_pct = float(getattr(assum, "promoter_drawings_pct", 0.0) or 0.0) / 100
 
     annual_dep     = float(dep.get("annual_dep", 0) or 0)
     # WDV — each year has its own (declining) depreciation figure; fall back
@@ -222,7 +225,10 @@ def calculate_income_statement(
         pat  = R(pbt - tax)
 
         cash_accruals        = R(pat + dep_yr)
-        cumulative_reserves  = R(cumulative_reserves + pat)
+        # CA: drawings reduce retained earnings but are NOT a P&L expense —
+        # they come out of PAT after tax, same as a dividend would for a company.
+        drawings             = R(max(pat, 0) * drawings_pct)
+        cumulative_reserves  = R(cumulative_reserves + pat - drawings)
 
         result.append({
             "year":               yr,
@@ -258,6 +264,7 @@ def calculate_income_statement(
             "net_profit":         pat,
             "profit_after_tax":   pat,
             "cash_accruals":      cash_accruals,
+            "drawings":           drawings,
             "reserves_surplus":   cumulative_reserves,
             "emi_paid":           emi_paid,
             "net_surplus":        R(pat - emi_paid),

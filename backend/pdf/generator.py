@@ -1104,6 +1104,7 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         yr_bs_prev   = bs[i]     if i < len(bs)        else {}
 
         cash_acc     = float(yr_income.get("cash_accruals", 0) or 0)
+        drawings     = float(yr_income.get("drawings",      0) or 0)
         tl_principal = float(yr_loan.get("principal_paid",  0) or 0)
 
         # WC bank-loan change (year-over-year from balance sheet)
@@ -1121,7 +1122,7 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         inc_funding  = R(funding_cur - funding_prev)
 
         total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_funding, 0))
-        total_uses    = R(tl_principal + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_funding, 0))
+        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_funding, 0))
         surplus       = R(total_sources - total_uses)
         # Balance sheet is the source of truth for closing cash after funding
         # gaps are converted to valid short-term borrowing.
@@ -1136,6 +1137,7 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
             "total_sources":      total_sources,
             "inc_current_assets": R(inc_ca),
             "tl_repayment":       R(tl_principal),
+            "drawings":           R(drawings),
             "total_uses":         total_uses,
             "surplus":            surplus,
             "closing_cash":       closing_cash,

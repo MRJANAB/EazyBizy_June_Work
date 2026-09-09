@@ -193,6 +193,16 @@ class AssumptionsInfo(BaseModel):
     capacity_y5_pct:       float = Field(default=0.0)
     # COGS override — 0 = use industry default (Mfg 55%, Trading 70%, Service 10%)
     cogs_pct_override:     float = Field(default=0.0,  description="Actual COGS % of revenue (0 = use industry default)")
+    # Promoter drawings — CA standard: Closing Reserves = Opening + PAT − Drawings.
+    # 0 = no drawings assumed (common conservative default for a new/greenfield
+    # project's first 5 years) — never invented; explicit user/CA input.
+    promoter_drawings_pct: float = Field(default=0.0,  description="% of each year's PAT drawn by the promoter/partners for personal use. 0 = full retention.")
+    # Working-capital bank-finance method — banks vary; never hardcode one.
+    wc_finance_method:      str   = Field(default="simple_margin",
+                                description="'simple_margin' (Bank Finance = WC Requirement x wc_loan_pct) or "
+                                            "'drawing_power' (DP = paid-for stock/debtors after margin, less creditors).")
+    wc_margin_pct:          float = Field(default=25.0,
+                                description="Margin % banks apply to stock/debtors when computing Drawing Power (Tandon-committee-era convention: commonly 25%). Only used when wc_finance_method='drawing_power'.")
 
 
 class ExpensesInfo(BaseModel):

@@ -9,9 +9,17 @@ BUG 6 FIX: Use 360 days (banking convention), separate RM_Stock / WIP / FG / Deb
   Creditors  = (RM_YearN / 360) × creditorDays
   Total_WC   = RM_Stock + WIP + FG + Debtors - Creditors
   Service WC = Receivables + Salary Float + Expense Float + Cash Reserve
-  WC_Loan    = wcLoanPct × Total_WC
-  WC_Margin  = (1 - wcLoanPct) × Total_WC
   WC_Interest = WC_Loan × wcInterestRate
+
+Bank finance on that WC requirement — method varies bank-to-bank, never
+hardcode one (assumptions.wc_finance_method):
+  'simple_margin' (default):
+    WC_Loan    = wcLoanPct × Total_WC
+    WC_Margin  = (1 - wcLoanPct) × Total_WC
+  'drawing_power' (paid-for-stock-and-debtors method many PSU banks use):
+    DP = (RM_Stock + WIP + FG) × (1 - marginPct) + Debtors × (1 - marginPct) − Creditors
+    WC_Loan   = min(DP, Total_WC)   [DP can't fund more than the assessed requirement]
+    WC_Margin = Total_WC − WC_Loan
 """
 from core.engine import R, annual_revenue_from_prod, get_industry_defaults
 
@@ -48,6 +56,8 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
     fg_days       = int(getattr(assum, "fg_days",   30) or 30)
 
     wc_pct    = float(getattr(assum, "wc_loan_pct", ind["wc_loan_pct"] * 100) or (ind["wc_loan_pct"] * 100)) / 100
+    wc_method = str(getattr(assum, "wc_finance_method", "simple_margin") or "simple_margin").lower()
+    dp_margin_pct = float(getattr(assum, "wc_margin_pct", 25.0) or 25.0) / 100
     int_rate  = float(getattr(assum, "interest_rate_pct", 10.5) or 10.5) / 100
     rev_growth = float(getattr(assum, "revenue_growth_pct", 7.0) or 7.0) / 100
     salary_hike = float(getattr(assum, "salary_increase_pct", 10.0) or 10.0) / 100
@@ -154,8 +164,21 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
             expense_float = 0.0
             salary_float = 0.0
             total     = R(max(rm_stock + wip + fg + debtors - creditors, 0))
-        bank_loan = R(total * wc_pct)
-        margin    = R(total - bank_loan)
+        if wc_method == "drawing_power":
+            # DP = paid-for stock/debtors after the bank's margin, less
+            # creditors already funding part of the stock. Can never exceed
+            # the assessed WC requirement itself.
+            drawing_power = R(max(
+                (rm_stock + wip + fg) * (1 - dp_margin_pct)
+                + debtors * (1 - dp_margin_pct)
+                - creditors,
+                0,
+            ))
+            bank_loan = R(min(drawing_power, total))
+            margin    = R(total - bank_loan)
+        else:
+            bank_loan = R(total * wc_pct)
+            margin    = R(total - bank_loan)
 
         result.append({
             "year":          yr,
@@ -177,6 +200,8 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
             "creditor_days": creditor_days,
             "wip_days":      wip_days,
             "fg_days":       fg_days,
+            "wc_finance_method": wc_method,
+            "wc_margin_pct":     round(dp_margin_pct * 100, 1) if wc_method == "drawing_power" else round(wc_pct * 100, 1),
         })
 
     return result

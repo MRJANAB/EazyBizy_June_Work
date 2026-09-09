@@ -1465,13 +1465,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["USE OF FUNDS","","","","",""],
         ["Inc. in Current Assets"]  + [r(p["inc_current_assets"]) for p in pcf],
         ["Term Loan Repayment"]     + [r(p["tl_repayment"])       for p in pcf],
+        ["Less: Promoter Drawings"] + [r(p.get("drawings", 0))    for p in pcf],
         ["Total Uses"]             + [r(p["total_uses"])           for p in pcf],
         ["Opening Cash Balance"]    + [r(p["opening_cash"])       for p in pcf],
         ["Surplus / Deficit"]       + [r(p["surplus"])            for p in pcf],
         ["Closing Cash Balance"]    + [r(p["closing_cash"])       for p in pcf],
     ], colWidths=[60*mm]+[22*mm]*5)
     cf_t.setStyle(BTS())
-    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(9)); cf_t.setStyle(TOT(12))
+    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
     story.append(cf_t)
     PB(story)
 

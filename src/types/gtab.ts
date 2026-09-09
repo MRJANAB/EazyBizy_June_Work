@@ -193,7 +193,10 @@ export interface ProjectReportInputs {
     // ── Loan & financing ─────────────────────────────────────────────────
     term_loan_pct:              number;   // % of fixed capital financed by TL
     promoter_equity_pct:        number;   // % of project cost from promoter
-    wc_loan_pct:                number;   // % of WC financed by bank
+    wc_loan_pct:                number;   // % of WC financed by bank (used when wc_finance_method = 'simple_margin')
+    wc_finance_method:          "simple_margin" | "drawing_power"; // how the bank sizes WC finance — varies bank-to-bank
+    wc_margin_pct:              number;   // bank's margin % on stock/debtors (used when wc_finance_method = 'drawing_power')
+    promoter_drawings_pct:      number;   // % of each year's PAT drawn by promoter/partners; 0 = full retention
     capital_subsidy_pct:        number;   // MSME state capital subsidy % on fixed assets (0 = none)
     contingency_pct:            number;   // contingency on P&M as %
     loan_tenure_years:          number;
@@ -350,6 +353,9 @@ export const createInitialProjectReportInputs = (): ProjectReportInputs => ({
     promoter_equity_pct:        25,
     // RBI/Nayak Committee turnover method floor for MSE working capital assessment
     wc_loan_pct:                80,
+    wc_finance_method:          "simple_margin",
+    wc_margin_pct:              25,
+    promoter_drawings_pct:      0,
     capital_subsidy_pct:        0,
     contingency_pct:            0,
     contingency_rate_pct:       0,

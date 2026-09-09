@@ -1,6 +1,8 @@
-import { AlertCircle, IndianRupee, BarChart3, Lightbulb } from "lucide-react";
+import { AlertCircle, IndianRupee, BarChart3, Lightbulb, Landmark } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { GTABFormData } from "@/types/gtab";
 import { getFinancingPlan, getPromoterEquityPct } from "@/lib/projectReport";
 import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
@@ -150,6 +152,34 @@ const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
               </p>
             </div>
 
+          </div>
+
+          {/* Divider */}
+          <div className="border-t" />
+
+          {/* Means of Finance Breakdown — Term Loan / Working Capital / Promoter Contribution as clear input-style fields */}
+          <SectionTitle
+            icon={Landmark}
+            title="Means of Finance Breakdown"
+            subtitle="How this project will be funded — term loan, working capital and your own contribution"
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
+            <div className="space-y-2">
+              <Label>Term Loan Amount (₹)</Label>
+              <Input readOnly value={formatCurrency(financingPlan.termLoanAmount)} className="h-12 rounded-xl font-semibold" />
+              <p className="text-xs text-muted-foreground">{financingPlan.termLoanBankFinancePct}% of Fixed Capital, financed by the bank</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Working Capital Loan Amount (₹)</Label>
+              <Input readOnly value={formatCurrency(financingPlan.workingCapitalLoan)} className="h-12 rounded-xl font-semibold" />
+              <p className="text-xs text-muted-foreground">{financingPlan.wcBankFinancePct}% of monthly working capital requirement</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Promoter's Contribution (₹)</Label>
+              <Input readOnly value={formatCurrency(financingPlan.promoterContribution)} className="h-12 rounded-xl font-semibold" />
+              <p className="text-xs text-muted-foreground">{Number(promoterEquityPct).toFixed(1)}% of total project cost — your own equity</p>
+            </div>
           </div>
 
           {/* Divider */}

@@ -218,6 +218,7 @@ def calculate_income_statement(
         interest   = float(loan_schedule[i]["interest_paid"])
         wc_int     = float(wc_schedule[i]["wc_interest"]) if wc_schedule else 0.0
         emi_paid   = float(loan_schedule[i]["emi_paid"])
+        principal_paid = float(loan_schedule[i]["principal_paid"])
 
         ebit = R(ebitda - dep_yr)
         pbt  = R(ebit - interest - wc_int)
@@ -267,7 +268,12 @@ def calculate_income_statement(
             "drawings":           drawings,
             "reserves_surplus":   cumulative_reserves,
             "emi_paid":           emi_paid,
-            "net_surplus":        R(pat - emi_paid),
+            # BUG FIX: was PAT - full TL Service (principal + interest) — interest
+            # is already deducted once inside PAT, so subtracting it again here
+            # double-counted it. CA rule (matches Section O2's "Net Cash Surplus"
+            # and monthly_pnl.py's own documented formula): Cash Accruals (PAT +
+            # Dep) less TL Principal only.
+            "net_surplus":        R(cash_accruals - principal_paid),
             "dscr":               0.0,
             "industry":           industry,
             "cogs_ratio_pct":     round((cogs / rev * 100) if rev > 0 else 0, 1),

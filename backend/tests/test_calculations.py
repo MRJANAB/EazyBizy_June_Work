@@ -419,6 +419,36 @@ class TestIncomeStatement:
                 f"Year {yr['year']}: cash_accruals {yr['cash_accruals']} ≠ PAT+Dep {expected}"
             )
 
+    def test_net_surplus_equals_cash_accruals_minus_principal(self):
+        # BUG FIX: "net_surplus" was PAT - full TL Service (principal +
+        # interest) — interest is already deducted once inside PAT, so
+        # subtracting it again double-counted it, understating the true
+        # cash position. CA rule (matches Section O2's "Net Cash Surplus"):
+        # Cash Accruals (PAT + Dep) less TL Principal only.
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        data = _make_data()
+        dep  = calculate_depreciation(data, SCHEME_PMEGP)
+        loan = calculate_loan_schedule(data, SCHEME_PMEGP)
+        wc   = calculate_wc_by_year(data, SCHEME_PMEGP)
+        income = calculate_income_statement(data, SCHEME_PMEGP, dep, loan, wc)
+        for i, yr in enumerate(income):
+            principal_paid = loan[i]["principal_paid"]
+            interest_paid  = loan[i]["interest_paid"]
+            expected = round(yr["cash_accruals"] - principal_paid, 2)
+            assert abs(yr["net_surplus"] - expected) < 2, (
+                f"Year {yr['year']}: net_surplus {yr['net_surplus']} != "
+                f"cash_accruals - principal {expected}"
+            )
+            old_buggy = round(yr["pat"] - yr["emi_paid"], 2)  # PAT - (principal+interest)
+            if interest_paid > 1:
+                assert abs(yr["net_surplus"] - old_buggy) > 1, (
+                    f"Year {yr['year']}: net_surplus must differ from the old double-counted "
+                    "PAT - TL Service formula when TL interest is nonzero"
+                )
+
     def test_revenue_increases_with_growth(self):
         income = self._get_income(revenue_growth_pct=7.0)
         for i in range(1, 4):  # Years 2-4 (not 5 because cap schedule ends)

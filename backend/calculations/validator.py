@@ -234,6 +234,28 @@ def validate_report(report_data: dict) -> None:
             f"CHECK 6 WARN — Average DSCR {avg_dscr:.2f}x below {scheme_str.upper()} minimum {dscr_min}x."
         )
 
+    # V13: Existing business claims a commencement date that isn't in the past.
+    # An "Existing Business (N years)" with a commencement date of today (or
+    # later) is internally inconsistent — the business can't have both just
+    # started and already been running for N years.
+    business_info = report_data.get("input", {}).get("business", {})
+    biz_status   = str(business_info.get("business_status", "") or "").lower()
+    biz_duration = float(business_info.get("business_duration_months", 0) or 0)
+    commencement = str(business_info.get("commencement_date", "") or "")
+    if "existing" in biz_status and biz_duration > 0 and commencement:
+        try:
+            from datetime import date, datetime as _dt
+            _commencement_date = _dt.fromisoformat(commencement[:10]).date()
+            if _commencement_date >= date.today():
+                warnings.append(
+                    f"V13 WARN — Business Status is 'Existing Business ({biz_duration:.0f} months)' "
+                    f"but Commencement Date ({commencement[:10]}) is today or in the future. "
+                    "An existing business cannot have commenced today — check the commencement date "
+                    "or business duration entered."
+                )
+        except (ValueError, TypeError):
+            pass  # unparseable date — not this check's concern
+
     # ── Attach warnings ───────────────────────────────────────────────────────
     report_data["validation_warnings"] = warnings
 

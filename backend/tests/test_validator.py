@@ -86,6 +86,49 @@ class TestV1MeansOfFinanceReconciliation:
         validate_report(report_data)
 
 
+class TestV13BusinessStatusVsCommencementDate:
+    """BUG: an applicant marked 'Existing Business' with N months of
+    operating history but a commencement date of today (or later) is
+    internally inconsistent — an existing business can't have just
+    commenced. V13 is a WARNING (not a hard error), since it flags a data
+    inconsistency the applicant should double-check rather than a
+    calculation failure."""
+
+    def _report_data_with_business(self, business):
+        report_data = _minimal_report_data(_scheme_data())
+        report_data["input"] = {"business": business}
+        return report_data
+
+    def test_existing_business_commencing_today_warns(self):
+        from datetime import date
+        report_data = self._report_data_with_business({
+            "business_status": "Existing Business",
+            "business_duration_months": 24,
+            "commencement_date": date.today().isoformat(),
+        })
+        validate_report(report_data)  # warning only, must not raise
+        assert any("V13 WARN" in w for w in report_data["validation_warnings"])
+
+    def test_existing_business_with_past_commencement_does_not_warn(self):
+        report_data = self._report_data_with_business({
+            "business_status": "Existing Business",
+            "business_duration_months": 24,
+            "commencement_date": "2023-01-01",
+        })
+        validate_report(report_data)
+        assert not any("V13 WARN" in w for w in report_data["validation_warnings"])
+
+    def test_new_business_commencing_today_does_not_warn(self):
+        from datetime import date
+        report_data = self._report_data_with_business({
+            "business_status": "New Business",
+            "business_duration_months": 0,
+            "commencement_date": date.today().isoformat(),
+        })
+        validate_report(report_data)
+        assert not any("V13 WARN" in w for w in report_data["validation_warnings"])
+
+
 class TestV5DscrMessageIsActionable:
     def test_dscr_failure_message_does_not_blame_a_fixed_bug(self):
         """The V5 message used to say 'likely RM is calculated from

@@ -392,15 +392,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     if _is_not_bankable:
         _reasons = []
         if _avg_dscr_val < 1.25:
-            _reasons.append(f"DSCR {round(_avg_dscr_val,2)}x < 1.25x benchmark")
+            _reasons.append(f"Term Loan DSCR {round(_avg_dscr_val,2)}x is below the 1.25x illustrative benchmark")
         if _annual_pat_v < 0:
             _reasons.append("Net Profit (PAT) is negative")
         if _annual_ebitda_v < 0:
             _reasons.append("EBITDA is negative — operating losses")
         if cma.get("payback_not_achievable", False):
             _reasons.append("Payback period not achievable")
+        # FIX (matches FIX #14 below): this platform assesses viability, it
+        # does not impersonate the sanctioning bank's own credit decision.
         nb_tbl = Table(
-            [[Paragraph("⚠ NOT BANKABLE – REVISE ASSUMPTIONS BEFORE SUBMISSION", ST["rec_approve"])]],
+            [[Paragraph("⚠ FINANCIAL VIABILITY ASSESSMENT — HIGH RISK UNDER CURRENT ASSUMPTIONS", ST["rec_approve"])]],
             colWidths=[170*mm]
         )
         nb_tbl.setStyle(TableStyle([
@@ -885,13 +887,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 ["Service Revenue Model", "Client/project billing (see Section A3)", ""],
                 ["Client Billing Cycle",  f"{inp.get('debtor_days', 30)} days", "Collection"],
                 ["Hours of Operation / Day", str(inp["hours_of_operation"]), "Hours"],
-                ["Annual Revenue (100% Cap)", rs(ps["revenue_at_100pct"]), "Rs."],
+                ["Annual Revenue (100% Cap, Year 1)", rs(ps["revenue_at_100pct"]), "Rs."],
             ]
         else:
             _d1_rows = [
                 ["Parameter","Value","Unit"],
                 ["Working Days per Year",     r(inp["working_days_per_year"]),  "Days"],
-                ["Annual Revenue (100% Cap)", rs(ps["revenue_at_100pct"]),      "Rs."],
+                ["Annual Revenue (100% Cap, Year 1)", rs(ps["revenue_at_100pct"]),      "Rs."],
                 ["Revenue Model",             "Revenue-based (see Section A3 for product details)", ""],
             ]
         prod_params = Table(_d1_rows, colWidths=[90*mm,55*mm,20*mm])
@@ -899,7 +901,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(prod_params)
         NL(story, 5)
 
-        H2("D2. Annual Sales Realization (at 100% Capacity)", story)
+        H2("D2. Annual Sales Realization (Year 1, at 100% Capacity)", story)
         products = inp.get("products_list") or cma.get("products") or []
         if _industry == "trading" and products and len(products) > 0 and products[0].get("category") != "Products/Services":
             sales_rows = [["Product Name", "Purchase Price", "Selling Price", "Quantity", "Revenue (M)", "COGS (M)", "Gross Profit (M)"]]
@@ -935,15 +937,22 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                     name = p.get("name") or p.get("category") or "Product"
                     mix = (ann_rev_y1 / total_rev_y1 * 100) if total_rev_y1 else 0
                     sales_rows.append([name, r(ann_rev_y1 * scale), rp2(mix)])
-                sales_rows.append(["Total at 100% Capacity", r(total_rev_100pct), "100.0%"])
+                sales_rows.append(["Total at 100% Capacity (Year 1)", r(total_rev_100pct), "100.0%"])
             else:
                 sales_rows.append([primary_product, r(ps["revenue_at_100pct"]), "100.0%"])
-                sales_rows.append(["Total at 100% Capacity", r(ps["revenue_at_100pct"]), "100.0%"])
-                
+                sales_rows.append(["Total at 100% Capacity (Year 1)", r(ps["revenue_at_100pct"]), "100.0%"])
+
             sales_t = Table(sales_rows, colWidths=[90*mm,50*mm,30*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(len(sales_rows)-1))
         story.append(sales_t)
-        NL(story, 5)
+        NL(story, 3)
+        story.append(Paragraph(
+            f"<b>Note:</b> the figures above are the Year-1 baseline. From Year 2 onward, revenue grows at "
+            f"{rp2(inp.get('revenue_growth_pct', 0))} per year (Section F) on top of the capacity ramp-up — "
+            "so a later year's revenue can exceed this Year-1 100%-capacity figure even at a lower stated "
+            "capacity %. See Section J for the actual per-year revenue.",
+            ST["small"]))
+        NL(story, 3)
 
         H2("D3. " + ("Service Delivery Cost Structure" if _is_service else "Purchase / Direct Cost Structure"), story)
         if _industry == "trading":
@@ -981,7 +990,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(prod_params)
         NL(story, 5)
 
-        H2("D2. Annual Sales Realization (at 100% Capacity)", story)
+        H2("D2. Annual Sales Realization (Year 1, at 100% Capacity)", story)
         products = inp.get("products_list") or cma.get("products") or []
         if products and len(products) > 0 and products[0].get("category") and products[0].get("category") != "Products/Services":
             sales_rows = [["Product","Price (Rs./Unit)","Quantity/Month","Annual Revenue (Rs.)"]]
@@ -1887,14 +1896,21 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # Recommendation) since T1's "Objective Credit Indicators" table duplicated
     # every metric already shown in Q1/Q2 above; only this verdict was unique.
     H2("Q4. Internal Viability Assessment", story)
+    # BUG FIX: "Feasibility Assessment" text (e.g. "DOES NOT MEET VIABILITY
+    # BENCHMARKS") is longer than a 42.5mm column can hold as a plain string —
+    # ReportLab does not wrap plain strings, so it visibly overflowed into the
+    # "Risk Level" column. Wrap long cells in Paragraphs (which do wrap) and
+    # widen that column relative to the others.
+    _fa_cell_style = _s("fa_cell", fontSize=9, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=BLK, leading=12)
     fa_t = Table([
         ["Internal Viability Grade","Feasibility Assessment","Risk Level","Weighted Score"],
-        [cma["credit_rating"], _rec_display, cma["risk_level"], str(cma["total_score"])],
-    ], colWidths=[42.5*mm]*4)
+        [Paragraph(str(cma["credit_rating"]), _fa_cell_style), Paragraph(str(_rec_display), _fa_cell_style),
+         Paragraph(str(cma["risk_level"]), _fa_cell_style), Paragraph(str(cma["total_score"]), _fa_cell_style)],
+    ], colWidths=[32*mm,68*mm,32*mm,38*mm])
     fa_t.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,0),DG),("TEXTCOLOR",(0,0),(-1,0),W),
-        ("FONTNAME",(0,0),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),10),
-        ("ALIGN",(0,0),(-1,-1),"CENTER"),("BACKGROUND",(0,1),(-1,1),LG),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,0),10),
+        ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("BACKGROUND",(0,1),(-1,1),LG),
         ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
         ("GRID",(0,0),(-1,-1),0.5,W),
     ]))
@@ -1925,11 +1941,18 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ════════════════════════════════════════════════════════════════
     SEC("SECTION S — RISK ANALYSIS", story)
     H2("S1. Risk Matrix", story)
+    # BUG FIX: "Category" (e.g. "Manpower Dependency") and "Risk Description"
+    # are plain strings in narrow columns — ReportLab doesn't wrap plain
+    # strings, so long entries visibly overflowed into the next column.
+    # Wrap both in Paragraphs so they wrap within their own cell instead.
+    _risk_cell_style = _s("risk_cell", fontSize=8, alignment=TA_LEFT, fontName="Helvetica", textColor=BLK, leading=10)
     risk_rows = [["Category","Risk Description","Probability","Impact","Net Risk"]]
     _risk_matrix_display = _display_risk_matrix(_industry)
     for i,rm in enumerate(_risk_matrix_display):
-        risk_rows.append([rm["category"],rm["description"],rm["probability"],rm["impact"],rm["net_risk"]])
-    risk_t = Table(risk_rows, colWidths=[28*mm,60*mm,25*mm,22*mm,25*mm])
+        risk_rows.append([Paragraph(str(rm["category"]), _risk_cell_style),
+                           Paragraph(str(rm["description"]), _risk_cell_style),
+                           rm["probability"], rm["impact"], rm["net_risk"]])
+    risk_t = Table(risk_rows, colWidths=[32*mm,64*mm,24*mm,24*mm,26*mm])
     risk_t.setStyle(BTS())
     for i,rm in enumerate(_risk_matrix_display):
         risk_t.setStyle(RISK_COLOR(i+1, rm["net_risk"]))
@@ -1962,7 +1985,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ════════════════════════════════════════════════════════════════
     # SECTION T — PROFITABILITY INDEX (DPR Sheet 15)
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION T — PROFITABILITY INDEX (Based on Year 3)", story)
+    SEC("SECTION T — PROFITABILITY & RETURN ANALYSIS (Based on Year 3)", story)
     # BUG FIX: "Capital Employed" was Promoter Fixed Equity alone, so PAT/Capital
     # produced extreme, economically meaningless percentages (e.g. -857%) whenever
     # equity was thin relative to debt. Capital Employed (CA/ROCE convention) is
@@ -2101,17 +2124,19 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(_fdef_t)
     NL(story, 5)
     story.append(Paragraph(
-        "<b>P&L Formula Chain (CA Standard):</b> "
+        "<b>P&L Formula Chain (this report's methodology):</b> "
         "Revenue − COGS = Gross Profit → GP − Operating Expenses = EBITDA → "
         "EBITDA − Depreciation = EBIT → EBIT − Interest (TL + WC) = PBT → "
         "PBT − Tax = PAT → PAT + Depreciation − TL Principal = Net Cash Surplus",
         ST["small"]))
     NL(story, 3)
     story.append(Paragraph(
-        "<b>Initial Investment Structure (CA Standard):</b> "
+        "<b>Initial Investment Structure (this report's methodology):</b> "
         "Fixed Project Cost = Land + Building + Machinery + Other Fixed Assets. "
-        "Term Loan applied to Fixed Capital only (RBI/SIDBI norm). "
-        "Working Capital is a separate revolving facility (Tandon Committee norms). "
+        "Term Loan is applied to Fixed Capital only — consistent with common RBI/SIDBI practice, "
+        "but the sanctioning bank's own norm governs. "
+        "Working Capital is treated as a separate revolving facility — consistent with the Tandon "
+        "Committee approach, applied here in simplified form. "
         "Initial Project Investment = Fixed Cost + Promoter WC Margin (not TL-funded WC).",
         ST["small"]))
     NL(story, 3)
@@ -2139,7 +2164,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "The financial institution / bank is advised to independently verify all data, conduct its own "
         "due diligence, and apply its standard credit appraisal norms before sanctioning any loan. "
         "This is a preliminary borrower feasibility report, not a certified bank CMA. "
-        "This report is valid for 90 days from the date of preparation.",
+        f"This report is valid for {inp.get('report_validity_days', 120)} days from the date of preparation.",
         ST["normal"]))
     NL(story, int(20*mm))
     sig_t = Table([
@@ -2166,10 +2191,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ════════════════════════════════════════════════════════════════
     # SECTION U — FORM IV (COMPARATIVE STATEMENT)
     # ════════════════════════════════════════════════════════════════
-    PB(story)
-    SEC("SECTION U — FORM IV: COMPARATIVE CURRENT ASSETS & LIABILITIES", story)
+    # BUG FIX: this section used to always print its header even when there
+    # was no Form IV data to show (the live pipeline never populates
+    # dpr["form_iv"] — that's only built by a legacy pipeline whose field
+    # names don't match this one's WC schedule, so wiring it in naively would
+    # show fabricated/zeroed figures rather than real ones). A page with only
+    # a header and nothing else is worse than omitting it — never deliver a
+    # blank schedule, so skip the whole section when there is no data.
     fiv = dpr.get("form_iv", [])
     if fiv:
+        PB(story)
+        SEC("SECTION U — FORM IV: COMPARATIVE CURRENT ASSETS & LIABILITIES", story)
         fiv_rows = [
             ["Particulars", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"],
             ["A. CURRENT ASSETS", "", "", "", "", ""],

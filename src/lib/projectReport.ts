@@ -4,6 +4,11 @@ import {
   mergeProjectReportInputs,
 } from "@/types/gtab";
 import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
+import {
+  calculatePMEGPSubsidy,
+  calculatePMEGPPromoterContribution,
+  calculatePMEGPBankFinance,
+} from "@/lib/loanRulesEngine";
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(Number(value || 0), min), max);
@@ -95,9 +100,16 @@ export const getBankFinancePct = (formData: GTABFormData) => {
   return clamp(raw, band[0], band[1]);
 };
 
+// RBI/Nayak Committee simplified turnover method (mandatory for MSE borrowers
+// with turnover up to ₹5 crore — covers effectively all Mudra/PMEGP/CGTMSE/
+// small-MSME applicants here): WC requirement = 25% of turnover, of which the
+// bank finances a minimum of 20% of turnover = 80% of the assessed
+// requirement, borrower margin = the remaining 20%.
+const NAYAK_COMMITTEE_WC_BANK_FINANCE_PCT = 80;
+
 export const getWorkingCapitalBankFinancePct = (formData: GTABFormData) => {
   const merged = mergeProjectReportInputs(formData.project_report_inputs);
-  return clamp(Number(merged.dpr.wc_loan_pct || 60), 0, 100);
+  return clamp(Number(merged.dpr.wc_loan_pct || NAYAK_COMMITTEE_WC_BANK_FINANCE_PCT), 0, 100);
 };
 
 const getConfiguredPromoterEquityPct = (formData: GTABFormData) => {
@@ -112,27 +124,56 @@ export const getFinancingPlan = (formData: GTABFormData) => {
     promoterWorkingCapitalContribution,
     totalProjectCost,
   } = getProjectCostBreakdown(formData);
-  const termLoanBankFinancePct = getBankFinancePct(formData);
   const wcBankFinancePct = getWorkingCapitalBankFinancePct(formData);
   const includesTermLoan = formData.loan_purpose !== "working_capital";
   const includesWorkingCapital = formData.loan_purpose !== "term_loan";
-  // CA standard: Term Loan applies to FIXED capital only (not total project cost)
-  const termLoanAmount = includesTermLoan
-    ? Number(((fixedAssetCost * termLoanBankFinancePct) / 100).toFixed(2))
-    : 0;
+
+  const isPMEGP = formData.loan_scheme === "pmegp";
+
+  let termLoanAmount = 0;
+  let termLoanBankFinancePct = 0;
+  let promoterProjectContribution = 0;
+  let pmegpSubsidyAmount = 0;
+
+  if (isPMEGP) {
+    // PMEGP is NOT "Term Loan = X% of Fixed Capital" — it's a statutory 3-way
+    // split: Margin Money subsidy (15/25/35% by category × area, held as TDR)
+    // + Promoter's own contribution (5%/10% by category) + Bank Term Loan
+    // (the residual). See loanRulesEngine.ts calculatePMEGP* for the verified
+    // formula (matches backend/schemes/pmegp.py).
+    pmegpSubsidyAmount = includesTermLoan
+      ? calculatePMEGPSubsidy(fixedAssetCost, formData.social_category, formData.area_type || "urban")
+      : 0;
+    promoterProjectContribution = includesTermLoan
+      ? calculatePMEGPPromoterContribution(fixedAssetCost, formData.social_category)
+      : 0;
+    termLoanAmount = includesTermLoan
+      ? calculatePMEGPBankFinance(fixedAssetCost, pmegpSubsidyAmount, promoterProjectContribution)
+      : 0;
+    termLoanBankFinancePct = fixedAssetCost > 0
+      ? Number(((termLoanAmount / fixedAssetCost) * 100).toFixed(2))
+      : 0;
+  } else {
+    // CA standard for other schemes: Term Loan applies to FIXED capital only
+    // (not total project cost); Promoter fixed equity = fixed capital − term loan.
+    termLoanBankFinancePct = getBankFinancePct(formData);
+    termLoanAmount = includesTermLoan
+      ? Number(((fixedAssetCost * termLoanBankFinancePct) / 100).toFixed(2))
+      : 0;
+    promoterProjectContribution = Number(
+      Math.max(fixedAssetCost - termLoanAmount, 0).toFixed(2),
+    );
+  }
+
   const workingCapitalLoan = includesWorkingCapital
     ? Number(((monthlyWorkingCapital * wcBankFinancePct) / 100).toFixed(2))
     : 0;
-  // Promoter fixed equity = fixed capital − term loan
-  const promoterProjectContribution = Number(
-    Math.max(fixedAssetCost - termLoanAmount, 0).toFixed(2),
-  );
   const totalBankFinance = Number((termLoanAmount + workingCapitalLoan).toFixed(2));
-  // Total promoter contribution = fixed equity + WC margin
+  // Total promoter contribution = fixed equity (or PMEGP promoter %) + WC margin
   const promoterContribution = Number(
     (promoterProjectContribution + promoterWorkingCapitalContribution).toFixed(2),
   );
-  const totalFundingBase = Number((promoterContribution + totalBankFinance).toFixed(2));
+  const totalFundingBase = Number((promoterContribution + totalBankFinance + pmegpSubsidyAmount).toFixed(2));
   const promoterEquityPct = totalProjectCost
     ? Number(((promoterContribution / totalProjectCost) * 100).toFixed(2))
     : getConfiguredPromoterEquityPct(formData);
@@ -140,9 +181,10 @@ export const getFinancingPlan = (formData: GTABFormData) => {
     ? Number(((termLoanAmount / totalProjectCost) * 100).toFixed(2))
     : 0;
 
-  // Invariant: Project Cost = project Means of Finance = promoter contribution +
-  // term loan (WC bank loan is a separate revolving facility, excluded).
-  const projectMeansOfFinance = Number((promoterContribution + termLoanAmount).toFixed(2));
+  // Invariant: Project Cost = project Means of Finance = promoter contribution
+  // + term loan + PMEGP subsidy (WC bank loan is a separate revolving
+  // facility, excluded from project cost).
+  const projectMeansOfFinance = Number((promoterContribution + termLoanAmount + pmegpSubsidyAmount).toFixed(2));
   if (import.meta.env?.DEV && Math.abs(totalProjectCost - projectMeansOfFinance) > 1) {
     console.warn("[projectReport] Project cost ≠ Means of Finance", { totalProjectCost, projectMeansOfFinance });
   }
@@ -158,6 +200,7 @@ export const getFinancingPlan = (formData: GTABFormData) => {
     workingCapitalLoan,
     totalBankFinance,
     totalBankFinancePct,
+    pmegpSubsidyAmount,
     promoterProjectContribution,
     promoterWorkingCapitalContribution,
     promoterContribution,

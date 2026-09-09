@@ -348,7 +348,8 @@ export const createInitialProjectReportInputs = (): ProjectReportInputs => ({
     // Loan & financing
     term_loan_pct:              75,
     promoter_equity_pct:        25,
-    wc_loan_pct:                60,
+    // RBI/Nayak Committee turnover method floor for MSE working capital assessment
+    wc_loan_pct:                80,
     capital_subsidy_pct:        0,
     contingency_pct:            0,
     contingency_rate_pct:       0,

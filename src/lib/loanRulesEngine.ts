@@ -239,12 +239,20 @@ const LOAN_SCHEME_RULES: Record<GTABLoanScheme, {
   },
 };
 
-// PMEGP Subsidy Rules
+// PMEGP Subsidy Rules — officially called "Margin Money" in PMEGP guidelines
+// (held as TDR for 3 years), NOT to be confused with the promoter's own
+// contribution below, which is a separate, much smaller figure.
 const PMEGP_SUBSIDY_RULES = {
   general_rural: 0.25,         // 25% subsidy
   general_urban: 0.15,          // 15% subsidy
   special_rural: 0.35,           // 35% subsidy
   special_urban: 0.25,           // 25% subsidy
+};
+
+// PMEGP Promoter's Own Contribution Rules — distinct from the subsidy above.
+const PMEGP_PROMOTER_CONTRIBUTION_RULES = {
+  general: 0.10,
+  special: 0.05,   // SC/ST/OBC/Women/Minority/Ex-Serviceman/PwD
 };
 
 // PMEGP Project Cost Limits (2024)
@@ -287,25 +295,39 @@ export function calculatePMEGPSubsidy(
 }
 
 /**
- * Calculate PMEGP margin money (promoter contribution)
+ * PMEGP "Margin Money" is the official term for the government subsidy
+ * itself (held as TDR for 3 years) — it is NOT the promoter's own
+ * contribution. Kept as a thin alias so existing callers/imports still work.
  */
-export function calculatePMEGPMarginMoney(
-  projectCost: number,
-  subsidyAmount: number
-): number {
-  // Margin money = Project Cost - Subsidy
-  return projectCost - subsidyAmount;
+export function calculatePMEGPMarginMoney(subsidyAmount: number): number {
+  return subsidyAmount;
 }
 
 /**
- * Calculate PMEGP bank finance amount
+ * Calculate PMEGP promoter's own cash contribution — separate from, and much
+ * smaller than, the Margin Money subsidy above.
+ */
+export function calculatePMEGPPromoterContribution(
+  projectCost: number,
+  applicantCategory: GTABSocialCategory
+): number {
+  const isSpecial = applicantCategory !== 'general';
+  const pct = isSpecial
+    ? PMEGP_PROMOTER_CONTRIBUTION_RULES.special
+    : PMEGP_PROMOTER_CONTRIBUTION_RULES.general;
+  return Math.round(projectCost * pct);
+}
+
+/**
+ * Calculate PMEGP bank term loan — the residual after subsidy and the
+ * promoter's own contribution: Bank Loan = Project Cost − Subsidy − Promoter.
  */
 export function calculatePMEGPBankFinance(
   projectCost: number,
-  marginMoney: number
+  subsidyAmount: number,
+  promoterContribution: number
 ): number {
-  // Bank finance = Project Cost - Margin Money
-  return projectCost - marginMoney;
+  return Math.max(projectCost - subsidyAmount - promoterContribution, 0);
 }
 
 /**
@@ -347,25 +369,21 @@ export function validatePMEGPProjectCost(
 }
 
 /**
- * Validate PMEGP promoter contribution
+ * Validate PMEGP promoter's own contribution (5%/10% of project cost — NOT
+ * the Margin Money subsidy).
  */
 export function validatePMEGPPromoterContribution(
-  marginMoney: number,
+  promoterContribution: number,
   projectCost: number
 ): { isValid: boolean; requiredPct: number; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const requiredMarginMoney = marginMoney;
-  const requiredPct = (requiredMarginMoney / projectCost) * 100;
+  const requiredPct = projectCost > 0 ? (promoterContribution / projectCost) * 100 : 0;
 
-  // PMEGP requires promoter to contribute the margin money (project cost - subsidy)
-  if (requiredMarginMoney <= 0) {
-    errors.push('Invalid margin money calculation');
+  if (promoterContribution <= 0) {
+    errors.push('Invalid promoter contribution calculation');
   }
-
-  // Check if promoter contribution is sufficient
-  const minContributionPct = Math.max(5, requiredPct); // At least 5% or calculated margin
 
   if (requiredPct < 5) {
     warnings.push('Promoter contribution is less than 5% of project cost');
@@ -380,7 +398,9 @@ export function validatePMEGPPromoterContribution(
 }
 
 /**
- * Generate complete PMEGP loan breakdown
+ * Generate complete PMEGP loan breakdown — three distinct components:
+ * Margin Money (govt subsidy, 15/25/35% by category × area), the promoter's
+ * own contribution (5%/10% by category), and the bank term loan (residual).
  */
 export function generatePMEGPLoanBreakdown(
   projectCost: number,
@@ -392,6 +412,7 @@ export function generatePMEGPLoanBreakdown(
   isEligible: boolean;
   subsidyAmount: number;
   marginMoney: number;
+  promoterContribution: number;
   bankFinance: number;
   promoterContributionPct: number;
   validationErrors: string[];
@@ -406,17 +427,18 @@ export function generatePMEGPLoanBreakdown(
     validationErrors.push(...projectValidation.errors);
   }
 
-  // Calculate subsidy
+  // Margin Money = the government subsidy (official PMEGP term)
   const subsidyAmount = calculatePMEGPSubsidy(projectCost, applicantCategory, areaType);
+  const marginMoney = calculatePMEGPMarginMoney(subsidyAmount);
 
-  // Calculate margin money
-  const marginMoney = calculatePMEGPMarginMoney(projectCost, subsidyAmount);
+  // Promoter's own contribution — separate from, and much smaller than, Margin Money
+  const promoterContribution = calculatePMEGPPromoterContribution(projectCost, applicantCategory);
 
-  // Calculate bank finance
-  const bankFinance = calculatePMEGPBankFinance(projectCost, marginMoney);
+  // Bank term loan = residual after subsidy and promoter contribution
+  const bankFinance = calculatePMEGPBankFinance(projectCost, subsidyAmount, promoterContribution);
 
   // Validate promoter contribution
-  const contributionValidation = validatePMEGPPromoterContribution(marginMoney, projectCost);
+  const contributionValidation = validatePMEGPPromoterContribution(promoterContribution, projectCost);
   if (!contributionValidation.isValid) {
     validationErrors.push(...contributionValidation.errors);
   }
@@ -426,6 +448,7 @@ export function generatePMEGPLoanBreakdown(
     isEligible: validationErrors.length === 0,
     subsidyAmount,
     marginMoney,
+    promoterContribution,
     bankFinance,
     promoterContributionPct: contributionValidation.requiredPct,
     validationErrors,
@@ -749,6 +772,7 @@ export function validateSchemeEligibility(
   let subsidy_percentage: number | undefined;
   let subsidy_amount: number | undefined;
   let bank_finance_amount: number | undefined;
+  let promoter_contribution_amount: number | undefined;
 
   const rules = LOAN_SCHEME_RULES[scheme];
   if (!rules) {
@@ -828,7 +852,7 @@ export function validateSchemeEligibility(
     warnings.push(...pmegpBreakdown.validationWarnings);
 
     // Check if promoter contribution meets requirements
-    const requiredContribution = pmegpBreakdown.marginMoney;
+    const requiredContribution = pmegpBreakdown.promoterContribution;
     if (details.promoter_contribution < requiredContribution) {
       errors.push(
         `Promoter contribution must be at least ₹${requiredContribution.toLocaleString()} (${pmegpBreakdown.promoterContributionPct}% of project cost)`
@@ -839,6 +863,7 @@ export function validateSchemeEligibility(
     // Calculate subsidy based on category and location
     subsidy_percentage = 0; // Will be calculated as amount, not percentage
     subsidy_amount = pmegpBreakdown.subsidyAmount;
+    promoter_contribution_amount = pmegpBreakdown.promoterContribution;
 
     // Set bank finance amount
     bank_finance_amount = pmegpBreakdown.bankFinance;
@@ -891,8 +916,10 @@ export function validateSchemeEligibility(
     subsidy_percentage,
     subsidy_amount,
     bank_finance_amount,
-    margin_money_amount: subsidy_amount ? details.project_cost - subsidy_amount : undefined,
-    promoter_contribution_required: subsidy_amount ? details.project_cost - subsidy_amount : undefined,
+    // PMEGP official terminology: "Margin Money" is the subsidy itself, held
+    // as TDR — distinct from the promoter's own (much smaller) contribution.
+    margin_money_amount: subsidy_amount,
+    promoter_contribution_required: promoter_contribution_amount,
   };
 }
 

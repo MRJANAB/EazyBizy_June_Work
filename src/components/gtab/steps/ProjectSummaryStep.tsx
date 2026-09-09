@@ -164,7 +164,7 @@ const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
             subtitle="How this project will be funded — term loan, working capital and your own contribution"
           />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
+          <div className={`grid grid-cols-1 gap-4 md:gap-6 ${formData.loan_scheme === "pmegp" ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
             <div className="space-y-2">
               <Label>Term Loan Amount (₹)</Label>
               <Input readOnly value={formatCurrency(financingPlan.termLoanAmount)} className="h-12 rounded-xl font-semibold" />
@@ -175,6 +175,13 @@ const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
               <Input readOnly value={formatCurrency(financingPlan.workingCapitalLoan)} className="h-12 rounded-xl font-semibold" />
               <p className="text-xs text-muted-foreground">{financingPlan.wcBankFinancePct}% of monthly working capital requirement</p>
             </div>
+            {formData.loan_scheme === "pmegp" && (
+              <div className="space-y-2">
+                <Label>Government Subsidy — Margin Money (₹)</Label>
+                <Input readOnly value={formatCurrency(financingPlan.pmegpSubsidyAmount)} className="h-12 rounded-xl font-semibold" />
+                <p className="text-xs text-muted-foreground">PMEGP margin money subsidy, held as TDR for 3 years</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Promoter's Contribution (₹)</Label>
               <Input readOnly value={formatCurrency(financingPlan.promoterContribution)} className="h-12 rounded-xl font-semibold" />

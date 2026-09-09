@@ -123,10 +123,10 @@ function PMEGPCalculator() {
           <strong>Project Cost:</strong> ₹{pmegpData.projectCost.toLocaleString()}
         </div>
         <div>
-          <strong>Government Subsidy:</strong> ₹{pmegpData.subsidyAmount.toLocaleString()}
+          <strong>Margin Money (Govt. Subsidy):</strong> ₹{pmegpData.marginMoney.toLocaleString()}
         </div>
         <div>
-          <strong>Margin Money (Your Contribution):</strong> ₹{pmegpData.marginMoney.toLocaleString()}
+          <strong>Your Own Contribution:</strong> ₹{pmegpData.promoterContribution.toLocaleString()}
         </div>
         <div>
           <strong>Bank Finance:</strong> ₹{pmegpData.bankFinance.toLocaleString()}

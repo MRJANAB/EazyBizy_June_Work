@@ -385,6 +385,10 @@ async def get_scheme_rules(scheme_id: str):
         },
     }
     sid = scheme_id.lower().replace("-", "_")
+    # Same aliases the calculation engine uses (rules.normalize_scheme_id) —
+    # a bare "mudra" or the frontend's "normal_msme" must resolve to the
+    # same scheme metadata the PDF is built from, not 404.
+    sid = {"mudra": "mudra_kishor", "normal_msme": "msme_psu"}.get(sid, sid)
     if sid not in _RULES:
         raise HTTPException(404, f"Scheme '{scheme_id}' not found. Available: {list(_RULES.keys())}")
 

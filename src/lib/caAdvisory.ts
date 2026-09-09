@@ -13,6 +13,7 @@
 
 import type { GTABFormData } from "@/types/gtab";
 import { getFinancingPlan, getProjectCostBreakdown, getBankFinancePctBand } from "@/lib/projectReport";
+import { getSchemeRules } from "@/lib/schemeRulesStore";
 
 export type AdvisoryTone = "good" | "warn" | "info";
 
@@ -52,6 +53,30 @@ const PROJECT_COST_CEILING: Record<string, number> = {
 };
 const pmegpCeiling = (formData: GTABFormData) =>
   ["service", "trading"].includes(formData.industry_type) ? 1000000 : 2500000;
+
+/**
+ * Minimum promoter margin a banker expects, preferring the backend Rules &
+ * Rates engine (fetched via useSchemeRules, populated in schemeRulesStore)
+ * over the local MIN_PROMOTER_MARGIN_PCT table above.
+ *
+ * PMEGP's actual minimum is category-AND-area-specific (5% Special /
+ * 10% General) via subsidy_matrix, not a flat scorecard benchmark — using
+ * the wrong one would false-flag a Special-category applicant who
+ * correctly contributed only 5%.
+ */
+function getMinPromoterMarginPct(formData: GTABFormData): number {
+  const scheme = formData.loan_scheme;
+  if (scheme === "pmegp") {
+    const isSpecial = formData.social_category !== "general";
+    const isRural = formData.area_type === "rural";
+    const matrixKey = `${isSpecial ? "Special" : "General"}_${isRural ? "Rural" : "Urban"}` as
+      "General_Urban" | "General_Rural" | "Special_Urban" | "Special_Rural";
+    const fetched = getSchemeRules("pmegp")?.subsidy_matrix?.[matrixKey]?.promoter_pct;
+    return fetched ?? MIN_PROMOTER_MARGIN_PCT.pmegp;
+  }
+  const fetched = getSchemeRules(scheme)?.benchmarks?.promoter_pct;
+  return fetched ?? MIN_PROMOTER_MARGIN_PCT[scheme] ?? 20;
+}
 
 // ── Step 5: Capital Expenditure ──────────────────────────────────────────────
 
@@ -96,7 +121,7 @@ export function adviseProjectCostCeiling(formData: GTABFormData): Advisory | nul
 export function advisePromoterMargin(formData: GTABFormData): Advisory | null {
   const plan = getFinancingPlan(formData);
   if (plan.totalProjectCost <= 0 || plan.fixedAssetCost <= 0) return null;
-  const minPct = MIN_PROMOTER_MARGIN_PCT[formData.loan_scheme] ?? 20;
+  const minPct = getMinPromoterMarginPct(formData);
   const current = plan.promoterEquityPct;
 
   if (current >= minPct) {

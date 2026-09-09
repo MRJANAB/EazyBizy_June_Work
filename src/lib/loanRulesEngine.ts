@@ -257,6 +257,33 @@ const PMEGP_PROMOTER_CONTRIBUTION_RULES = {
 };
 
 // PMEGP Project Cost Limits (2024)
+/**
+ * Minimum promoter-contribution % a scheme expects, preferring the backend
+ * Rules & Rates engine over the local LOAN_SCHEME_RULES table — same
+ * fallback pattern as calculatePMEGPSubsidy above.
+ *
+ * PMEGP's actual minimum is category-AND-area-specific (5% Special /
+ * 10% General — see subsidy_matrix, matching calculatePMEGPPromoterContribution),
+ * not the flat scorecard benchmark used for other schemes' overall
+ * creditworthiness scoring — using the wrong one would false-flag a
+ * Special-category applicant who correctly contributed only 5%.
+ */
+function getMinPromoterContributionPct(
+  scheme: GTABLoanScheme,
+  applicantSocialCategory?: GTABSocialCategory,
+  isRural?: boolean,
+): number {
+  if (scheme === 'pmegp') {
+    const isSpecial = (applicantSocialCategory ?? 'general') !== 'general';
+    const matrixKey = `${isSpecial ? 'Special' : 'General'}_${isRural ? 'Rural' : 'Urban'}` as
+      'General_Urban' | 'General_Rural' | 'Special_Urban' | 'Special_Rural';
+    const fetched = getSchemeRules('pmegp')?.subsidy_matrix?.[matrixKey]?.promoter_pct;
+    return fetched ?? LOAN_SCHEME_RULES.pmegp.min_promoter_contribution_pct;
+  }
+  const fetched = getSchemeRules(scheme)?.benchmarks?.promoter_pct;
+  return fetched ?? LOAN_SCHEME_RULES[scheme].min_promoter_contribution_pct;
+}
+
 const PMEGP_PROJECT_LIMITS = {
   manufacturing: {
     first_loan: 5000000,    // ₹50 lakhs
@@ -816,9 +843,10 @@ export function validateSchemeEligibility(
   // Check promoter contribution
   const promoterContributionPct =
     (details.promoter_contribution / details.project_cost) * 100;
-  if (promoterContributionPct < rules.min_promoter_contribution_pct) {
+  const minPromoterPct = getMinPromoterContributionPct(scheme, applicantSocialCategory, isRural);
+  if (promoterContributionPct < minPromoterPct) {
     errors.push(
-      `Promoter contribution must be at least ${rules.min_promoter_contribution_pct}%`
+      `Promoter contribution must be at least ${minPromoterPct}%`
     );
     eligible = false;
   }

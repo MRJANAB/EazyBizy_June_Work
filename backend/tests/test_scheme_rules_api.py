@@ -70,3 +70,23 @@ class TestUnknownScheme:
     def test_404(self):
         resp = client.get("/api/v1/report/schemes/not_a_real_scheme/rules")
         assert resp.status_code == 404
+
+
+class TestSchemeIdAliases:
+    """The frontend's GTABLoanScheme type uses 'mudra' and 'normal_msme' —
+    these must resolve to the same rows the calculation engine uses
+    (rules.normalize_scheme_id), not 404."""
+
+    def test_bare_mudra_resolves_to_kishor(self):
+        resp = client.get("/api/v1/report/schemes/mudra/rules")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["scheme_id"] == "mudra_kishor"
+        assert body["rules"]["promoter_contribution_pct"] == 10.0
+
+    def test_normal_msme_resolves_to_msme_psu(self):
+        resp = client.get("/api/v1/report/schemes/normal_msme/rules")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["scheme_id"] == "msme_psu"
+        assert body["rules"]["promoter_floor_pct"] == 10.0

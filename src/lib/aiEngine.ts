@@ -10,6 +10,7 @@
 
 import type { GTABFormData } from '@/types/gtab';
 import { getFinancingPlan } from '@/lib/projectReport';
+import { getSchemeRules } from '@/lib/schemeRulesStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -82,6 +83,13 @@ const SPECIAL_CATEGORIES = ['sc', 'st', 'obc', 'minority', 'women', 'ex_servicem
 
 function pmegpSubsidyPct(category: string, area: string): number {
   const isSpecial = SPECIAL_CATEGORIES.includes(category?.toLowerCase());
+  const matrixKey = `${isSpecial ? 'Special' : 'General'}_${area === 'rural' ? 'Rural' : 'Urban'}` as
+    'General_Urban' | 'General_Rural' | 'Special_Urban' | 'Special_Rural';
+  // Prefer the backend Rules & Rates engine (fetched via useSchemeRules) —
+  // falls back to the local figures below only before the first fetch
+  // resolves, matching the same pattern used in loanRulesEngine.ts.
+  const fetched = getSchemeRules('pmegp')?.subsidy_matrix?.[matrixKey]?.subsidy_pct;
+  if (fetched != null) return fetched;
   if (area === 'rural') return isSpecial ? 35 : 25;
   return isSpecial ? 25 : 15;
 }
@@ -252,13 +260,17 @@ export function recommendScheme(formData: GTABFormData): SchemeRecommendation {
   // ── MSME PSU Bank ─────────────────────────────────────────────────────────
   const msmeOk   = loanAmount >= 100000;
   const msmeLoan = projectCost * 0.75;
+  // Prefer the backend Rules & Rates engine's scorecard benchmark — the
+  // local 1.25 fallback here matches core/engine.py's SCHEME_BENCHMARKS
+  // (this used to say 1.50, disagreeing with the backend outright).
+  const msmeMinDSCR = getSchemeRules('msme_psu')?.benchmarks?.dscr_avg ?? 1.25;
   options.push(makeScheme({
     id: 'msme_psu', name: 'MSME Bank Loan',
-    maxLoan: 50000000, subsidy: 'None', subsidyPct: 0, tlPct: 0.75, minDSCR: 1.50,
+    maxLoan: 50000000, subsidy: 'None', subsidyPct: 0, tlPct: 0.75, minDSCR: msmeMinDSCR,
     collateral: true, cmaRequired: true,
     score: msmeOk ? 65 : 30,
     pros: ['All industries', 'New & existing businesses', 'Higher loan amounts'],
-    cons: ['Collateral required', 'No subsidy', 'Stricter DSCR (≥1.50) norms'],
+    cons: ['Collateral required', 'No subsidy', `Stricter DSCR (≥${msmeMinDSCR}) norms`],
     eligible: msmeOk,
     eligibilityReason: msmeOk ? undefined : 'Minimum Rs.1L loan amount',
   }, msmeLoan, 0));

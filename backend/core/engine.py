@@ -459,9 +459,17 @@ def _tally_projected_balance_sheet(rows):
     CA rule:
       Assets = Equity + Liabilities
 
-    Cash is the balancing current asset only when funding exceeds non-cash
-    assets. If funding is short, the deficit is carried as short-term funding
-    instead of being hidden by clamping cash to zero.
+    BUG FIX: a funding shortfall used to be inserted as a fake "Short-Term
+    Funding Gap" LIABILITY — a facility that was explicitly disclosed as
+    "not arranged" in the very next sentence, which is self-contradictory:
+    an unarranged facility is not a liability. Cash is now the single
+    balancing figure and is allowed to go NEGATIVE (an overdrawn/unfunded
+    cash position) when arranged equity + liabilities fall short of the
+    assets the business needs — this is the standard way an unfunded
+    shortfall is shown on a projected balance sheet, and it never invents a
+    liability that doesn't exist. "short_term_funding"/"funding_gap" are
+    kept as informational fields (the shortfall's magnitude) but are no
+    longer added into total_liabilities.
     """
     for row in rows:
         equity     = row.get("equity",             0)
@@ -482,18 +490,16 @@ def _tally_projected_balance_sheet(rows):
         )
         cash_or_gap = R(base_equity_liabilities - non_cash_assets, 2)
 
-        if cash_or_gap >= 0:
-            cash = cash_or_gap
-            short_term_funding = 0.0
-        else:
-            cash = 0.0
-            short_term_funding = R(abs(cash_or_gap), 2)
+        # Cash is simply the balancing figure — negative means an unfunded
+        # shortfall, not a real liability to add on the other side.
+        cash = cash_or_gap
+        short_term_funding = R(abs(cash_or_gap), 2) if cash_or_gap < 0 else 0.0
 
         row["cash"] = cash
         row["short_term_funding"] = short_term_funding
         row["funding_gap"] = short_term_funding
         row["total_assets"] = R(non_cash_assets + cash, 2)
-        row["total_liabilities"] = R(base_equity_liabilities + short_term_funding, 2)
+        row["total_liabilities"] = R(base_equity_liabilities, 2)
         row["total_equity_liabilities"] = row["total_liabilities"]
         row["check"] = R(row["total_assets"] - row["total_liabilities"], 2)
     return rows

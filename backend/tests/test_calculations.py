@@ -734,6 +734,40 @@ class TestBalanceSheet:
         assert bs[0]["promoter_wc_margin"] == 929145
         assert bs[0]["check"] == 0  # still balances
 
+    def test_funding_shortfall_shows_as_negative_cash_not_a_fake_liability(self):
+        # BUG FIX: a genuine cash shortfall used to be hidden by clamping
+        # cash to zero and adding a "Short-Term Funding" LIABILITY for the
+        # difference — a facility the report itself disclosed elsewhere as
+        # "not arranged", which is self-contradictory (an unarranged
+        # facility is not a liability). Cash must now go negative instead,
+        # and total_liabilities must NOT include the shortfall at all.
+        import types
+        from calculations.balance_sheet import calculate_balance_sheet
+        scheme_data = {
+            "term_loan": 283830, "wc_loan": 398205, "promoter_amount": 189220,
+            "margin_money": 0, "project_cost": 1402195, "fixed_project_cost": 473050,
+        }
+        dep = {"gross_block": 423050, "annual_dep": 27305}
+        loan_schedule = [{"closing_balance": 283830}] * 5
+        wc_schedule = [{"total": 1327350, "bank_loan": 398205, "margin": 929145}] * 5
+        # Deep Year-1 loss with no offsetting reserves — a real, unfunded shortfall.
+        income = [{"year": 1, "depreciation": 27305, "reserves_surplus": -1614519}]
+        data = types.SimpleNamespace(project=types.SimpleNamespace(land_cost=0))
+
+        bs = calculate_balance_sheet(data, scheme_data, income, dep, loan_schedule, wc_schedule)
+        row = bs[1]  # Year 1
+        assert row["cash"] < 0, "a genuine shortfall must show as negative cash"
+        assert row["short_term_funding"] == abs(row["cash"])  # informational only
+        base_equity_liabilities = (
+            row["equity"] + row["margin_money"] + row["reserves"] + row["term_loan"]
+            + row["wc_bank"] + row["promoter_wc_margin"]
+        )
+        assert row["total_liabilities"] == round(base_equity_liabilities, 2), (
+            "total_liabilities must equal arranged equity+liabilities only — "
+            "the shortfall must NOT be added on top as a fake liability"
+        )
+        assert row["check"] == 0  # still balances, via negative cash
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8b. Cash Flow ↔ Balance Sheet reconciliation

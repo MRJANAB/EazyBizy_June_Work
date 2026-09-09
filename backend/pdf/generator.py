@@ -1131,10 +1131,6 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         ca_prev = float(yr_bs_prev.get("current_assets", 0) or 0)
         inc_ca  = R(ca_cur - ca_prev)
 
-        funding_cur  = float(yr_bs_cur.get("short_term_funding", yr_bs_cur.get("funding_gap", 0)) or 0)
-        funding_prev = float(yr_bs_prev.get("short_term_funding", yr_bs_prev.get("funding_gap", 0)) or 0)
-        inc_funding  = R(funding_cur - funding_prev)
-
         # BUG FIX: the balance sheet's promoter_wc_margin liability (the
         # promoter injecting more WC margin as WC requirement grows each
         # year) is a real cash source that this statement never accounted
@@ -1144,11 +1140,17 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         wcm_prev = float(yr_bs_prev.get("promoter_wc_margin", 0) or 0)
         inc_wc_margin = R(wcm_cur - wcm_prev)
 
-        total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_funding, 0) + max(inc_wc_margin, 0))
-        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_funding, 0) + max(-inc_wc_margin, 0))
+        # BUG FIX: an "Inc. in Short-Term Funding" source used to be added
+        # here to force this statement to reconcile with a fake balance-
+        # sheet liability. That liability no longer exists — a funding
+        # shortfall now shows up directly as negative cash — so no separate
+        # funding term is needed at all; Sources - Uses already equals the
+        # true change in cash (which can be negative) without it.
+        total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_wc_margin, 0))
+        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_wc_margin, 0))
         surplus       = R(total_sources - total_uses)
-        # Balance sheet is the source of truth for closing cash after funding
-        # gaps are converted to valid short-term borrowing.
+        # Balance sheet is the single source of truth for closing cash,
+        # which may legitimately be negative (an unfunded shortfall).
         closing_cash  = R(float(yr_bs_cur.get("cash", 0) or 0))
 
         rows.append({
@@ -1157,7 +1159,6 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
             "cash_accruals":      cash_acc,
             "inc_wc_loan":        R(inc_wc_loan),
             "inc_wc_margin":      R(inc_wc_margin),
-            "inc_short_term_funding": R(inc_funding),
             "total_sources":      total_sources,
             "inc_current_assets": R(inc_ca),
             "tl_repayment":       R(tl_principal),

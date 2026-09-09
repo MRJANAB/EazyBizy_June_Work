@@ -945,13 +945,30 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             sales_t = Table(sales_rows, colWidths=[90*mm,50*mm,30*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(len(sales_rows)-1))
         story.append(sales_t)
-        NL(story, 3)
+        NL(story, 5)
+        # BUG FIX: D1/D2 showed a single, flat "100% Capacity" revenue figure
+        # while Section J's Year 4/5 revenue exceeded it even at a LOWER
+        # stated capacity % — because 100%-capacity revenue itself grows
+        # every year (price/revenue escalation per Section F), which this
+        # page never disclosed. Derive each year's 100%-capacity-equivalent
+        # straight from Section J's own revenue/capacity (single source of
+        # truth — never a separate recompute that could drift).
         story.append(Paragraph(
-            f"<b>Note:</b> the figures above are the Year-1 baseline. From Year 2 onward, revenue grows at "
-            f"{rp2(inp.get('revenue_growth_pct', 0))} per year (Section F) on top of the capacity ramp-up — "
-            "so a later year's revenue can exceed this Year-1 100%-capacity figure even at a lower stated "
-            "capacity %. See Section J for the actual per-year revenue.",
+            "<b>Note:</b> 100%-capacity revenue is NOT constant across years — it grows with the revenue "
+            f"escalation assumption ({rp2(inp.get('revenue_growth_pct', 0))}/year, Section F), independently "
+            "of the capacity ramp-up below. This is why a later year's Projected Revenue can exceed the "
+            "Year-1 100%-capacity figure shown above even at a lower stated capacity %.",
             ST["small"]))
+        NL(story, 3)
+        _cap_rows = [["Year", "100% Capacity Revenue (Rs.)", "Capacity %", "Projected Revenue (Rs.)"]]
+        for _cy in cop:
+            _cap_pct = float(_cy.get("capacity", 0) or 0)
+            _cy_rev  = float(_cy.get("revenue", 0) or 0)
+            _cy_100  = R(_cy_rev / _cap_pct, 2) if _cap_pct else 0
+            _cap_rows.append([str(_cy.get("year", "")), r(_cy_100), rp(_cap_pct), r(_cy_rev)])
+        _cap_t = Table(_cap_rows, colWidths=[20*mm, 55*mm, 30*mm, 55*mm])
+        _cap_t.setStyle(BTS())
+        story.append(_cap_t)
         NL(story, 3)
 
         H2("D3. " + ("Service Delivery Cost Structure" if _is_service else "Purchase / Direct Cost Structure"), story)
@@ -1433,7 +1450,6 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Term Loan (Bank)"]           + [r(pb["term_loan"])             for pb in pbs],
         ["  (c) Current Liabilities","","","","","",""],
         ["  Bank Borrowings — WC (CC/OD)"]+ [r(pb["wc_bank"])             for pb in pbs],
-        ["  Additional Short-Term Funding (Unarranged)"] + [r(pb.get("short_term_funding", pb.get("funding_gap", 0))) for pb in pbs],
         ["TOTAL EQUITY & LIABILITIES"]  + [r(pb["total_liabilities"])      for pb in pbs],
         # ── ASSETS ──────────────────────────────────────────────────────────
         ["II. ASSETS","","","","","",""],
@@ -1445,7 +1461,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Other Long-Term Assets"]     + [r(pb["other_assets"])          for pb in pbs],
         ["  (b) Current Assets","","","","","",""],
         ["  Stock / Debtors / WC Assets"]+ [r(pb["current_assets"])        for pb in pbs],
-        ["  Cash & Bank Balance"]        + [r(pb["cash"])                  for pb in pbs],
+        # BUG FIX: a funding shortfall used to be hidden by clamping cash to
+        # zero and inventing an "Additional Short-Term Funding" liability
+        # that the report itself disclosed as "not arranged" — self-
+        # contradictory. Cash is now the one balancing figure and is shown
+        # negative when arranged funding falls short, so the shortfall is
+        # visible here directly instead of as a fake liability.
+        ["  Cash & Bank Balance (negative = unfunded shortfall)"] + [r(pb["cash"]) for pb in pbs],
         ["TOTAL ASSETS"]                 + [r(pb["total_assets"])          for pb in pbs],
     ]
     bs_t = Table(bs_rows, colWidths=[52*mm]+[19.7*mm]*6)
@@ -1455,6 +1477,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     total_assets_row = next((i for i, row in enumerate(bs_rows) if row[0] == "TOTAL ASSETS"), None)
     if total_liab_row:  bs_t.setStyle(TOT(total_liab_row))
     if total_assets_row: bs_t.setStyle(TOT(total_assets_row))
+    _cash_row = next((i for i, row in enumerate(bs_rows) if row[0].startswith("  Cash & Bank Balance")), None)
+    if _cash_row is not None and any(float(pb.get("cash", 0) or 0) < 0 for pb in pbs):
+        bs_t.setStyle(TableStyle([
+            ("TEXTCOLOR", (0, _cash_row), (-1, _cash_row), colors.HexColor("#B71C1C")),
+            ("FONTNAME",  (0, _cash_row), (-1, _cash_row), "Helvetica-Bold"),
+        ]))
     if _has_accumulated_losses:
         loss_row = next((i for i, row in enumerate(bs_rows) if row[0] == "  Less: Accumulated Losses"), None)
         nw_row = next((i for i, row in enumerate(bs_rows) if row[0] == "  Net Worth (Equity - Losses)"), None)
@@ -1505,11 +1533,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         NL(story, 3)
         _fg_tbl = Table(
             [[Paragraph(
-                "<b>ADDITIONAL SHORT-TERM FUNDING (UNARRANGED):</b> " + " | ".join(_funding_gap_yrs) + ". "
+                "<b>UNFUNDED CASH SHORTFALL (shown as negative Cash & Bank Balance above):</b> "
+                + " | ".join(_funding_gap_yrs) + ". "
                 "This is the cash shortfall NOT covered by the term loan, WC bank finance, or the promoter's "
-                "WC margin already factored into this report — it is not an arranged facility. Before "
-                "submission, either increase promoter funding, arrange an additional CC/OD or unsecured-loan "
-                "facility for this amount, or revise the revenue/cost assumptions driving the shortfall.",
+                "WC margin already factored into this report. It is deliberately NOT shown as a liability, "
+                "since no such facility has actually been arranged. Before submission, either increase "
+                "promoter funding, arrange an additional CC/OD or unsecured-loan facility for this amount, "
+                "or revise the revenue/cost assumptions driving the shortfall.",
                 ST["small"]
             )]],
             colWidths=[170*mm]
@@ -1533,7 +1563,6 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Cash Accruals"]           + [r(p["cash_accruals"])      for p in pcf],
         ["Inc. in Bank Borrowings"] + [r(p["inc_wc_loan"])        for p in pcf],
         ["Inc. in Promoter's WC Margin"] + [r(p.get("inc_wc_margin", 0)) for p in pcf],
-        ["Inc. in Additional Short-Term Funding (Unarranged)"] + [r(p.get("inc_short_term_funding", 0)) for p in pcf],
         ["Total Sources"]           + [r(p["total_sources"])       for p in pcf],
         ["USE OF FUNDS","","","","",""],
         ["Inc. in Current Assets"]  + [r(p["inc_current_assets"]) for p in pcf],
@@ -1542,16 +1571,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Total Uses"]             + [r(p["total_uses"])           for p in pcf],
         ["Opening Cash Balance"]    + [r(p["opening_cash"])       for p in pcf],
         ["Surplus / Deficit"]       + [r(p["surplus"])            for p in pcf],
-        ["Closing Cash Balance"]    + [r(p["closing_cash"])       for p in pcf],
+        ["Closing Cash Balance (negative = unfunded shortfall)"] + [r(p["closing_cash"]) for p in pcf],
     ], colWidths=[60*mm]+[22*mm]*5)
     cf_t.setStyle(BTS())
-    cf_t.setStyle(TOT(6)); cf_t.setStyle(TOT(11)); cf_t.setStyle(TOT(14))
+    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
     story.append(cf_t)
     NL(story, 3)
     story.append(Paragraph(
-        "<b>Note on Additional Short-Term Funding:</b> this line is the cash shortfall not covered by "
-        "the facilities already arranged (term loan, WC bank finance, promoter's WC margin) — it is "
-        "NOT an arranged borrowing. If this figure is non-zero in any year, the applicant will need to "
+        "<b>Note:</b> Closing Cash Balance is allowed to go negative when the term loan, WC bank finance, "
+        "and promoter's WC margin already factored into this report don't cover the cash requirement — "
+        "that negative figure IS the unarranged funding shortfall. It is deliberately not dressed up as a "
+        "borrowing source above. If this figure is negative in any year, the applicant will need to "
         "either arrange additional promoter funding, secure a CC/OD or unsecured-loan enhancement, or "
         "revise the underlying revenue/cost assumptions before bank submission.",
         ST["small"]))
@@ -1926,14 +1956,26 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # SECTION R — 5-YEAR PROJECTIONS (CMA)
     # ════════════════════════════════════════════════════════════════
     SEC("SECTION R — 5-YEAR PROFITABILITY PROJECTIONS (CMA)", story)
-    proj_rows = [["Year","Sales (Rs.)","Expenses (Rs.)","EBITDA (Rs.)","Dep (Rs.)","Interest (Rs.)","PAT (Rs.)","TL Service (Rs.)","Net Surplus (Rs.)","EMI Coverage"]]
+    # BUG FIX: 10 columns crammed into one portrait-width table made every
+    # header wrap awkwardly and the figures hard to read. Split into a P&L
+    # table and a debt-service table — same figures, room to read them.
+    H2("R1. Profit & Loss Summary", story)
+    proj_rows = [["Year","Sales (Rs.)","Expenses (Rs.)","EBITDA (Rs.)","Dep (Rs.)","Interest (Rs.)","PAT (Rs.)"]]
     for p in cma["projections_5yr"]:
         proj_rows.append([str(p["year"]),r(p["sales"]),r(p["expenses"]),r(p["ebitda"]),
-                           r(p["depreciation"]),r(p["interest"]),r(p["profit_after_tax"]),
-                           r(p["emi_paid"]),r(p["net_surplus"]),str(p["dscr"])])
-    proj_t = Table(proj_rows, colWidths=[10*mm,20*mm,20*mm,18*mm,16*mm,16*mm,18*mm,18*mm,20*mm,14*mm])
+                           r(p["depreciation"]),r(p["interest"]),r(p["profit_after_tax"])])
+    proj_t = Table(proj_rows, colWidths=[14*mm,30*mm,30*mm,26*mm,22*mm,24*mm,24*mm])
     proj_t.setStyle(BTS())
     story.append(proj_t)
+    NL(story, 5)
+
+    H2("R2. Term Loan Debt Service Coverage", story)
+    ds_rows = [["Year","TL Service (Rs.)","Net Surplus (Rs.)","Term Loan DSCR"]]
+    for p in cma["projections_5yr"]:
+        ds_rows.append([str(p["year"]), r(p["emi_paid"]), r(p["net_surplus"]), str(p["dscr"])])
+    ds_t = Table(ds_rows, colWidths=[25*mm,45*mm,45*mm,45*mm])
+    ds_t.setStyle(BTS())
+    story.append(ds_t)
     PB(story)
 
     # ════════════════════════════════════════════════════════════════

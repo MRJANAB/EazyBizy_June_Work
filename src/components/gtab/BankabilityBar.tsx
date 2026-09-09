@@ -18,12 +18,12 @@ const Chip = ({
   icon: typeof IndianRupee; label: string; value: string; tone?: "good" | "warn" | "bad" | "neutral";
 }) => {
   const toneCls =
-    tone === "good" ? "text-emerald-700 border-emerald-200 bg-emerald-50"
-    : tone === "warn" ? "text-amber-700 border-amber-200 bg-amber-50"
-    : tone === "bad" ? "text-red-700 border-red-200 bg-red-50"
-    : "text-slate-700 border-slate-200 bg-white";
+    tone === "good" ? "text-emerald-700 border-emerald-200/70 bg-emerald-50 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_6px_14px_-4px_rgba(16,185,129,0.25)]"
+    : tone === "warn" ? "text-amber-700 border-amber-200/70 bg-amber-50 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_6px_14px_-4px_rgba(217,119,6,0.25)]"
+    : tone === "bad" ? "text-red-700 border-red-200/70 bg-red-50 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_6px_14px_-4px_rgba(220,38,38,0.25)]"
+    : "text-slate-700 border-gray-100 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_6px_14px_-4px_rgba(15,23,42,0.10)]";
   return (
-    <div className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-3 py-2 ${toneCls}`}>
+    <div className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xl border px-3 py-2 transition-transform duration-200 hover:-translate-y-0.5 ${toneCls}`}>
       <Icon className="h-4 w-4 shrink-0 opacity-70" />
       <div className="min-w-0">
         <p className="text-[10px] font-medium uppercase tracking-wide opacity-70">{label}</p>
@@ -43,7 +43,7 @@ export default function BankabilityBar({ formData }: { formData: GTABFormData })
   const marginTone = plan.promoterEquityPct >= 15 ? "good" : plan.promoterEquityPct > 0 ? "warn" : "neutral";
 
   return (
-    <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
+    <div className="mb-4 rounded-2xl border border-gray-100 bg-slate-50/80 p-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.03),0_10px_22px_-8px_rgba(15,23,42,0.08)]">
       <div className="mb-2 flex items-center gap-2 px-1">
         <span className="h-4 w-1 rounded-full bg-[#15b8aa]" />
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">

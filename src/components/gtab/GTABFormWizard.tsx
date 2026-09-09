@@ -1366,7 +1366,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
             Step {currentStep} of {STEPS.length}
           </span>
         </div>
-        <Progress value={progress} className="mt-5 h-2 bg-[#1f2937] [&>div]:bg-[#35d4c6]" />
+        <Progress value={progress} className="mt-5 h-2 bg-[#1f2937] shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] [&>div]:bg-[#35d4c6] [&>div]:shadow-[0_0_8px_rgba(53,212,198,0.6)]" />
 
         {/* Step Indicators — click any step to jump directly */}
         <div className="gtab-step-scroll mt-6 flex snap-x gap-4 overflow-x-auto pb-3 lg:grid lg:grid-cols-9 lg:gap-2 lg:overflow-visible lg:pb-2">
@@ -1396,14 +1396,14 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
                 `}
               >
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-medium transition-all
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-medium transition-all duration-200
                     ${isActive
-                      ? "border-[#15b8aa] bg-[#15b8aa] text-white shadow-[0_0_0_3px_rgba(21,184,170,0.25)]"
+                      ? "border-[#15b8aa] bg-[#15b8aa] text-white shadow-[0_0_0_3px_rgba(21,184,170,0.25),0_6px_14px_-2px_rgba(21,184,170,0.55),0_2px_4px_rgba(15,23,42,0.15)] -translate-y-0.5"
                       : isComplete
-                        ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25"
+                        ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 shadow-[0_3px_8px_-1px_rgba(16,185,129,0.3),0_1px_2px_rgba(15,23,42,0.06)] hover:bg-emerald-500/25 hover:-translate-y-0.5"
                         : isGap
-                          ? "border-amber-400 bg-amber-50 text-amber-600 hover:bg-amber-100"
-                          : "border-gray-300 bg-white text-gray-500 hover:border-[#35d4c6] hover:text-[#15b8aa]"
+                          ? "border-amber-400 bg-amber-50 text-amber-600 shadow-[0_3px_8px_-1px_rgba(217,119,6,0.25)] hover:bg-amber-100 hover:-translate-y-0.5"
+                          : "border-gray-300 bg-white text-gray-500 shadow-[0_2px_5px_rgba(15,23,42,0.08)] hover:border-[#35d4c6] hover:text-[#15b8aa] hover:-translate-y-0.5"
                     }`}
                   title={isGap ? "Some required details are missing" : undefined}
                 >
@@ -1438,7 +1438,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3 }}
-            className="overflow-hidden rounded-[1rem] border border-gray-200 bg-gray-50 p-2 sm:rounded-[1.1rem] sm:p-6 md:p-8"
+            className="overflow-hidden rounded-[1rem] border border-gray-100 bg-white p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-8px_rgba(15,23,42,0.10)] sm:rounded-[1.1rem] sm:p-6 md:p-8"
             >
               {renderStep()}
             </motion.div>
@@ -1451,12 +1451,12 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
       </div>
 
       {/* Navigation Buttons */}
-      <div className="gtab-action-bar relative mt-4 grid grid-cols-1 gap-3 rounded-[1rem] border border-gray-200 bg-white p-3 shadow-sm sm:mt-6 sm:flex sm:flex-row sm:justify-between sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+      <div className="gtab-action-bar relative mt-4 grid grid-cols-1 gap-3 rounded-[1rem] border border-gray-100 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_24px_-6px_rgba(15,23,42,0.10)] sm:mt-6 sm:flex sm:flex-row sm:justify-between sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
         <Button
           variant="outline"
           onClick={prevStep}
           disabled={currentStep === 1}
-          className="h-12 w-full rounded-[0.9rem] border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 sm:h-11 sm:w-auto"
+          className="h-12 w-full rounded-[0.9rem] border-gray-300 text-sm font-semibold text-gray-700 shadow-[0_2px_6px_rgba(15,23,42,0.06)] transition-transform hover:-translate-y-0.5 hover:bg-gray-100 hover:shadow-[0_4px_10px_rgba(15,23,42,0.10)] sm:h-11 sm:w-auto"
         >
           <ChevronLeft className="w-4 h-4" />
           Previous
@@ -1467,7 +1467,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
             variant="outline"
             onClick={() => saveProgress(false)}
             disabled={isSaving}
-            className="h-12 rounded-[0.9rem] border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 sm:h-11"
+            className="h-12 rounded-[0.9rem] border-gray-300 text-sm font-semibold text-gray-700 shadow-[0_2px_6px_rgba(15,23,42,0.06)] transition-transform hover:-translate-y-0.5 hover:bg-gray-100 hover:shadow-[0_4px_10px_rgba(15,23,42,0.10)] sm:h-11"
           >
             <Save className="w-4 h-4" />
             {isSaving ? "Saving..." : "Save Draft"}
@@ -1476,7 +1476,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
           {currentStep < STEPS.length ? (
             <Button
               onClick={nextStep}
-              className="h-12 rounded-[0.9rem] bg-[#D4AF37] text-sm font-bold text-[#061421] shadow-[0_12px_24px_rgba(212,175,55,0.22)] hover:bg-[#f0c84b] sm:h-11"
+              className="h-12 rounded-[0.9rem] bg-[#D4AF37] text-sm font-bold text-[#061421] shadow-[0_2px_4px_rgba(15,23,42,0.15),0_14px_26px_-4px_rgba(212,175,55,0.45)] transition-transform hover:-translate-y-0.5 hover:bg-[#f0c84b] hover:shadow-[0_4px_8px_rgba(15,23,42,0.18),0_18px_32px_-4px_rgba(212,175,55,0.55)] active:translate-y-0 sm:h-11"
             >
               Next
               <ChevronRight className="w-4 h-4" />

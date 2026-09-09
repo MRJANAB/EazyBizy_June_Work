@@ -706,6 +706,100 @@ class TestBalanceSheet:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 8b. Cash Flow ↔ Balance Sheet reconciliation
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCashFlowReconciliation:
+    """
+    BUG FIX: the Cash Flow Statement (Section L) never accounted for the
+    promoter's WC margin growing year over year (a real cash source, added to
+    the balance sheet's liabilities in the fix above) — so "Surplus/Deficit"
+    fell short of the balance sheet's own Closing Cash by exactly that amount,
+    with no explanation. A cash flow statement's Sources minus Uses MUST equal
+    the change in cash for that period — always, by definition. These tests
+    pin that identity so it can never silently drift again.
+    """
+
+    def _get_bs_income_loan_wc(self, scheme_data=None):
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        from calculations.balance_sheet import calculate_balance_sheet
+        scheme_data = scheme_data or SCHEME_PMEGP
+        data = _make_data()
+        dep  = calculate_depreciation(data, scheme_data)
+        loan = calculate_loan_schedule(data, scheme_data)
+        wc   = calculate_wc_by_year(data, scheme_data)
+        income = calculate_income_statement(data, scheme_data, dep, loan, wc)
+        bs = calculate_balance_sheet(data, scheme_data, income, dep, loan, wc)
+        return bs, income, loan, wc
+
+    def test_profitable_scenario_reconciles_every_year(self):
+        from pdf.generator import _build_cash_flow
+        bs, income, loan, wc = self._get_bs_income_loan_wc()
+        cf = _build_cash_flow(income, loan, wc, bs)
+        for row in cf:
+            implied_delta = round(row["closing_cash"] - row["opening_cash"], 2)
+            assert abs(row["surplus"] - implied_delta) < 2, (
+                f"Year {row['year']}: Surplus/Deficit ({row['surplus']}) must equal "
+                f"Closing Cash - Opening Cash ({implied_delta})"
+            )
+
+    def test_loss_making_scenario_with_growing_wc_margin_reconciles(self):
+        # Pinned regression: growing promoter_wc_margin (WC requirement rising
+        # each year, per the user-reported fixture) is exactly the term the
+        # old code dropped. Deep losses (negative reserves_surplus) exercise
+        # the "Additional Short-Term Funding" path too.
+        import types
+        from calculations.balance_sheet import calculate_balance_sheet
+        from pdf.generator import _build_cash_flow
+        scheme_data = {
+            "term_loan": 283830, "wc_loan": 398205, "promoter_amount": 189220,
+            "margin_money": 0, "project_cost": 1402195, "fixed_project_cost": 473050,
+        }
+        dep = {"gross_block": 423050, "annual_dep": 27305}
+        loan_schedule = [
+            {"closing_balance": 283830, "principal_paid": 0},
+            {"closing_balance": 212873, "principal_paid": 70957},
+            {"closing_balance": 141915, "principal_paid": 70958},
+            {"closing_balance": 70958,  "principal_paid": 70957},
+            {"closing_balance": 0,      "principal_paid": 70958},
+        ]
+        wc_schedule = [
+            {"total": 1327350, "bank_loan": 398205, "margin": 929145},
+            {"total": 1491701, "bank_loan": 447510, "margin": 1044191},
+            {"total": 1659569, "bank_loan": 497871, "margin": 1161698},
+            {"total": 1772132, "bank_loan": 531640, "margin": 1240492},
+            {"total": 1888785, "bank_loan": 566636, "margin": 1322149},
+        ]
+        reserves = [-1614519, -3255957, -4878524, -6447939, -7932755]
+        cash_accruals = [-1587214, -1616113, -1599062, -1547584, -1464525]
+        depreciation  = [27305, 25325, 23505, 21831, 20291]  # real WDV schedule (declining)
+        income = [
+            {"year": i + 1, "depreciation": depreciation[i], "reserves_surplus": reserves[i],
+             "cash_accruals": cash_accruals[i], "drawings": 0}
+            for i in range(5)
+        ]
+        data = types.SimpleNamespace(project=types.SimpleNamespace(land_cost=0))
+        bs = calculate_balance_sheet(data, scheme_data, income, dep, loan_schedule, wc_schedule)
+        cf = _build_cash_flow(income, loan_schedule, wc_schedule, bs)
+        for row in cf:
+            implied_delta = round(row["closing_cash"] - row["opening_cash"], 2)
+            assert abs(row["surplus"] - implied_delta) < 2, (
+                f"Year {row['year']}: Surplus/Deficit ({row['surplus']}) must equal "
+                f"Closing Cash - Opening Cash ({implied_delta}) — "
+                f"inc_wc_margin={row.get('inc_wc_margin')}"
+            )
+            # The old bug always understated surplus by inc_wc_margin, which is
+            # non-zero here (margin genuinely grows) — assert we're not
+            # accidentally back to the broken formula.
+            if row.get("inc_wc_margin", 0):
+                broken_surplus = round(row["surplus"] - row["inc_wc_margin"], 2)
+                assert row["surplus"] != broken_surplus
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 9. Sensitivity Analysis
 # ─────────────────────────────────────────────────────────────────────────────
 

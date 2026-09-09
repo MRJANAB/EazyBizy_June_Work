@@ -474,7 +474,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Promoter Fixed Equity",  rs(display_promoter_fixed_equity),
          "Promoter WC Margin",     rs(display_promoter_wc_margin)],
         ["Total Promoter Contribution", rs(display_promoter_contribution),
-         "Promoter %",            pof(display_promoter_contribution, display_total_project_cost)],
+         "Promoter % of Initial Investment", pof(display_promoter_contribution, display_total_project_cost)],
     ], colWidths=[50*mm,35*mm,50*mm,35*mm])
     metrics.setStyle(BTS())
     story.append(metrics)
@@ -1424,7 +1424,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Term Loan (Bank)"]           + [r(pb["term_loan"])             for pb in pbs],
         ["  (c) Current Liabilities","","","","","",""],
         ["  Bank Borrowings — WC (CC/OD)"]+ [r(pb["wc_bank"])             for pb in pbs],
-        ["  Short-Term Funding Gap"]     + [r(pb.get("short_term_funding", pb.get("funding_gap", 0))) for pb in pbs],
+        ["  Additional Short-Term Funding (Unarranged)"] + [r(pb.get("short_term_funding", pb.get("funding_gap", 0))) for pb in pbs],
         ["TOTAL EQUITY & LIABILITIES"]  + [r(pb["total_liabilities"])      for pb in pbs],
         # ── ASSETS ──────────────────────────────────────────────────────────
         ["II. ASSETS","","","","","",""],
@@ -1488,6 +1488,30 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ("LEFTPADDING",   (0,0),(-1,-1), 8),
         ]))
         story.append(_cap_ero_tbl)
+    _funding_gap_yrs = [
+        f"Year {pb.get('year','?')}: Rs.{float(pb.get('short_term_funding', pb.get('funding_gap', 0)) or 0):,.0f}"
+        for pb in pbs[1:] if float(pb.get("short_term_funding", pb.get("funding_gap", 0)) or 0) > 0
+    ]
+    if _funding_gap_yrs:
+        NL(story, 3)
+        _fg_tbl = Table(
+            [[Paragraph(
+                "<b>ADDITIONAL SHORT-TERM FUNDING (UNARRANGED):</b> " + " | ".join(_funding_gap_yrs) + ". "
+                "This is the cash shortfall NOT covered by the term loan, WC bank finance, or the promoter's "
+                "WC margin already factored into this report — it is not an arranged facility. Before "
+                "submission, either increase promoter funding, arrange an additional CC/OD or unsecured-loan "
+                "facility for this amount, or revise the revenue/cost assumptions driving the shortfall.",
+                ST["small"]
+            )]],
+            colWidths=[170*mm]
+        )
+        _fg_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), RED),
+            ("TOPPADDING",    (0,0),(-1,-1), 6),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+            ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ]))
+        story.append(_fg_tbl)
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1499,7 +1523,8 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["SOURCE OF FUNDS","","","","",""],
         ["Cash Accruals"]           + [r(p["cash_accruals"])      for p in pcf],
         ["Inc. in Bank Borrowings"] + [r(p["inc_wc_loan"])        for p in pcf],
-        ["Inc. in Short-Term Funding"] + [r(p.get("inc_short_term_funding", 0)) for p in pcf],
+        ["Inc. in Promoter's WC Margin"] + [r(p.get("inc_wc_margin", 0)) for p in pcf],
+        ["Inc. in Additional Short-Term Funding (Unarranged)"] + [r(p.get("inc_short_term_funding", 0)) for p in pcf],
         ["Total Sources"]           + [r(p["total_sources"])       for p in pcf],
         ["USE OF FUNDS","","","","",""],
         ["Inc. in Current Assets"]  + [r(p["inc_current_assets"]) for p in pcf],
@@ -1511,8 +1536,16 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Closing Cash Balance"]    + [r(p["closing_cash"])       for p in pcf],
     ], colWidths=[60*mm]+[22*mm]*5)
     cf_t.setStyle(BTS())
-    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
+    cf_t.setStyle(TOT(6)); cf_t.setStyle(TOT(11)); cf_t.setStyle(TOT(14))
     story.append(cf_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Note on Additional Short-Term Funding:</b> this line is the cash shortfall not covered by "
+        "the facilities already arranged (term loan, WC bank finance, promoter's WC margin) — it is "
+        "NOT an arranged borrowing. If this figure is non-zero in any year, the applicant will need to "
+        "either arrange additional promoter funding, secure a CC/OD or unsecured-loan enhancement, or "
+        "revise the underlying revenue/cost assumptions before bank submission.",
+        ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1545,7 +1578,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ════════════════════════════════════════════════════════════════
     # SECTION N — DSCR
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION N — DEBT SERVICE COVERAGE RATIO (DSCR)", story)
+    SEC("SECTION N — TERM LOAN DEBT SERVICE COVERAGE RATIO (TERM LOAN DSCR)", story)
     dr = dscr["years"]
     dscr_t = Table([
         ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
@@ -1555,8 +1588,8 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["(B) TL Principal Repayment"]    + [r(d["tl_repayment"])   for d in dr],
         ["(B) Add: Interest on TL"]       + [r(d["tl_interest"])    for d in dr],
         ["Total (B) — Denominator"]       + [r(d["total_b"])         for d in dr],
-        ["DSCR (A ÷ B)"]                  + [str(d["dscr"])          for d in dr],
-        ["Average DSCR (5-Year)",          str(cma.get("avg_dscr", dscr["average"])),"","","",""],
+        ["Term Loan DSCR (A ÷ B)"]        + [str(d["dscr"])          for d in dr],
+        ["Average Term Loan DSCR (5-Year)", str(cma.get("avg_dscr", dscr["average"])),"","","",""],
     ], colWidths=[60*mm]+[22*mm]*5)
     dscr_t.setStyle(BTS())
     for idx in [3, 6, 7, 8]: dscr_t.setStyle(TOT(idx))
@@ -1566,8 +1599,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     avg = dscr["average"]
     status = "ABOVE" if avg >= min_req else "BELOW"
     story.append(Paragraph(
-        f"<b>Note:</b> Banks typically require a minimum DSCR of {min_req}. "
-        f"The average DSCR of {avg} is <b>{status}</b> the minimum benchmark.",
+        f"<b>Note:</b> This is the <b>Term Loan DSCR</b> — it covers only the term loan's own principal and "
+        f"interest, and deliberately excludes Working Capital interest (which is a separate revolving "
+        f"facility, serviced out of the same cash accruals but not amortised like a term loan). "
+        f"Banks typically require a minimum Term Loan DSCR of {min_req}. "
+        f"The average of {avg} is <b>{status}</b> the minimum benchmark.",
         ST["normal"]))
     PB(story)
 
@@ -1699,8 +1735,8 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     H2("Q1. Repayment Coverage & Payback", story)
     rep_t = Table([
         ["Metric","Value","Benchmark","Status"],
-        ["Year 1 DSCR",            str(cma["dscr_y1"]),       ">= 1.25", cma["dscr_label"]],
-        ["Average DSCR (5-Year)",  str(cma.get("avg_dscr_5yr", cma.get("avg_dscr", 0))),  ">= 1.25", dscr_label(cma.get("avg_dscr_5yr", cma.get("avg_dscr", 0)))],
+        ["Year 1 Term Loan DSCR",            str(cma["dscr_y1"]),       ">= 1.25", cma["dscr_label"]],
+        ["Average Term Loan DSCR (5-Year)",  str(cma.get("avg_dscr_5yr", cma.get("avg_dscr", 0))),  ">= 1.25", dscr_label(cma.get("avg_dscr_5yr", cma.get("avg_dscr", 0)))],
         ["Payback Period (months)", _fmt_payback(cma), "< 24 mo", ("Not Achievable" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else ("Good" if float(cma.get("breakeven_months",0))<24 else "Monitor"))],
         ["Margin of Safety",       rp2(cma["margin_of_safety"]),"> 0",    "Positive" if cma["margin_of_safety"]>0 else "Negative"],
     ], colWidths=[70*mm,35*mm,35*mm,30*mm])
@@ -1716,12 +1752,27 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _q2_tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
     _q2_tot_de = round((pc["term_loan"] + pc.get("wc_loan", 0)) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
     _q2_net_annual_surplus = R(cma.get("surplus_monthly", 0) * 12, 2)
+    # Item: the same word "Promoter Contribution %" was used for THREE different
+    # denominators across the report (fixed cost only / initial investment /
+    # total funding incl. WC bank finance) — label each distinctly so a banker
+    # never has to guess which base a given % is measured against.
+    _q2_fixed_project_cost   = R(pc["term_loan"] + display_promoter_fixed_equity, 2)
+    _q2_wc_requirement_total = float(wc[0].get("total", 0)) if wc else 0.0
+    _q2_total_funding_reqd   = R(_q2_fixed_project_cost + _q2_wc_requirement_total, 2)
+    _q2_promoter_share_total_funding = round(display_promoter_contribution / _q2_total_funding_reqd * 100, 1) if _q2_total_funding_reqd else 0
     ratios = Table([
         ["Ratio","Value","Benchmark","Assessment"],
         ["Current Ratio",              r2(cma["current_ratio"]),      "> 1.33", "Good" if cma["current_ratio"]>1.33 else "Monitor"],
         ["D:E (TL ÷ Promoter Fixed Equity)",          str(_q2_tl_de) + " : 1",  "< 2", "Good" if _q2_tl_de < 2 else "High"],
         ["Total Leverage ((TL+WC) ÷ Total Promoter)", str(_q2_tot_de) + " : 1", "< 3", "Good" if _q2_tot_de < 3 else "High"],
-        ["Promoter Contribution",      rp2(cma["promoter_pct"]),       "> 10%", "Good" if cma["promoter_pct"]>10 else "Low"],
+        ["Fixed Project Promoter Contribution\n(Promoter Fixed Equity ÷ Fixed Project Cost)",
+         rp2(cma["promoter_pct"]), "> 10%", "Good" if cma["promoter_pct"]>10 else "Low"],
+        ["Total Initial Investment Promoter Contribution\n(Total Promoter Contribution ÷ Initial Project Investment)",
+         pof(display_promoter_contribution, display_total_project_cost), "> 10%",
+         "Good" if display_promoter_contribution > 0.1 * display_total_project_cost else "Low"],
+        ["Total Funding Requirement Promoter Share\n(Total Promoter Contribution ÷ Fixed Cost + Total WC Requirement)",
+         rp2(_q2_promoter_share_total_funding), "> 10%",
+         "Good" if _q2_promoter_share_total_funding > 10 else "Low"],
         ["EBITDA Margin (EBITDA / Sales)",     rp2(cma["ebitda_margin_pct"]), "> 20%", "Good" if cma["ebitda_margin_pct"]>20 else "Monitor"],
         ["Net Profit Margin (PAT / Sales)",    rp2(cma["net_margin_pct"]),    "> 10%", "Good" if cma["net_margin_pct"]>10 else "Monitor"],
         ["ROI (EBITDA)",               rp2(cma["roi_ebitda_pct"]),    "> 15%",  "Good" if cma["roi_ebitda_pct"]>15 else "Monitor"],
@@ -1912,22 +1963,40 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # SECTION T — PROFITABILITY INDEX (DPR Sheet 15)
     # ════════════════════════════════════════════════════════════════
     SEC("SECTION T — PROFITABILITY INDEX (Based on Year 3)", story)
+    # BUG FIX: "Capital Employed" was Promoter Fixed Equity alone, so PAT/Capital
+    # produced extreme, economically meaningless percentages (e.g. -857%) whenever
+    # equity was thin relative to debt. Capital Employed (CA/ROCE convention) is
+    # now Promoter Equity + Term Loan — the long-term funds actually deployed —
+    # and this section reports ROCE/ROI/ROE separately with explicit definitions
+    # instead of one ambiguous "% of Capital" column.
     ref_t = Table([
-        ["Reference Sales (Rs.)","Total Investment (Rs.)","Capital Employed (Rs.)"],
-        [r(prof["sales"]), r(prof["total_investment"]), r(prof["capital_employed"])],
-    ], colWidths=[56.7*mm]*3)
+        ["Reference Sales (Rs.)","Total Project Investment (Rs.)","Promoter Equity (Rs.)","Total Debt (Rs.)","Capital Employed (Rs.)"],
+        [r(prof["sales"]), r(prof["total_investment"]), r(prof.get("promoter_equity", 0)),
+         r(prof.get("total_debt", 0)), r(prof["capital_employed"])],
+    ], colWidths=[34*mm,38*mm,34*mm,30*mm,34*mm])
     ref_t.setStyle(BTS())
     story.append(ref_t)
     NL(story, 5)
+    _t_capital_employed = max(prof["capital_employed"], 1)
+    _t_promoter_equity   = max(prof.get("promoter_equity", 0), 1)
     pi_t = Table([
-        ["Metric","Amount (Rs.)","% of Sales","% of Investment","% of Capital"],
+        ["Metric","Amount (Rs.)","% of Sales","ROCE\n(÷ Capital Employed)","ROE\n(÷ Promoter Equity)"],
         ["PBIDT", rs(prof["pbidt"]), rp2(prof["pbidt_pct_sales"]),
-         pof(prof["pbidt"],prof["total_investment"]), pof(prof["pbidt"],prof["capital_employed"])],
+         pof(prof["pbidt"], _t_capital_employed), "—"],
         ["PAT (Net Profit)", rs(prof["pat"]), rp2(prof["pat_pct_sales"]),
-         pof(prof["pat"],prof["total_investment"]), pof(prof["pat"],prof["capital_employed"])],
-    ], colWidths=[42*mm,32*mm,26*mm,38*mm,32*mm])
+         pof(prof["pat"], _t_capital_employed), pof(prof["pat"], _t_promoter_equity)],
+    ], colWidths=[38*mm,30*mm,26*mm,38*mm,38*mm])
     pi_t.setStyle(BTS())
     story.append(pi_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>ROCE</b> = PBIDT or PAT ÷ Capital Employed (Promoter Equity + Term Loan) — return on all "
+        "long-term funds deployed, before financing structure is considered. "
+        "<b>ROE</b> = PAT ÷ Promoter Equity — return to the promoter specifically; this can legitimately "
+        "run very high (or very negative) for a thinly-capitalised, highly-leveraged project, since a "
+        "small equity base amplifies both gains and losses. A large ROE magnitude is a leverage signal, "
+        "not a calculation error.",
+        ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1936,17 +2005,20 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     PB(story)
     SEC("APPENDIX — FORMULA DEFINITIONS & METHODOLOGY", story)
     story.append(Paragraph(
-        "The following formulas and conventions are used throughout this report. "
-        "All calculations follow CA / RBI / SIDBI standard norms for MSME credit appraisal.",
+        "The following formulas and conventions are used throughout this report. They are informed by "
+        "common CA / RBI / SIDBI credit-appraisal practice, but the benchmarks shown below are this "
+        "platform's configured/illustrative thresholds, not a universal regulatory requirement — the "
+        "sanctioning bank's own scheme-specific norms take precedence.",
         ST["normal"]))
     NL(story, 3)
     _fdef_rows = [
         ["Ratio / Formula", "Definition & Method", "Benchmark"],
-        ["DSCR\n(Debt Service\nCoverage Ratio)",
-         "= (PAT + Depreciation + Interest) / (Principal Repayment + Interest)\n"
-         "Measures ability to repay debt from operating cash flow.\n"
-         "CA Rule: Cash Accruals (PAT+Dep) / Total Debt Service (P+I)",
-         ">= 1.25x\n(scheme-specific)"],
+        ["DSCR\n(Term Loan Debt\nService Coverage Ratio)",
+         "= (PAT + Depreciation + Term Loan Interest) / (Term Loan Principal + Term Loan Interest)\n"
+         "Measures ability to repay the TERM LOAN from operating cash flow. Deliberately excludes\n"
+         "Working Capital interest — WC is a separate revolving facility, not amortised like a term loan.\n"
+         "CA Rule: Cash Accruals (PAT+Dep) / Term Loan Debt Service (P+I)",
+         ">= 1.25x\n(scheme-specific,\nterm-loan only)"],
         ["ROI — EBITDA\n(Return on Investment)",
          "= Annual EBITDA / Initial Project Investment × 100\n"
          "Denominator = Fixed Assets + Promoter WC Margin (CA standard investment base)\n"
@@ -1957,11 +2029,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
          "PAT = Profit After Tax (post-interest, post-depreciation, post-tax)\n"
          "Measures true net return to the project",
          "> 10%"],
-        ["Current Ratio",
+        ["Current Ratio\n(Accounting basis)",
          "= Total Current Assets / Total Current Liabilities\n"
-         "CA / Tandon Committee: WC Assets (stock + debtors) / WC Bank Borrowings (CC/OD)\n"
-         "Minimum 1.33x required for WC limits per Tandon Committee norms",
-         "> 1.33x"],
+         "This report's Current Assets/Liabilities are WC Assets (stock + debtors) and WC Bank "
+         "Borrowings (CC/OD) respectively — a simplified accounting-basis ratio, not a bank's own\n"
+         "WC assessment methodology (e.g. Tandon Committee MPBF), which each bank/scheme should\n"
+         "apply separately using its own norms and threshold.",
+         "> 1.33x\n(illustrative)"],
         ["D:E Ratio\n(Term Loan D:E)",
          "= Term Loan Amount / Promoter Fixed Equity\n"
          "Promoter Fixed Equity = Fixed Capital Cost × (1 − TL%)\n"

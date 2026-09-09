@@ -1077,7 +1077,13 @@ def _build_dpr_from_report(
             "sales": float(income[2]["revenue"] if len(income) > 2 else 0),
             # total_proj is already computed from line-item sums above (same as _total_pc in generate_pdf)
             "total_investment": total_proj,
-            "capital_employed": promoter,
+            # BUG FIX: "capital_employed" was Promoter Fixed Equity ALONE — comparing a whole
+            # year's PAT/PBIDT against only the thinnest equity slice produced extreme,
+            # economically-meaningless percentages (e.g. -857%). Capital Employed (CA/ROCE
+            # convention) = long-term funds actually deployed = Promoter Equity + Term Loan.
+            "promoter_equity":  promoter,
+            "total_debt":       tl,
+            "capital_employed": R(promoter + tl, 2),
             "pbidt": float(income[2].get("ebitda", 0) if len(income) > 2 else 0),
             "pbidt_pct_sales": R(float(income[2].get("ebitda", 0) if len(income) > 2 else 0) / max(float(income[2].get("revenue", 1) if len(income) > 2 else 1), 1) * 100),
             "pat": float(income[2].get("pat", 0) if len(income) > 2 else 0),
@@ -1129,8 +1135,17 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         funding_prev = float(yr_bs_prev.get("short_term_funding", yr_bs_prev.get("funding_gap", 0)) or 0)
         inc_funding  = R(funding_cur - funding_prev)
 
-        total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_funding, 0))
-        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_funding, 0))
+        # BUG FIX: the balance sheet's promoter_wc_margin liability (the
+        # promoter injecting more WC margin as WC requirement grows each
+        # year) is a real cash source that this statement never accounted
+        # for — leaving "Surplus/Deficit" short of the balance sheet's own
+        # Closing Cash by exactly that amount every year.
+        wcm_cur  = float(yr_bs_cur.get("promoter_wc_margin",  0) or 0)
+        wcm_prev = float(yr_bs_prev.get("promoter_wc_margin", 0) or 0)
+        inc_wc_margin = R(wcm_cur - wcm_prev)
+
+        total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_funding, 0) + max(inc_wc_margin, 0))
+        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_funding, 0) + max(-inc_wc_margin, 0))
         surplus       = R(total_sources - total_uses)
         # Balance sheet is the source of truth for closing cash after funding
         # gaps are converted to valid short-term borrowing.
@@ -1141,6 +1156,7 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
             "opening_cash":       R(closing_prev),
             "cash_accruals":      cash_acc,
             "inc_wc_loan":        R(inc_wc_loan),
+            "inc_wc_margin":      R(inc_wc_margin),
             "inc_short_term_funding": R(inc_funding),
             "total_sources":      total_sources,
             "inc_current_assets": R(inc_ca),

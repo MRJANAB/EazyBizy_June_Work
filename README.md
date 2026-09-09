@@ -1,7 +1,7 @@
 # EazyBizy — Government Loan Assistance Platform
 
-> **Version:** 3.3.0
-> **Date:** 18 July 2026
+> **Version:** 3.4.0
+> **Date:** 9 September 2026
 > **Status:** Production Ready
 
 ---
@@ -11,6 +11,81 @@
 EazyBizy is a full-stack fintech platform that helps businesses apply for government loan schemes (PMEGP, Mudra, MSME, CGTMSE). It includes a multi-step GTAB application wizard, a full Credit Analyst (CA) workstation with 16-step CMA report generation, an admin panel, an AI chatbot, and a learning module.
 
 **Stack:** React + TypeScript · Vite · Supabase · Tailwind CSS · shadcn/ui · Python FastAPI (CMA backend)
+
+---
+
+## What Changed in v3.4.0 (9 September 2026)
+
+Focus of this release: the GTAB wizard's financing numbers (subsidy %, promoter minimums, DSCR benchmarks, bank-finance %) now come from **one auto-calculating, admin-editable engine** instead of scattered hardcoded copies — plus depreciation is WDV-only and integrated into the wizard itself, a full CA-lens verification pass that caught and fixed a real reporting bug, and a UI pass on the wizard shell.
+
+### Depreciation: WDV-only, built into the wizard (no separate app)
+
+- Removed the standalone `/depreciation` module entirely (it was built, then deliberately reversed in favour of this).
+- Added **Step 9 — Depreciation Schedule**: a read-only, auto-calculated 5-year WDV (Written Down Value / reducing-balance) schedule, computed from what you already entered in Capital Expenditure (Step 4) and the depreciation rates in Financial Projections (Step 8). No new inputs, no SLM anywhere in the app.
+- `backend/calculations/depreciation.py` was rewritten from flat straight-line to genuine reducing-balance WDV — depreciation now correctly declines every year instead of repeating the same figure five times. This feeds the P&L, Balance Sheet, and the PDF's depreciation schedule identically.
+- The wizard is now **10 steps**: KYC & Business Details → Loan & Scheme → Business Profile → Capital Expenditure → Means of Finance → Operating Expenses → Working Capital → Financial Projections → **Depreciation Schedule** → Final Review.
+
+### Loan Scheme Rules & Rates Master — single source of truth
+
+Previously, numbers like PMEGP's margin-money subsidy tiers, promoter-contribution minimums, DSCR benchmarks, and default term-loan/working-capital bank-finance % were hardcoded independently in 4–7 different files across the frontend and backend — and some of them quietly disagreed with each other (e.g. MSME's required promoter margin was 15% in one file, 25% in another; MSME PSU's DSCR benchmark was 1.50 in one file, 1.25 in another). All of that is now resolved from one place:
+
+- **New table:** `loan_scheme_rules` (Supabase) — `scheme_id`, `bank_name` (nullable — future per-bank overrides), `rule_key`, a flexible JSON `value`, `effective_date`, `source_reference`, `active`. Publicly readable, admin-only write.
+- **New backend package:** `backend/rules/` — a small engine with typed getters (`get_dscr_benchmark`, `get_margin_money_subsidy_pct`, `get_promoter_contribution_pct`, `get_term_loan_pct_default`, `get_wc_loan_pct_default`, `get_interest_rate_pct_default`, `get_moratorium_months_default`, `get_promoter_floor_pct`). Every `schemes/*.py` calculator and the DSCR/scorecard logic now reads from here instead of a local constant. Falls back to an identical offline seed if the database isn't reachable — never invents a number.
+- **New endpoint:** `GET /api/v1/report/schemes/{scheme_id}/rules` — now fully engine-sourced (it already partially used the engine before; the last hardcoded piece, PMEGP's subsidy matrix, was moved over too). Also fixed a bug where a bare `"mudra"` or the frontend's `"normal_msme"` scheme id 404'd instead of resolving to the right scheme.
+- **Frontend wiring:** `src/lib/schemeRulesStore.ts` + `src/hooks/useSchemeRules.ts` fetch the resolved rules once per scheme selection and make them available to the existing calculation functions (`loanRulesEngine.ts`, `projectReport.ts`, `caAdvisory.ts`, `aiEngine.ts`, `caGuidance.ts`) — they prefer the fetched value and fall back to their old local constant only before the first fetch resolves.
+- **New admin UI:** `/admin` → **Loan Scheme Rules** tab. Every rule is listed with an edit dialog (JSON value, source/reference, notes, active toggle) — no more needing the Supabase SQL Editor for a routine rate change. See "How to edit a rate" below.
+
+### Bugs found and fixed during a full CA-lens verification pass
+
+A complete PMEGP application was run end-to-end through the real pipeline (Means of Finance → Depreciation → Loan Schedule → Working Capital → P&L → DSCR → Balance Sheet → PDF), checking every number by hand, both for a thin-margin project (should reject) and a healthy one (should approve). This caught:
+
+| Bug | Was | Now |
+|---|---|---|
+| **False "MoF must reconcile" error on nearly every report** | The V1 validator compared Means of Finance against `project_cost` (which deliberately includes the promoter's working-capital margin), while MoF itself never includes that margin — so it was off by exactly that amount on any application with a working-capital requirement, i.e. almost all of them. Shown directly to the user as a validation warning on an otherwise healthy report. | Compares against `fixed_project_cost`, the number MoF actually reconciles to. |
+| **DSCR scoring ignored scheme-specific benchmarks** | `validateSchemeEligibility`, `validateFinancialRatios`, and `generateBankScore` all checked every scheme against a flat 1.25 DSCR / 1.33 current-ratio threshold — even though Mudra Shishu/Kishor's real requirement is only 1.10 / 1.20. A Shishu borrower clearing their own bar could still be warned and scored down. | All four now resolve the scheme's real benchmark from the Rules engine before scoring. |
+| **Stale/misleading validator + advisory text** | A DSCR-failure message blamed an already-fixed bug ("RM calculated from grossMarginPct"); on-screen CA guidance (Step 6 and Step 9 tips) claimed Mudra Tarun/CGTMSE need 1.5x DSCR and MSME needs 1.33x, when the actual seeded value for all of them is 1.25. | Messages give real, actionable guidance and pull the live benchmark instead of a hardcoded number. |
+
+### "Nothing capped" pass
+
+Went through all 10 steps checking for any rate that legitimately varies bank-to-bank or scheme-to-scheme but was silently force-capped into a narrow band:
+
+- **Loan Tenure and Moratorium** (Step 8) were `<Select>` dropdowns limited to a fixed preset list with no way to enter anything else — now free-entry number fields with the presets as one-click shortcuts.
+- **State Capital Subsidy %** (Step 8, MSME) was capped at 35% — loosened, since some state schemes exceed that for special categories.
+- **Step 5 — Means of Finance**: Term Loan Amount, WC Loan Amount, and Promoter's Contribution were read-only display fields; the underlying % could only be changed several steps later on Step 8. Both are now directly editable right on Step 5 (writing to the same underlying field Step 8 uses), except Term Loan % for PMEGP/Mudra/CGTMSE, which the backend computes by a fixed scheme formula regardless of input — that now shows a clear "fixed by scheme rules" note instead of a misleading editable field.
+
+### UI pass on the wizard shell
+
+- Soft "elevated card" shadows (Material-style depth) on the step indicator circles, the bankability chips (Project Cost / Bank Finance / Promoter Share / Est. DSCR), the step-content card, the bottom nav bar, and the progress bar — was flat white-on-white before.
+- The header panel (step title, "Step X of Y", progress bar, stepper) now sits on its own visibly raised panel instead of blending into the page.
+- Step 3 (Business Profile) had five full-width textareas stacked in a single column with no grid — rebalanced into a hero field plus two 2-column pairs, using the modal's actual width instead of one narrow center column.
+- Fixed the step indicator wrapping onto two rows: the desktop grid was still hardcoded to 9 columns from before Step 9 (Depreciation Schedule) existed, so the 10th step ("Final Review") had nowhere to go but a new row.
+
+### ⚠️ Migrations to apply (Supabase → SQL Editor)
+
+- `supabase/migrations/20260909173000_depreciation_wdv_system.sql` — asset/rules tables for the original standalone depreciation app. **Superseded** — the app no longer uses these tables (Step 9's WDV schedule is computed inline from wizard data), but the migration is harmless to leave in place if already applied.
+- `supabase/migrations/20260909190000_loan_scheme_rules_master.sql` — creates `loan_scheme_rules` and seeds it with the values already in production use. **Required** for the Rules Master to read live instead of falling back to its offline seed (same values either way, but only the live table is admin-editable).
+
+Also required on the **Render** backend service: environment variables `SUPABASE_URL` and `SUPABASE_ANON_KEY` (same values the frontend's `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` already use) — see `render.yaml`.
+
+---
+
+## How to use the new features
+
+**Become an admin** (one-time, needed for the Rules Admin UI below): the signup flow never grants the `admin` role automatically. In Supabase → SQL Editor:
+
+```sql
+INSERT INTO public.user_roles (user_id, role)
+SELECT id, 'admin' FROM auth.users WHERE email = 'your-login-email@example.com'
+ON CONFLICT (user_id, role) DO NOTHING;
+```
+
+Then log in (or refresh) and open `/admin`.
+
+**Edit a rate** (subsidy %, DSCR benchmark, term-loan/WC-loan default, etc.): `/admin` → **Loan Scheme Rules** tab → click the pencil icon on any row → edit the JSON value (and source/reference if it changed) → Save. Takes effect for new report requests within a few minutes (the backend caches rules for 5 minutes to avoid a database round-trip on every PDF).
+
+**Use the Depreciation Schedule step**: nothing to do — fill in Capital Expenditure (Step 4) and, if you want non-default rates, the depreciation % fields in Financial Projections (Step 8). Step 9 shows the resulting 5-year WDV schedule automatically, and it's exactly what the generated PDF will show.
+
+**Adjust Bank Finance % without hunting for it**: on Step 5 (Means of Finance), type directly into the "% of Fixed Capital" / "% of monthly working capital" fields under Term Loan and WC Loan — no need to jump to Step 8 first.
 
 ---
 
@@ -206,8 +281,9 @@ EazyBizy/
 │   │                        #           breakeven, sensitivity, historical
 │   │                        #   report: report_sections.py (single source) → excel_report / pdf_report / csv_report
 │   ├── pdf/                 # Legacy PDF builder (superseded by cma/pdf_report.py)
-│   ├── calculations/        # Income statement, DSCR, loan schedule, depreciation, working capital
+│   ├── calculations/        # Income statement, DSCR, loan schedule, depreciation (WDV), working capital, validator
 │   ├── schemes/             # PMEGP, Mudra, MSME, CGTMSE scheme logic and router
+│   ├── rules/               # Rules & Rates engine — single source of truth for scheme financing %, DSCR benchmarks
 │   └── models/              # Pydantic input schema
 ├── supabase/
 │   ├── functions/           # Edge functions (generate-cma-report, process-loan, format-report)
@@ -244,6 +320,7 @@ EazyBizy/
 
 | Version | Date | Summary |
 |---------|------|---------|
+| 3.4.0 | 9 September 2026 | WDV-only depreciation integrated into the wizard as auto-calculated Step 9 (standalone `/depreciation` app removed); Loan Scheme Rules & Rates Master — one admin-editable engine (`backend/rules/`, `loan_scheme_rules` table, `/admin` Rules UI) replacing scattered/disagreeing hardcoded scheme constants; fixed a false-positive validator error that flagged nearly every generated report, plus DSCR scoring that ignored scheme-specific benchmarks; removed narrow caps on Tenure/Moratorium/State Subsidy %; Step 5 Means of Finance % now directly editable; wizard shell UI pass (elevation, header panel, Step 3 layout, 10-step grid fix) |
 | 3.3.0 | 18 July 2026 | Bankable CMA engine (20-section RBI/Tandon/Nayak report from a single shared source → identical PDF/Excel/CSV); banker-grade refinements (CPTL in current ratio + Form III/IV, inventory@COGS, Sec-35D preliminary write-off); public Live Demo with 6 approved per-scheme samples (watermarked PDF, admin-locked Excel/CSV); RLS delete + update policies; auth-deadlock spinner fix; download cache-bust; removed GTAB "Rajesh" demo seeding |
 | 3.2.0 | 29 May 2026 | CA workstation 16-step expansion, break-even/sensitivity/scorecard/collateral, security fixes (path traversal, error leakage), backend bug fixes (mpbf KeyError, sales KeyError, Pydantic 422 block), Supabase migration for CA columns |
 | 3.1.0 | 24 May 2026 | AI engine, CMA advisory panel, backend calculation overhaul, schemes API, GTAB WC step expansion |

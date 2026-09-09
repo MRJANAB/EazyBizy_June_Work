@@ -203,6 +203,37 @@ class TestDepreciation:
             assert row["building_closing_wdv"] >= 0
             assert row["machinery_closing_wdv"] >= 0
 
+    def test_wdv_5year_schedule_pinned_fixture_matches_frontend(self):
+        """Pins the EXACT same fixture as src/lib/wdvDepreciation.test.ts's
+        rounding-regression test, so backend and frontend can never silently
+        drift apart again. Building=600000, machinery=1,200,000+80,000
+        installation, fixtures=125,000, contingency=5%, rates 10%/5%."""
+        from calculations.depreciation import calculate_depreciation
+        data = _make_data(project=types.SimpleNamespace(
+            building_cost=600000, land_cost=0, preliminary_expenses=0,
+            tools_installation=80000,
+            machinery_items=[
+                types.SimpleNamespace(quantity=1, unit_price=900000),
+                types.SimpleNamespace(quantity=1, unit_price=300000),
+            ],
+            computers_cost=30000, furniture_cost=20000, electrification_cost=50000,
+            racks_storage_cost=25000, transportation_cost=0,
+        ), assumptions=_make_assumptions(contingency_pct=5, depreciation_pct=10, building_dep_rate_pct=5))
+        dep = calculate_depreciation(data, SCHEME_PMEGP)
+        assert dep["gross_block"] == 2069000
+        expected = [
+            {"bld": 30000, "mach": 146900, "closing": 1892100},
+            {"bld": 28500, "mach": 132210, "closing": 1731390},
+            {"bld": 27075, "mach": 118989, "closing": 1585326},
+            {"bld": 25721, "mach": 107090, "closing": 1452515},
+            {"bld": 24435, "mach": 96381,  "closing": 1331699},
+        ]
+        for i, exp in enumerate(expected):
+            row = dep["schedule"][i]
+            assert row["building_depreciation"] == exp["bld"], f"Year {i+1} building dep"
+            assert row["machinery_depreciation"] == exp["mach"], f"Year {i+1} machinery dep"
+            assert row["closing_wdv"] == exp["closing"], f"Year {i+1} closing WDV"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Working Capital

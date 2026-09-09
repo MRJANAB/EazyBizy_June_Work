@@ -66,6 +66,50 @@ describe("buildWdvDepreciationSchedule", () => {
     expect(year1.machineryDepreciation).toBeCloseTo((546_000 + 80_000) * 0.10, 2);
   });
 
+  it(
+    "rounds to whole rupees at EVERY step, matching backend/core/engine.py's " +
+      "R(val, decimals=0) exactly -- 2-decimal rounding here would compound a " +
+      "real divergence by Year 4/5 since each year's opening is the previous " +
+      "year's rounded closing (regression: confirmed via a side-by-side " +
+      "Python/Node run with building=600000, machinery=1200000+80000 " +
+      "installation, fixtures=125000, contingency=5%, rates 10%/5%)",
+    () => {
+      const dep = buildWdvDepreciationSchedule(
+        makeFormData({
+          shed_building_cost: 600_000,
+          plant_machinery: [
+            { id: "1", machine_name: "Flour Mill", cost: 900_000, quantity: 1, unit_cost: 900_000, supplier_name: "", supplier_phone: "", supplier_email: "" },
+            { id: "2", machine_name: "Packaging", cost: 300_000, quantity: 1, unit_cost: 300_000, supplier_name: "", supplier_phone: "", supplier_email: "" },
+          ],
+          machinery_installation_cost: 80_000,
+          computers_cost: 30_000,
+          furniture_cost: 20_000,
+          electrification_cost: 50_000,
+          racks_storage_cost: 25_000,
+          transportation_cost: 0,
+          project_report_inputs: {
+            ...INITIAL_FORM_DATA.project_report_inputs,
+            dpr: { ...INITIAL_FORM_DATA.project_report_inputs.dpr, contingency_pct: 5, building_dep_rate_pct: 5 },
+            revenue: { ...INITIAL_FORM_DATA.project_report_inputs.revenue, depreciation_pct: 10 },
+          },
+        }),
+      );
+      expect(dep.grossBlock).toBe(2_069_000);
+      const expected = [
+        { bldDep: 30000, machDep: 146900, closing: 1892100 },
+        { bldDep: 28500, machDep: 132210, closing: 1731390 },
+        { bldDep: 27075, machDep: 118989, closing: 1585326 },
+        { bldDep: 25721, machDep: 107090, closing: 1452515 },
+        { bldDep: 24435, machDep: 96381,  closing: 1331699 },
+      ];
+      expected.forEach((exp, i) => {
+        expect(dep.schedule[i].buildingDepreciation).toBe(exp.bldDep);
+        expect(dep.schedule[i].machineryDepreciation).toBe(exp.machDep);
+        expect(dep.schedule[i].closingWdv).toBe(exp.closing);
+      });
+    },
+  );
+
   it("returns an all-zero schedule when no capex has been entered", () => {
     const dep = buildWdvDepreciationSchedule(
       makeFormData({

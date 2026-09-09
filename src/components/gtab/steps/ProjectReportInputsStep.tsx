@@ -828,6 +828,32 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                     </p>
                   </div>
 
+                  {/* WIP Days — manufacturing only (backend zeroes this for trading/service/agriculture) */}
+                  <div className="space-y-2">
+                    <Label>Work-in-Progress (WIP) Days</Label>
+                    <Input type="number" className="h-11 rounded-xl"
+                      value={report.dpr.wip_days ?? 15} min={0} max={90}
+                      onChange={(e) => updateSection("dpr", { wip_days: Math.max(Number(e.target.value) || 0, 0) })} />
+                    <p className="text-xs text-muted-foreground">
+                      {isTrading || isService || isAgriculture
+                        ? "Only applies to manufacturing — ignored for your industry."
+                        : "Days of part-finished goods on the shop floor. Standard: 15 days."}
+                    </p>
+                  </div>
+
+                  {/* Finished Goods Days — manufacturing/trading/agriculture (backend zeroes this for service) */}
+                  <div className="space-y-2">
+                    <Label>Finished Goods (FG) Holding Days</Label>
+                    <Input type="number" className="h-11 rounded-xl"
+                      value={report.dpr.fg_days ?? 30} min={0} max={90}
+                      onChange={(e) => updateSection("dpr", { fg_days: Math.max(Number(e.target.value) || 0, 0) })} />
+                    <p className="text-xs text-muted-foreground">
+                      {isService
+                        ? "Only applies where you hold physical stock — ignored for services."
+                        : "Days finished goods sit in inventory before sale. Standard: 30 days."}
+                    </p>
+                  </div>
+
                   {/* Minimum Cash Balance */}
                   <div className="space-y-2">
                     <Label>Minimum Cash Balance (₹)</Label>

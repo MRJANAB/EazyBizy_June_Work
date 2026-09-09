@@ -41,7 +41,7 @@ const STEPS = [
   { id: 5, title: "Means of Finance", icon: "📊" },
   { id: 6, title: "Operating Expenses", icon: "💰" },
   { id: 7, title: "Working Capital", icon: "🎯" },
-  { id: 8, title: "Promoter Net Worth", icon: "🧾" },
+  { id: 8, title: "Financial Projections", icon: "🧾" },
   { id: 9, title: "Final Review", icon: "👁️" },
 ];
 

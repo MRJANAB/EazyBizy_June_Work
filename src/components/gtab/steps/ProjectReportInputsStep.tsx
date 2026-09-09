@@ -13,10 +13,9 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Briefcase, Building2, Boxes, CheckCircle2, CircleHelp, Factory, Landmark, Lightbulb, Plus, ShieldCheck, Store, Trash2, UserRound, Users, Wallet } from "lucide-react";
+import { AlertTriangle, Boxes, CheckCircle2, CircleHelp, Factory, Landmark, Lightbulb, Plus, Store, Trash2, Wallet } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import AIAssistBadge from "@/components/AIAssistPanel";
-import { GTABFormData, NATURE_OF_BUSINESS_OPTIONS, PRODUCT_SUGGESTIONS, ProjectReportCompetitor, ProjectReportInputs, ProjectReportProductCategory } from "@/types/gtab";
+import { GTABFormData, PRODUCT_SUGGESTIONS, ProjectReportInputs, ProjectReportProductCategory } from "@/types/gtab";
 import { getFinancingPlan, getBankFinancePctBand } from "@/lib/projectReport";
 import { CASuggestionTip } from "@/components/gtab/CASuggestionTip";
 import { advisePromoterMargin } from "@/lib/caAdvisory";
@@ -25,18 +24,7 @@ import { getStep9Tips } from "@/lib/caGuidance";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Resolve internal enum value → human-readable label for display. */
-function resolveNatureLabel(industryType: string, value: string): string {
-  if (!value) return "";
-  const key = (industryType || "manufacturing") as keyof typeof NATURE_OF_BUSINESS_OPTIONS;
-  const opts = NATURE_OF_BUSINESS_OPTIONS[key] ?? NATURE_OF_BUSINESS_OPTIONS["manufacturing"];
-  return opts.find((o) => o.value === value)?.label ?? value.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-
-/** Capitalize first letter of each word (for registration_type enum). */
-const titleCase = (s: string) => (s || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-
-/** CA Readiness Score — shows how complete Step 9 is for loan approval. */
+/** CA Readiness Score — shows how complete this step is for loan approval. */
 const CAReadiness = ({ formData, report, isTrading, isService, isAgriculture }: any) => {
   const checks = [
     { label: "Promoter PAN Number",       ok: !!report.promoter.pan_number, required: true },
@@ -53,8 +41,6 @@ const CAReadiness = ({ formData, report, isTrading, isService, isAgriculture }: 
     { label: "Interest Rate & Tenure Set",  ok: !!(report.loan.interest_rate_pct > 0 && report.loan.tenure_months > 0), required: true },
     { label: "Tax Rate (CA mandatory 25%)", ok: report.revenue.tax_rate_pct >= 25, required: true },
     { label: "Market Size / Growth Filled", ok: !!(report.business.market_size_crores > 0 || report.business.market_growth_pct > 0), required: false },
-    { label: "Promoter Net Worth Filled",   ok: report.promoter_assets.residential_property > 0 || report.promoter_assets.fixed_deposits > 0, required: false },
-    { label: "Competitor(s) Added",         ok: report.competitors.length > 0, required: false },
     { label: "Salary Hike Assumption Set",  ok: !!(report.dpr as any).salary_increase_pct || true, required: false },
   ];
   const required = checks.filter(c => c.required);
@@ -329,33 +315,6 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
     });
   };
 
-  const addCompetitor = (): string => {
-    const newId = typeof crypto !== 'undefined' && crypto.randomUUID 
-      ? crypto.randomUUID() 
-      : Math.random().toString(36).substring(2, 15);
-    updateReport({
-      competitors: [
-        ...report.competitors,
-        { id: newId, name: "", type: "Organized", distance: "", strengths: "", weaknesses: "" },
-      ],
-    });
-    return newId;
-  };
-
-  const updateCompetitor = (id: string, updates: Partial<ProjectReportCompetitor>) => {
-    updateReport({
-      competitors: report.competitors.map((item) =>
-        item.id === id ? { ...item, ...updates } : item
-      ),
-    });
-  };
-
-  const removeCompetitor = (id: string) => {
-    updateReport({
-      competitors: report.competitors.filter((item) => item.id !== id),
-    });
-  };
-
   // ── Industry-specific capacity defaults (no hardcodes) ─────────────────────
   const isServiceOrTrading = isService || isTrading;
   const capacityDefaults: Record<number, number> = isServiceOrTrading
@@ -380,8 +339,8 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
         <CardContent className="space-y-5 p-4 sm:space-y-7 sm:p-8">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <SectionTitle
-              icon={Briefcase}
-              title="Promoter Net Worth & Projections (Step 9 of 10)"
+              icon={Landmark}
+              title="Loan Structure & Financial Projections"
               subtitle="Fill all sections below. The CA engine uses this data to generate DSCR, Break-Even, Sensitivity and 5-year projections."
             />
             <Badge variant="secondary" className="rounded-full px-3 py-1 bg-primary/10 text-primary border-primary/20">
@@ -389,139 +348,9 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             </Badge>
           </div>
 
-          {/* Promoter Profile */}
-          <SectionTitle
-            icon={UserRound}
-            title="1. Promoter Profile"
-            subtitle="Identity and experience details. Banks verify PAN. These appear in the report cover page."
-          />
-
-          <CATip tips={[
-            "Name, DOB, PAN and Years of Experience were captured in Step 1 (KYC) — they flow into this report automatically. No need to re-enter.",
-            "Previous employment shows income history — leave blank if self-employed/homemaker.",
-          ]} />
-
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-            Identity & KYC — {report.promoter.fathers_name ? `${report.promoter.fathers_name}, ` : ""}
-            {report.promoter.date_of_birth ? `DOB ${report.promoter.date_of_birth}, ` : ""}
-            {report.promoter.pan_number ? `PAN ${report.promoter.pan_number}, ` : ""}
-            {Number(report.promoter.years_experience || formData.years_experience || 0) > 0
-              ? `${report.promoter.years_experience || formData.years_experience} yrs experience`
-              : "experience not set"}
-            {" — "}edit in Step 1 if needed.
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
-            <div className="space-y-2">
-              <Label>Previous Employer</Label>
-              <Input className="h-11 rounded-xl" value={report.promoter.previous_employer} onChange={(e) => updateSection("promoter", { previous_employer: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Previous Role</Label>
-              <Input className="h-11 rounded-xl" value={report.promoter.previous_role} onChange={(e) => updateSection("promoter", { previous_role: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Employment From</Label>
-              <DatePicker className="h-11 rounded-xl" value={report.promoter.employment_from} onChange={(v) => updateSection("promoter", { employment_from: v })} placeholder="Start date" toYear={new Date().getFullYear()} disableFuture />
-            </div>
-            <div className="space-y-2">
-              <Label>Employment To</Label>
-              <DatePicker className="h-11 rounded-xl" value={report.promoter.employment_to} onChange={(v) => updateSection("promoter", { employment_to: v })} placeholder="End date" toYear={new Date().getFullYear()} disableFuture />
-            </div>
-          </div>
-
-          <div className="border-t" />
-
-          <div className="border-t" />
-
-          <SectionTitle
-            icon={Building2}
-            title={isTrading ? "2. Trading Business Details" : isService ? "2. Service Business Profile" : "2. Business Details"}
-            subtitle="Business registration details as they will appear in the CMA report cover page."
-          />
-
-          <CATip tips={[
-            "Commencement Date = when the business actually started / will start. For new businesses: proposed start date.",
-            "GST registration strengthens credibility with banks. Apply on GST portal if not registered.",
-            "MSME / UDYAM registration is FREE online and mandatory to claim PMEGP/Mudra benefits.",
-            "Market Size shows the opportunity. Banks want to see your business is in a growing market.",
-          ]} />
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
-            {(isTrading || isService) && (
-              <>
-                <div className="space-y-2">
-                  <Label>Business / Shop Name</Label>
-                  <Input className="h-11 rounded-xl"
-                    value={report.business.business_name || formData.business_entity_name}
-                    onChange={(e) => updateSection("business", { business_name: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{isService ? "Type of Service" : "Type of Trading Business"}</Label>
-                  <Input
-                    className="h-11 rounded-xl"
-                    value={
-                      report.business.nature_of_business ||
-                      resolveNatureLabel(formData.industry_type, formData.type_of_business)
-                    }
-                    onChange={(e) => updateSection("business", { nature_of_business: e.target.value })}
-                    placeholder={isService ? "e.g. Beauty Salon, IT Services, Repairs" : "e.g. Stationery / Books / Gifts"}
-                  />
-                  {!report.business.nature_of_business && formData.type_of_business && (
-                    <p className="text-xs text-emerald-600">
-                      Auto-filled: "{resolveNatureLabel(formData.industry_type, formData.type_of_business)}"
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Business Constitution</Label>
-                  <Input className="h-11 rounded-xl"
-                    value={report.business.business_type || titleCase(formData.registration_type)}
-                    onChange={(e) => updateSection("business", { business_type: e.target.value })}
-                    placeholder="Proprietorship / Partnership / Pvt Ltd" />
-                  {!report.business.business_type && formData.registration_type && (
-                    <p className="text-xs text-emerald-600">Auto-filled: "{titleCase(formData.registration_type)}"</p>
-                  )}
-                </div>
-              </>
-            )}
-            <div className="space-y-2">
-              <Label>Commencement Date</Label>
-              <DatePicker className="h-11 rounded-xl" value={report.business.commencement_date} onChange={(v) => updateSection("business", { commencement_date: v })} placeholder="Business start date" />
-            </div>
-            <div className="space-y-2">
-              <Label>GST Number</Label>
-              <Input className="h-11 rounded-xl uppercase" value={report.business.gst_number} onChange={(e) => updateSection("business", { gst_number: e.target.value.toUpperCase() })} />
-            </div>
-            <div className="space-y-2">
-              <Label>MSME / UDYAM Number</Label>
-              <Input className="h-11 rounded-xl" value={report.business.msme_number} onChange={(e) => updateSection("business", { msme_number: e.target.value })} />
-            </div>
-            <NumberField label="Market Size (Crores)" value={report.business.market_size_crores} onChange={(value) => updateSection("business", { market_size_crores: value })} />
-            <NumberField label="Market Growth %" value={report.business.market_growth_pct} onChange={(value) => updateSection("business", { market_growth_pct: value })} />
-            <div className="space-y-2 md:col-span-3">
-              <Label>Target Areas</Label>
-              <Input
-                className="h-11 rounded-xl"
-                value={report.business.target_areas.join(", ")}
-                onChange={(e) =>
-                  updateSection("business", {
-                    target_areas: e.target.value
-                      .split(",")
-                      .map((item) => item.trim())
-                      .filter(Boolean),
-                  })
-                }
-                placeholder="Andheri, Borivali, Thane"
-              />
-            </div>
-          </div>
-
-          <div className="border-t" />
-
           <SectionTitle
             icon={Landmark}
-            title="3. Loan Structure & Interest Assumptions"
+            title="1. Loan Structure & Interest Assumptions"
             subtitle="These values drive the Repayment Schedule, DSCR and Interest calculations in the bank report."
           />
 
@@ -823,7 +652,7 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
 
           <SectionTitle
             icon={Wallet}
-            title="3b. Working Capital & Promoter Contribution"
+            title="1b. Working Capital & Promoter Contribution"
             subtitle="Working capital drives Stock, Debtors and Cash cycle. Banks fund 60–75% (Tandon Committee norms)."
           />
 
@@ -1044,12 +873,12 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             icon={isTrading || isService || isAgriculture ? Store : Factory}
             title={
               isTrading
-                ? "4. Trading Products & Revenue (MANDATORY)"
+                ? "2. Trading Products & Revenue (MANDATORY)"
                 : isService
-                  ? "4. Service Revenue Lines (MANDATORY)"
+                  ? "2. Service Revenue Lines (MANDATORY)"
                   : isAgriculture
-                    ? "4. Agriculture Revenue Details (MANDATORY)"
-                  : "4. Production Parameters & Revenue (MANDATORY)"
+                    ? "2. Agriculture Revenue Details (MANDATORY)"
+                  : "2. Production Parameters & Revenue (MANDATORY)"
             }
             subtitle={
               isTrading
@@ -1463,7 +1292,7 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
 
           <SectionTitle
             icon={Boxes}
-            title="5. Financial Assumptions for CMA Projections"
+            title="3. Financial Assumptions for CMA Projections"
             subtitle="These drive all 5-year P&L, DSCR, Break-Even and Bank Scorecard calculations. CA-standard defaults pre-filled."
           />
 
@@ -1540,155 +1369,6 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             })}
           </div>
 
-          <div className="border-t" />
-
-          <div className="border-t" />
-
-          {/* Promoter Net Worth */}
-          <SectionTitle
-            icon={ShieldCheck}
-            title="6. Promoter Net Worth (Bank Credit Appraisal)"
-            subtitle="Banks assess promoter's financial standing. Enter approximate current market values. Used in credit scorecard."
-          />
-
-          <CATip tips={[
-            "Net Worth = Total Assets − Total Liabilities. Banks want Net Worth ≥ Promoter Contribution.",
-            "Residential property value: use current market value, not purchase price.",
-            "Fixed Deposits / Savings show liquidity — important for MSME / CGTMSE loans.",
-            "Home Loan outstanding is a liability — deducted from net worth. Declare honestly.",
-          ]} />
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
-            <NumberField label="Residential Property Value (Rs.)" value={report.promoter_assets.residential_property} onChange={(value) => updateSection("promoter_assets", { residential_property: value })} placeholder="e.g. 2000000" showWords />
-            <NumberField label="Fixed Deposits (Rs.)" value={report.promoter_assets.fixed_deposits} onChange={(value) => updateSection("promoter_assets", { fixed_deposits: value })} showWords />
-            <NumberField label="Savings Account Balance (Rs.)" value={report.promoter_assets.savings_account} onChange={(value) => updateSection("promoter_assets", { savings_account: value })} showWords />
-            <NumberField label="Mutual Funds / Investments (Rs.)" value={report.promoter_assets.mutual_funds} onChange={(value) => updateSection("promoter_assets", { mutual_funds: value })} showWords />
-            <NumberField label="Home Loan Outstanding (Rs.)" value={report.promoter_assets.home_loan_outstanding} onChange={(value) => updateSection("promoter_assets", { home_loan_outstanding: value })} showWords />
-            <NumberField label="Home Loan EMI / Month (Rs.)" value={report.promoter_assets.home_loan_emi} onChange={(value) => updateSection("promoter_assets", { home_loan_emi: value })} showWords />
-          </div>
-
-          {/* Net Worth Calculation — CA mandatory for credit appraisal */}
-          {(() => {
-            const totalAssets =
-              (report.promoter_assets.residential_property || 0) +
-              (report.promoter_assets.fixed_deposits || 0) +
-              (report.promoter_assets.savings_account || 0) +
-              (report.promoter_assets.mutual_funds || 0);
-            const totalLiabilities = report.promoter_assets.home_loan_outstanding || 0;
-            const netWorth = totalAssets - totalLiabilities;
-            const promoterContrib = financingPlan.promoterContribution || 0;
-            const netWorthOk = netWorth >= promoterContrib;
-            return totalAssets > 0 ? (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${netWorthOk ? "border-teal-200 bg-teal-50 text-teal-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                <div className="font-semibold">
-                  Promoter Net Worth: Rs. {netWorth.toLocaleString("en-IN")}
-                  <span className={`ml-2 text-xs font-normal ${netWorthOk ? "text-teal-600" : "text-amber-600"}`}>
-                    {netWorthOk ? "✓ Covers promoter contribution" : `⚠ Promoter contribution required: Rs. ${promoterContrib.toLocaleString("en-IN")}`}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs opacity-80">
-                  Total Assets: Rs. {totalAssets.toLocaleString("en-IN")} &nbsp;−&nbsp;
-                  Liabilities: Rs. {totalLiabilities.toLocaleString("en-IN")} &nbsp;=&nbsp;
-                  Net Worth: Rs. {netWorth.toLocaleString("en-IN")}
-                </div>
-              </div>
-            ) : null;
-          })()}
-
-          {/* Collateral & Guarantor reminder */}
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <strong>Bank Tip:</strong> For PMEGP and Mudra schemes, no collateral is required (CGTMSE covers the risk).
-            For MSME PSU Bank loans above Rs. 10L, banks typically ask for collateral or guarantor.
-          </div>
-
-          <div className="border-t" />
-
-          {/* ── Competitors Section ─────────────────────────────────────────────── */}
-          <SectionTitle
-            icon={Users}
-            title="7. Competitor Analysis (Improves Approval Chances)"
-            subtitle="Banks assess market competition. Add 2-4 known competitors — it shows you've done your market research."
-          />
-
-          <div className="space-y-3">
-            {/* Add competitor button */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                {report.competitors.length === 0
-                  ? "No competitors added yet. Add at least 1 for a complete report."
-                  : `${report.competitors.length} competitor(s) added`}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                onClick={() => addCompetitor()}
-              >
-                <Plus className="w-4 h-4" />
-                Add Competitor
-              </Button>
-            </div>
-
-            {report.competitors.length === 0 && (
-              <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-                Click "Add Competitor" above. Banks view this positively — shows you know your market.
-              </div>
-            )}
-
-            {report.competitors.map((comp, idx) => (
-              <div key={comp.id} className="rounded-xl border bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">Competitor #{idx + 1}</span>
-                  <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 text-destructive hover:bg-destructive/10 text-xs" onClick={() => removeCompetitor(comp.id)}>
-                    <Trash2 className="w-3.5 h-3.5" /> Remove
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label>Competitor Name *</Label>
-                    <Input className="h-11 rounded-xl" value={comp.name} onChange={(e) => updateCompetitor(comp.id, { name: e.target.value })} placeholder="e.g. Sharma Traders" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Type</Label>
-                    <Select value={comp.type} onValueChange={(v: any) => updateCompetitor(comp.id, { type: v })}>
-                      <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Organized">Organized</SelectItem>
-                        <SelectItem value="Unorganized">Unorganized</SelectItem>
-                        <SelectItem value="Online">Online</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Distance</Label>
-                    <Input className="h-11 rounded-xl" value={comp.distance} onChange={(e) => updateCompetitor(comp.id, { distance: e.target.value })} placeholder="e.g. 2 km" />
-                  </div>
-                  <div className="space-y-1.5 md:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Their Strengths</Label>
-                      <AIAssistBadge
-                        fieldLabel="Competitor Strengths"
-                        tooltip="AI can help analyze competitor advantages"
-                        onApply={(text) => updateCompetitor(comp.id, { strengths: text })}
-                      />
-                    </div>
-                    <Input className="h-11 rounded-xl" value={comp.strengths} onChange={(e) => updateCompetitor(comp.id, { strengths: e.target.value })} placeholder="e.g. Established brand" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label>Their Weaknesses</Label>
-                      <AIAssistBadge
-                        fieldLabel="Competitor Weaknesses"
-                        tooltip="AI can help identify competitor gaps"
-                        onApply={(text) => updateCompetitor(comp.id, { weaknesses: text })}
-                      />
-                    </div>
-                    <Input className="h-11 rounded-xl" value={comp.weaknesses} onChange={(e) => updateCompetitor(comp.id, { weaknesses: e.target.value })} placeholder="e.g. Poor quality" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </CardContent>
       </Card>
     </div>

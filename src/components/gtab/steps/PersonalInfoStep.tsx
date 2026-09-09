@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { User, GraduationCap, ShieldCheck } from "lucide-react";
+import { User, GraduationCap, ShieldCheck, Briefcase } from "lucide-react";
 import {
   GTABFormData,
   GENDER_OPTIONS,
@@ -224,6 +224,62 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
               Replace PAN with your actual details before submitting to the bank.
               This field auto-populates Section A of your project report.
             </p>
+          </div>
+
+        </CardContent>
+      </Card>
+
+      {/* ── Previous Employment Card ──────────────────────────────────────── */}
+      <Card className="gtab-card-dark overflow-hidden rounded-[1rem] border border-[#163149] bg-[#111827] text-slate-100 shadow-[0_18px_44px_rgba(0,0,0,0.24)] sm:rounded-2xl">
+        <CardContent className="space-y-5 p-5 sm:space-y-7 sm:p-8">
+
+          <SectionTitle
+            icon={Briefcase}
+            title="Previous Employment"
+            subtitle="Shows income history for the bank report — leave blank if self-employed / homemaker"
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+            <div className="space-y-2">
+              <FieldLabel>Previous Employer</FieldLabel>
+              <Input
+                className={fieldCls}
+                value={pri?.promoter?.previous_employer || ""}
+                onChange={(e) => updatePromoter({ previous_employer: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Previous Role</FieldLabel>
+              <Input
+                className={fieldCls}
+                value={pri?.promoter?.previous_role || ""}
+                onChange={(e) => updatePromoter({ previous_role: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Employment From</FieldLabel>
+              <DatePicker
+                dark
+                className="h-12 rounded-[0.9rem] px-4 text-base"
+                value={pri?.promoter?.employment_from || ""}
+                onChange={(v) => updatePromoter({ employment_from: v })}
+                placeholder="Start date"
+                toYear={new Date().getFullYear()}
+                disableFuture
+              />
+            </div>
+            <div className="space-y-2">
+              <FieldLabel>Employment To</FieldLabel>
+              <DatePicker
+                dark
+                className="h-12 rounded-[0.9rem] px-4 text-base"
+                value={pri?.promoter?.employment_to || ""}
+                onChange={(v) => updatePromoter({ employment_to: v })}
+                placeholder="End date"
+                toYear={new Date().getFullYear()}
+                disableFuture
+              />
+            </div>
           </div>
 
         </CardContent>

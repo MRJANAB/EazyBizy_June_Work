@@ -8,7 +8,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Phone, Building2 } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker";
+import { MapPin, Phone, Building2, TrendingUp } from "lucide-react";
 
 import { GTABFormData, REGISTRATION_OPTIONS, INDIAN_STATES } from "@/types/gtab";
 
@@ -32,6 +33,17 @@ const SectionTitle = ({ icon: Icon, title, subtitle }) => (
 );
 
 const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) => {
+  const pri = formData.project_report_inputs;
+
+  const updateBusiness = (updates: Partial<typeof pri.business>) => {
+    updateFormData({
+      project_report_inputs: {
+        ...pri,
+        business: { ...pri.business, ...updates },
+      },
+    });
+  };
+
   return (
     <div className="mx-auto max-w-none space-y-4 sm:space-y-6">
 
@@ -226,6 +238,82 @@ const BusinessInfoStep = ({ formData, updateFormData }: BusinessInfoStepProps) =
               )}
             </div>
 
+          </div>
+
+        </CardContent>
+      </Card>
+
+      <Card className="gtab-card-light rounded-[0.9rem] border shadow-sm sm:rounded-2xl">
+        <CardContent className="space-y-5 p-4 sm:space-y-7 sm:p-8">
+
+          <SectionTitle
+            icon={TrendingUp}
+            title="Business Profile Details"
+            subtitle="Registration and market details for the CMA report cover page"
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
+            <div className="space-y-2">
+              <Label>Commencement Date</Label>
+              <DatePicker
+                className="h-12 rounded-xl"
+                value={pri?.business?.commencement_date || ""}
+                onChange={(v) => updateBusiness({ commencement_date: v })}
+                placeholder="Business start date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>GST Number</Label>
+              <Input
+                className="h-12 rounded-xl uppercase"
+                value={pri?.business?.gst_number || ""}
+                onChange={(e) => updateBusiness({ gst_number: e.target.value.toUpperCase() })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>MSME / UDYAM Number</Label>
+              <Input
+                className="h-12 rounded-xl"
+                value={pri?.business?.msme_number || ""}
+                onChange={(e) => updateBusiness({ msme_number: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Market Size (Crores)</Label>
+              <Input
+                type="number"
+                className="h-12 rounded-xl"
+                value={pri?.business?.market_size_crores || ""}
+                onChange={(e) => updateBusiness({ market_size_crores: Number(e.target.value) || 0 })}
+                min={0}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Market Growth %</Label>
+              <Input
+                type="number"
+                className="h-12 rounded-xl"
+                value={pri?.business?.market_growth_pct || ""}
+                onChange={(e) => updateBusiness({ market_growth_pct: Number(e.target.value) || 0 })}
+                min={0}
+              />
+            </div>
+            <div className="space-y-2 md:col-span-3">
+              <Label>Target Areas</Label>
+              <Input
+                className="h-12 rounded-xl"
+                value={(pri?.business?.target_areas || []).join(", ")}
+                onChange={(e) =>
+                  updateBusiness({
+                    target_areas: e.target.value
+                      .split(",")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="Andheri, Borivali, Thane"
+              />
+            </div>
           </div>
 
         </CardContent>

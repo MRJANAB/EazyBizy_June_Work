@@ -97,13 +97,27 @@ async def generate_report(data: CMAReportInput):
             "sensitivity":      sensitivity,
         }
 
-        # 4. Validate — collects warnings but NEVER blocks PDF generation.
-        #    All validation issues are returned as warnings in the response.
+        # 4. Validate — most issues are collected as warnings and do NOT block
+        #    PDF generation (they're advisory: a low DSCR or thin margin is a
+        #    business risk to flag, not a reason to refuse the report).
+        #    V13 is the one hard exception: an "Existing Business" whose
+        #    commencement date is today/future while claiming N months of
+        #    prior operation is an internally-contradictory INPUT, not a
+        #    business-risk outcome — the applicant must fix one of the two
+        #    fields before any report (which would otherwise show a
+        #    fabricated "N yr M mo" figure) is generated at all.
         validation_issues = []
         try:
             validate_report(report_data)
         except Exception as ve:
-            # Validation found issues — collect them as warnings, still generate PDF
+            if "V13 FAIL" in str(ve):
+                # Re-raise: the outer `except ValueError` handler below turns
+                # this into a clean 422 with the original message. Raising an
+                # HTTPException directly here would instead be swallowed by
+                # the outer `except Exception` handler and turned into a
+                # generic 500.
+                raise ve
+            # Other validation issues — collect them as warnings, still generate PDF
             validation_issues = [str(ve)]
         # 5. Generate PDF regardless of validation issues
         _purge_old_pdfs()

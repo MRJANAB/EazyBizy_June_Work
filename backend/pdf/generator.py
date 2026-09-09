@@ -1086,6 +1086,12 @@ def _build_dpr_from_report(
             "capital_employed": R(promoter + tl, 2),
             "pbidt": float(income[2].get("ebitda", 0) if len(income) > 2 else 0),
             "pbidt_pct_sales": R(float(income[2].get("ebitda", 0) if len(income) > 2 else 0) / max(float(income[2].get("revenue", 1) if len(income) > 2 else 1), 1) * 100),
+            # EBIT = EBITDA − Depreciation (before interest/tax) — the single
+            # numerator ROCE uses, per the standard ROCE = EBIT ÷ Capital
+            # Employed definition. Both EBITDA and Depreciation are already
+            # computed by the income-statement engine; this is a direct
+            # formula application, not an independent recalculation.
+            "ebit": R(float(income[2].get("ebitda", 0) if len(income) > 2 else 0) - float(income[2].get("depreciation", 0) if len(income) > 2 else 0), 2),
             "pat": float(income[2].get("pat", 0) if len(income) > 2 else 0),
             "pat_pct_sales": R(float(income[2].get("pat", 0) if len(income) > 2 else 0) / max(float(income[2].get("revenue", 1) if len(income) > 2 else 1), 1) * 100),
         },

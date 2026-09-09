@@ -192,7 +192,12 @@ def calculate_monthly_pnl(
         "total_ca":                float(wc_y1.get("total",    0)),
         "total_cl":                float(wc_y1.get("bank_loan", 0)),
         "net_wc":                  float(wc_y1.get("margin",   0)),
-        # Current ratio: WC assets / WC bank loan (CA standard)
+        # NOT a Current Ratio (Total Current Assets / Total Current Liabilities) —
+        # this is WC Requirement / WC Bank Finance, i.e. how many times the
+        # arranged WC bank facility covers the assessed WC requirement.
+        # Kept under the old "current_ratio" key too for any other legacy
+        # consumer, but the PDF must read/label it as WC Bank Finance Coverage.
+        "wc_bank_finance_coverage_ratio": R(float(wc_y1.get("total", 0)) / max(float(wc_y1.get("bank_loan", 1)), 1), 2),
         "current_ratio":           R(float(wc_y1.get("total", 0)) / max(float(wc_y1.get("bank_loan", 1)), 1), 2),
         "current_portion_tl":      monthly_principal,
         "industry":                industry,

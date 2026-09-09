@@ -7,6 +7,7 @@ CA Rule:
   DSCR per scenario = (PAT + Dep + Interest) / (Principal + Interest)
 """
 from core.engine import R, dscr_label
+from calculations.dscr import term_loan_dscr
 
 _COGS_RATIO    = 0.50   # variable fraction of revenue
 _MARKETING_PCT = 0.025  # also variable
@@ -30,7 +31,12 @@ def calculate_sensitivity(data, scheme_data: dict, monthly: dict, income_stateme
         ) / 12
         base_fixed  = float(yr1.get("fixed_expenses", yr1.get("total_fixed", 0)) or 0) / 12
         monthly_dep = float(yr1.get("depreciation", 0) or 0) / 12
+        # Total interest (TL + WC) — used for P&L (PBT/PAT) only.
         monthly_int = float(yr1.get("interest", 0) or 0) / 12
+        # TL-ONLY interest — used for the Term Loan DSCR formula below, so the
+        # sensitivity DSCR matches the main DSCR schedule's definition exactly
+        # (which deliberately excludes WC interest).
+        monthly_tl_int = float(yr1.get("tl_interest", yr1.get("interest", 0)) or 0) / 12
         master_pbt  = float(yr1.get("profit_before_tax", 0) or 0)
         master_tax  = float(yr1.get("tax", 0) or 0)
         tax_rate    = (master_tax / master_pbt) if master_pbt > 0 else 0.25
@@ -41,6 +47,7 @@ def calculate_sensitivity(data, scheme_data: dict, monthly: dict, income_stateme
         base_fixed     = float(monthly.get("fixed_total",         0) or 0)
         monthly_dep    = float(monthly.get("monthly_dep",         0) or 0)
         monthly_int    = float(monthly.get("monthly_int_y1",      0) or 0)
+        monthly_tl_int = float(monthly.get("monthly_tl_int", monthly_int) or 0)
         tax_rate       = float(monthly.get("tax_monthly", 0) / max(float(monthly.get("pbt_monthly", 1) or 1), 0.001)) \
                          if monthly.get("pbt_monthly", 0) and monthly.get("pbt_monthly", 0) > 0 else 0.25
     monthly_prin   = float(monthly.get("monthly_principal",   0) or 0)
@@ -71,10 +78,11 @@ def calculate_sensitivity(data, scheme_data: dict, monthly: dict, income_stateme
         s_tax    = R(max(s_pbt * tax_rate, 0), 2)
         s_pat    = R(s_pbt - s_tax, 2)
 
-        # CA-standard DSCR = (PAT + Dep + Interest) / (Principal + Interest)
-        numerator   = R(s_pat + monthly_dep + monthly_int, 2)
-        denominator = R(monthly_prin + monthly_int, 2)
-        s_dscr = R(numerator / denominator, 2) if denominator else 0.0
+        # Term Loan DSCR — calls the EXACT SAME formula function as the main
+        # DSCR schedule (calculations/dscr.py::term_loan_dscr), using TL-only
+        # interest, so this can never diverge from the main report's DSCR.
+        s_cash_accruals = R(s_pat + monthly_dep, 2)
+        _, _, s_dscr = term_loan_dscr(s_cash_accruals, monthly_tl_int, monthly_prin)
 
         # COGS for this scenario (variable portion only, scaled with revenue)
         s_cogs = R(base_cogs * (1 + chg), 2)

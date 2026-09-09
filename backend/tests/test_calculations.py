@@ -904,6 +904,29 @@ class TestSensitivity:
                 "DSCR must be monotonically non-decreasing with revenue"
             )
 
+    def test_dscr_uses_the_shared_term_loan_dscr_formula(self):
+        """BUG FIX: sensitivity used to compute DSCR with TOTAL (TL+WC)
+        interest, silently diverging from the main DSCR schedule's TL-only
+        formula whenever WC interest was nonzero (a business with WC
+        borrowing would show two different, unreconcilable DSCR figures for
+        the same scenario). It must now call calculations/dscr.py's
+        term_loan_dscr() with TL-only interest — the exact same formula
+        function the main DSCR schedule uses."""
+        from calculations.dscr import term_loan_dscr
+        sens, monthly = self._get_sensitivity()
+        assert float(monthly.get("monthly_wc_int", 0)) > 0, (
+            "fixture must have nonzero WC interest for this test to be meaningful"
+        )
+        base = next(s for s in sens if s["scenario"] == "Base Case")
+        monthly_tl_int = float(monthly.get("monthly_tl_int", monthly.get("monthly_int_y1", 0)))
+        monthly_principal = float(monthly.get("monthly_principal", 0))
+        cash_accruals = base["monthly_profit"] + float(monthly.get("monthly_dep", 0))
+        _, _, expected_dscr = term_loan_dscr(cash_accruals, monthly_tl_int, monthly_principal)
+        assert abs(base["dscr"] - expected_dscr) < 0.02, (
+            f"Sensitivity DSCR {base['dscr']} must match term_loan_dscr() {expected_dscr} "
+            "computed with TL-only interest"
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 10. Business Type Engine

@@ -14,6 +14,22 @@ from core.engine import R, dscr_label
 from rules import get_default_engine
 
 
+def term_loan_dscr(cash_accruals: float, tl_interest: float, tl_principal: float) -> tuple:
+    """The single CA-standard Term Loan DSCR formula:
+        Total A = Cash Accruals + TL Interest
+        Total B = TL Principal + TL Interest
+        DSCR    = Total A / Total B
+    Used by BOTH the main DSCR schedule (below) and sensitivity analysis
+    (calculations/sensitivity.py), so the two can never diverge into
+    different formulas.
+    Returns (total_a, total_b, dscr).
+    """
+    total_a = R(float(cash_accruals) + float(tl_interest), 2)
+    total_b = R(float(tl_principal) + float(tl_interest), 2)
+    dscr = R(total_a / total_b, 2) if total_b else 0.0
+    return total_a, total_b, dscr
+
+
 def calculate_dscr(income: list, loan_schedule: list, scheme_data: dict) -> dict:
     """
     Compute DSCR for each year and the 5-year average.
@@ -29,11 +45,8 @@ def calculate_dscr(income: list, loan_schedule: list, scheme_data: dict) -> dict
         cash_ac   = float(yr.get("cash_accruals", 0) or 0)   # PAT + Dep
         # BUG 8 FIX: Use TL interest ONLY (not combined interest)
         tl_int    = float(yr.get("tl_interest", yr.get("interest", 0)) or 0)
-        total_a   = R(cash_ac + tl_int, 2)
-
         principal = float(loan_schedule[i]["principal_paid"])
-        total_b   = R(principal + tl_int, 2)
-        dv        = R(total_a / total_b, 2) if total_b else 0.0
+        total_a, total_b, dv = term_loan_dscr(cash_ac, tl_int, principal)
 
         if total_b > 0:
             dscr_sum   += dv

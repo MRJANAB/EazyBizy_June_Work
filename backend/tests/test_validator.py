@@ -16,7 +16,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
-from calculations.validator import validate_report, ValidationError
+from calculations.validator import validate_report, ValidationError, structural_reconciliation
 
 
 def _scheme_data(**overrides):
@@ -90,43 +90,44 @@ class TestV13BusinessStatusVsCommencementDate:
     """BUG: an applicant marked 'Existing Business' with N months of
     operating history but a commencement date of today (or later) is
     internally inconsistent — an existing business can't have just
-    commenced. V13 is a WARNING (not a hard error), since it flags a data
-    inconsistency the applicant should double-check rather than a
-    calculation failure."""
+    commenced. V13 is a HARD ERROR (escalated from an earlier warning-only
+    design): the applicant must correct one of the two contradictory input
+    fields before any report — which would otherwise show a fabricated
+    "N yr M mo" business-age figure alongside a same-day/future
+    commencement date — is generated at all."""
 
     def _report_data_with_business(self, business):
         report_data = _minimal_report_data(_scheme_data())
         report_data["input"] = {"business": business}
         return report_data
 
-    def test_existing_business_commencing_today_warns(self):
+    def test_existing_business_commencing_today_blocks_generation(self):
         from datetime import date
         report_data = self._report_data_with_business({
             "business_status": "Existing Business",
             "business_duration_months": 24,
             "commencement_date": date.today().isoformat(),
         })
-        validate_report(report_data)  # warning only, must not raise
-        assert any("V13 WARN" in w for w in report_data["validation_warnings"])
+        with pytest.raises(ValidationError) as exc:
+            validate_report(report_data)
+        assert "V13 FAIL" in str(exc.value)
 
-    def test_existing_business_with_past_commencement_does_not_warn(self):
+    def test_existing_business_with_past_commencement_does_not_block(self):
         report_data = self._report_data_with_business({
             "business_status": "Existing Business",
             "business_duration_months": 24,
             "commencement_date": "2023-01-01",
         })
-        validate_report(report_data)
-        assert not any("V13 WARN" in w for w in report_data["validation_warnings"])
+        validate_report(report_data)  # must not raise
 
-    def test_new_business_commencing_today_does_not_warn(self):
+    def test_new_business_commencing_today_does_not_block(self):
         from datetime import date
         report_data = self._report_data_with_business({
             "business_status": "New Business",
             "business_duration_months": 0,
             "commencement_date": date.today().isoformat(),
         })
-        validate_report(report_data)
-        assert not any("V13 WARN" in w for w in report_data["validation_warnings"])
+        validate_report(report_data)  # must not raise
 
 
 class TestV5DscrMessageIsActionable:
@@ -146,3 +147,107 @@ class TestV5DscrMessageIsActionable:
         message = str(exc.value)
         assert "V5 FAIL" in message
         assert "grossMarginPct" not in message
+
+
+def _consistent_cma_dpr():
+    """A minimal but internally self-consistent cma/dpr pair — every check in
+    structural_reconciliation should PASS against this fixture. Mirrors the
+    field names pdf/generator.py's _build_dpr_from_report actually produces."""
+    dpr = {
+        "project_cost": {
+            "total_project_cost": 1000.0,
+            "promoter_fixed_equity": 200.0,
+            "promoter_wc_margin": 100.0,
+            "total_promoter_contribution": 300.0,
+            "term_loan": 500.0,
+            "wc_loan": 200.0,
+        },
+        "depreciation": {"schedule": [
+            {"year": 1, "opening_wdv": 100.0, "depreciation": 10.0, "closing_wdv": 90.0},
+            {"year": 2, "opening_wdv": 90.0,  "depreciation": 9.0,  "closing_wdv": 81.0},
+        ]},
+        "term_loan": {"schedule": [
+            {"year": 1, "opening": 500.0, "closing": 400.0, "principal_repaid": 100.0},
+            {"year": 2, "opening": 400.0, "closing": 300.0, "principal_repaid": 100.0},
+        ]},
+        "working_capital_years": [
+            {"year": 1, "total": 300.0, "margin": 100.0, "bank_loan": 200.0},
+            {"year": 2, "total": 330.0, "margin": 110.0, "bank_loan": 220.0},
+        ],
+        "profit_and_loss_years": [
+            {"year": 1, "revenue": 1000.0, "total_expenses": 800.0, "profit_before_tax": 200.0, "tax": 50.0, "net_profit": 150.0},
+            {"year": 2, "revenue": 1100.0, "total_expenses": 850.0, "profit_before_tax": 250.0, "tax": 60.0, "net_profit": 190.0},
+        ],
+        "cash_flow_years": [
+            {"year": 1, "opening_cash": 0.0,  "surplus": 50.0, "closing_cash": 50.0},
+            {"year": 2, "opening_cash": 50.0, "surplus": 30.0, "closing_cash": 80.0},
+        ],
+        "balance_sheet_years": [
+            {"year": 0, "cash": 0.0,  "total_assets": 1000.0, "total_liabilities": 1000.0, "term_loan": 500.0, "wc_bank": 200.0, "current_assets": 300.0},
+            {"year": 1, "cash": 50.0, "total_assets": 1050.0, "total_liabilities": 1050.0, "term_loan": 400.0, "wc_bank": 200.0, "current_assets": 300.0},
+            {"year": 2, "cash": 80.0, "total_assets": 1130.0, "total_liabilities": 1130.0, "term_loan": 300.0, "wc_bank": 220.0, "current_assets": 330.0},
+        ],
+    }
+    cma = {
+        "project_cost_items": [
+            {"code": 1, "particulars": "Building", "amount": 700.0},
+            {"code": 2, "particulars": "Machinery", "amount": 300.0},
+        ],
+        "total_project_cost": 1000.0,
+        "promoter_fixed_equity": 200.0,
+        "promoter_wc_margin": 100.0,
+        "total_promoter_contribution": 300.0,
+    }
+    return cma, dpr
+
+
+class TestStructuralReconciliation:
+    """The 10 pure arithmetic-identity checks shown in the PDF's Section 31
+    ('Financial Model Reconciliation') — deliberately distinct from
+    business-outcome warnings (a loss-making year is a valid OUTCOME, not a
+    structural failure, and must never be flagged here)."""
+
+    def test_consistent_data_passes_every_check(self):
+        cma, dpr = _consistent_cma_dpr()
+        checks = structural_reconciliation(cma, dpr)
+        assert len(checks) == 10
+        failed = [c["name"] for c in checks if not c["passed"]]
+        assert failed == [], f"Unexpected FAILs against a self-consistent fixture: {failed}"
+
+    def test_broken_loan_rollforward_is_caught(self):
+        cma, dpr = _consistent_cma_dpr()
+        dpr["term_loan"]["schedule"][0]["closing"] = 999.0  # corrupt it
+        checks = structural_reconciliation(cma, dpr)
+        tl_check = next(c for c in checks if c["name"].startswith("Term Loan Roll-Forward"))
+        assert tl_check["passed"] is False
+
+    def test_broken_project_cost_items_is_caught(self):
+        cma, dpr = _consistent_cma_dpr()
+        cma["project_cost_items"][0]["amount"] = 1.0  # no longer sums to total
+        checks = structural_reconciliation(cma, dpr)
+        pc_check = next(c for c in checks if c["name"] == "Project Cost = Means of Finance")
+        assert pc_check["passed"] is False
+
+    def test_business_outcome_is_never_flagged_as_structural(self):
+        """A loss-making, negative-cash year is a valid, correctly-computed
+        OUTCOME — it must not fail any structural check as long as every
+        total still equals the sum of its own parts."""
+        cma, dpr = _consistent_cma_dpr()
+        for cy in dpr["profit_and_loss_years"]:
+            cy["profit_before_tax"] = -500.0
+            cy["tax"] = 0.0
+            cy["net_profit"] = -500.0
+            cy["total_expenses"] = cy["revenue"] + 500.0
+        for row in dpr["cash_flow_years"]:
+            row["surplus"] = -500.0
+            row["closing_cash"] = row["opening_cash"] - 500.0
+        dpr["balance_sheet_years"][1]["cash"] = -500.0
+        dpr["cash_flow_years"][0]["opening_cash"] = dpr["balance_sheet_years"][0]["cash"]
+        dpr["cash_flow_years"][0]["closing_cash"] = dpr["cash_flow_years"][0]["opening_cash"] + dpr["cash_flow_years"][0]["surplus"]
+        dpr["cash_flow_years"][1]["opening_cash"] = dpr["cash_flow_years"][0]["closing_cash"]
+        dpr["cash_flow_years"][1]["closing_cash"] = dpr["cash_flow_years"][1]["opening_cash"] + dpr["cash_flow_years"][1]["surplus"]
+        checks = structural_reconciliation(cma, dpr)
+        pnl_check = next(c for c in checks if c["name"].startswith("P&L Roll-Forward"))
+        cf_check  = next(c for c in checks if c["name"].startswith("Cash Flow Roll-Forward"))
+        assert pnl_check["passed"] is True
+        assert cf_check["passed"] is True

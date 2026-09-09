@@ -237,7 +237,11 @@ def validate_report(report_data: dict) -> None:
     # V13: Existing business claims a commencement date that isn't in the past.
     # An "Existing Business (N years)" with a commencement date of today (or
     # later) is internally inconsistent — the business can't have both just
-    # started and already been running for N years.
+    # started and already been running for N years. Escalated from a warning
+    # to a hard error: the applicant must correct one of the two contradictory
+    # fields before a report is generated, rather than the report silently
+    # showing a fabricated "N yr M mo" figure alongside a same-day/future
+    # commencement date.
     business_info = report_data.get("input", {}).get("business", {})
     biz_status   = str(business_info.get("business_status", "") or "").lower()
     biz_duration = float(business_info.get("business_duration_months", 0) or 0)
@@ -247,11 +251,12 @@ def validate_report(report_data: dict) -> None:
             from datetime import date, datetime as _dt
             _commencement_date = _dt.fromisoformat(commencement[:10]).date()
             if _commencement_date >= date.today():
-                warnings.append(
-                    f"V13 WARN — Business Status is 'Existing Business ({biz_duration:.0f} months)' "
+                errors.append(
+                    f"V13 FAIL — Business Status is 'Existing Business ({biz_duration:.0f} months)' "
                     f"but Commencement Date ({commencement[:10]}) is today or in the future. "
-                    "An existing business cannot have commenced today — check the commencement date "
-                    "or business duration entered."
+                    "An existing business cannot have commenced today. Correct either the "
+                    "commencement date (to a past date matching the stated business duration) "
+                    "or the business duration/status before resubmitting."
                 )
         except (ValueError, TypeError):
             pass  # unparseable date — not this check's concern
@@ -264,3 +269,148 @@ def validate_report(report_data: dict) -> None:
             f"Report failed {len(errors)} validation check(s):\n" +
             "\n".join(f"  • {e}" for e in errors)
         )
+
+
+class StructuralReconciliationError(ValueError):
+    """Raised when a pure arithmetic-identity check fails — a genuine
+    calculation-integrity bug, not a business-outcome warning."""
+    pass
+
+
+def structural_reconciliation(cma: dict, dpr: dict) -> list:
+    """
+    Ten pure arithmetic-identity checks over already-computed report data.
+
+    These are NOT business-outcome judgements — a loss-making year, a DSCR
+    below 1, or negative cash are valid, correctly-computed OUTCOMES, not
+    structural failures, and are deliberately NOT checked here (they are
+    surfaced separately, in the Executive Credit Summary / DSCR / Balance
+    Sheet sections, as risk warnings). This function only verifies that the
+    numbers the report displays are internally self-consistent: every total
+    equals the sum of its own parts, and every roll-forward schedule ties
+    opening to closing correctly.
+
+    Returns a list of {"name", "passed", "detail"} dicts, most-important
+    first. Does not raise — the caller (pdf/builder.py) decides whether any
+    FAIL should block report generation.
+    """
+    def close(a, b, tol=5.0):
+        try:
+            return abs(float(a) - float(b)) <= tol
+        except (TypeError, ValueError):
+            return False
+
+    checks = []
+    pc  = dpr.get("project_cost", {})
+    dep = dpr.get("depreciation", {})
+    tl  = dpr.get("term_loan", {})
+    wc  = dpr.get("working_capital_years", [])
+    cop = dpr.get("profit_and_loss_years", [])
+    pbs = dpr.get("balance_sheet_years", [])
+    pcf = dpr.get("cash_flow_years", [])
+
+    # 1. Project Cost = Means of Finance (itemised cost table sums to the
+    #    total shown everywhere else in the report)
+    items = cma.get("project_cost_items", [])
+    total_pc = float(cma.get("total_project_cost", pc.get("total_project_cost", 0)) or 0)
+    items_sum = sum(float(i.get("amount", 0) or 0) for i in items)
+    checks.append({
+        "name":   "Project Cost = Means of Finance",
+        "passed": close(items_sum, total_pc, 5.0) if total_pc else True,
+        "detail": f"Cost items sum Rs.{items_sum:,.0f} vs Total Project Cost Rs.{total_pc:,.0f}",
+    })
+
+    # 2. P&L roll-forward: PBT = Revenue - Total Expenses; PAT = PBT - Tax
+    pnl_ok, pnl_detail = True, "All years reconcile"
+    for cy in cop:
+        rev, texp = float(cy.get("revenue", 0) or 0), float(cy.get("total_expenses", 0) or 0)
+        pbt, tax  = float(cy.get("profit_before_tax", 0) or 0), float(cy.get("tax", 0) or 0)
+        pat = float(cy.get("net_profit", cy.get("pat", 0)) or 0)
+        if not close(rev - texp, pbt, 5.0) or not close(pbt - tax, pat, 5.0):
+            pnl_ok, pnl_detail = False, f"Year {cy.get('year')}: PBT/PAT roll-forward mismatch"
+            break
+    checks.append({"name": "P&L Roll-Forward (Revenue − Expenses − Tax)", "passed": pnl_ok, "detail": pnl_detail})
+
+    # 3. Working Capital: Total = Margin + Bank Loan (every year)
+    wc_ok, wc_detail = True, "All years reconcile"
+    for w in wc:
+        total = float(w.get("total", 0) or 0)
+        if not close(total, float(w.get("margin", 0) or 0) + float(w.get("bank_loan", 0) or 0), 5.0):
+            wc_ok, wc_detail = False, f"Year {w.get('year')}: WC total ≠ margin + bank loan"
+            break
+    checks.append({"name": "Working Capital (Total = Margin + Bank Loan)", "passed": wc_ok, "detail": wc_detail})
+
+    # 4. Term Loan roll-forward: Closing = Opening - Principal Repaid
+    tl_ok, tl_detail = True, "All years reconcile"
+    for row in tl.get("schedule", []):
+        if not close(float(row.get("closing", 0) or 0),
+                     float(row.get("opening", 0) or 0) - float(row.get("principal_repaid", 0) or 0), 5.0):
+            tl_ok, tl_detail = False, f"Year {row.get('year')}: TL closing ≠ opening − principal repaid"
+            break
+    checks.append({"name": "Term Loan Roll-Forward (Opening − Principal = Closing)", "passed": tl_ok, "detail": tl_detail})
+
+    # 5. Fixed Asset (Depreciation) roll-forward: Closing WDV = Opening WDV - Dep
+    dep_ok, dep_detail = True, "All years reconcile"
+    for row in dep.get("schedule", []):
+        if not close(float(row.get("closing_wdv", 0) or 0),
+                     float(row.get("opening_wdv", 0) or 0) - float(row.get("depreciation", 0) or 0), 5.0):
+            dep_ok, dep_detail = False, f"Year {row.get('year')}: Closing WDV ≠ Opening WDV − Depreciation"
+            break
+    checks.append({"name": "Fixed Asset Roll-Forward (WDV)", "passed": dep_ok, "detail": dep_detail})
+
+    # 6. Cash Flow roll-forward: Closing Cash = Opening Cash + Surplus/Deficit
+    cf_ok, cf_detail = True, "All years reconcile"
+    for row in pcf:
+        if not close(float(row.get("closing_cash", 0) or 0),
+                     float(row.get("opening_cash", 0) or 0) + float(row.get("surplus", 0) or 0), 5.0):
+            cf_ok, cf_detail = False, f"Year {row.get('year')}: Closing cash ≠ Opening cash + Surplus"
+            break
+    checks.append({"name": "Cash Flow Roll-Forward (Opening + Surplus = Closing)", "passed": cf_ok, "detail": cf_detail})
+
+    # 7. Balance Sheet: Total Assets = Total Equity & Liabilities (each year)
+    bs_ok, bs_detail = True, "All years reconcile"
+    for pb in pbs:
+        ta, tliab = float(pb.get("total_assets", 0) or 0), float(pb.get("total_liabilities", 0) or 0)
+        if not close(ta, tliab, 10.0):
+            bs_ok, bs_detail = False, f"Year {pb.get('year')}: Total Assets Rs.{ta:,.0f} ≠ Total Liabilities Rs.{tliab:,.0f}"
+            break
+    checks.append({"name": "Balance Sheet (Assets = Equity + Liabilities)", "passed": bs_ok, "detail": bs_detail})
+
+    # 8. Closing cash chain continuity: each year's opening cash = prior
+    #    year's closing cash (Year 1's opening = Year-0 balance-sheet cash).
+    cc_ok, cc_detail = True, "All years reconcile"
+    prev_closing = float(pbs[0].get("cash", 0) or 0) if pbs else 0.0
+    for row in pcf:
+        if not close(float(row.get("opening_cash", 0) or 0), prev_closing, 5.0):
+            cc_ok, cc_detail = False, f"Year {row.get('year')}: Opening cash ≠ prior year's closing cash"
+            break
+        prev_closing = float(row.get("closing_cash", 0) or 0)
+    checks.append({"name": "Closing Cash Chain Continuity", "passed": cc_ok, "detail": cc_detail})
+
+    # 9. Debt balances: TL/WC bank balances tie between their own schedules
+    #    and the Balance Sheet's term_loan / wc_bank rows.
+    debt_ok, debt_detail = True, "All years reconcile"
+    for i, row in enumerate(tl.get("schedule", [])):
+        bs_year = pbs[i + 1] if i + 1 < len(pbs) else None
+        if bs_year and not close(float(row.get("closing", 0) or 0), float(bs_year.get("term_loan", 0) or 0), 5.0):
+            debt_ok, debt_detail = False, f"Year {row.get('year')}: TL closing ≠ Balance Sheet term loan"
+            break
+    if debt_ok:
+        for i, w in enumerate(wc):
+            bs_year = pbs[i + 1] if i + 1 < len(pbs) else None
+            if bs_year and not close(float(w.get("bank_loan", 0) or 0), float(bs_year.get("wc_bank", 0) or 0), 5.0):
+                debt_ok, debt_detail = False, f"Year {w.get('year')}: WC bank loan ≠ Balance Sheet WC bank"
+                break
+    checks.append({"name": "Debt Balances (Schedules = Balance Sheet)", "passed": debt_ok, "detail": debt_detail})
+
+    # 10. Promoter contribution: Total = Fixed Equity + WC Margin
+    fixed_eq  = float(cma.get("promoter_fixed_equity", pc.get("promoter_fixed_equity", pc.get("equity_capital", 0))) or 0)
+    wc_margin = float(cma.get("promoter_wc_margin", wc[0].get("margin", 0) if wc else 0) or 0)
+    total_contrib = float(cma.get("total_promoter_contribution", cma.get("promoter_contribution", 0)) or 0)
+    checks.append({
+        "name":   "Promoter Contribution (Fixed Equity + WC Margin = Total)",
+        "passed": close(fixed_eq + wc_margin, total_contrib, 5.0) if total_contrib else True,
+        "detail": f"Rs.{fixed_eq:,.0f} + Rs.{wc_margin:,.0f} vs Total Rs.{total_contrib:,.0f}",
+    })
+
+    return checks

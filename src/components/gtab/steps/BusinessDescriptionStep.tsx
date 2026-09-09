@@ -153,6 +153,7 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
           />
 
           <div className="space-y-6">
+            {/* Hero field — full width, the longest and most important narrative */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Business Overview *</Label>
@@ -163,7 +164,7 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
                 />
               </div>
               <Textarea
-                className="min-h-[140px] rounded-xl"
+                className="min-h-[120px] rounded-xl"
                 value={formData.business_description || ""}
                 onChange={(e) => updateFormData({ business_description: e.target.value })}
                 placeholder="Describe your business, products/services, target market and uniqueness..."
@@ -171,38 +172,41 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
               <p className="text-xs text-muted-foreground">This will be included in your bank submission report</p>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Products / Services Offered *</Label>
-                <AIAssistBadge
-                  fieldLabel="Products / Services Offered"
-                  tooltip="AI can help describe your products and services"
-                  onApply={(text) => updateFormData({ products_services: text })}
+            {/* Paired fields — balances width vs. height instead of stacking full-width */}
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Products / Services Offered *</Label>
+                  <AIAssistBadge
+                    fieldLabel="Products / Services Offered"
+                    tooltip="AI can help describe your products and services"
+                    onApply={(text) => updateFormData({ products_services: text })}
+                  />
+                </div>
+                <Textarea
+                  className="min-h-[120px] rounded-xl"
+                  value={formData.products_services || ""}
+                  onChange={(e) => updateFormData({ products_services: e.target.value })}
+                  placeholder="Describe your main products or services..."
                 />
               </div>
-              <Textarea
-                className="min-h-[120px] rounded-xl"
-                value={formData.products_services || ""}
-                onChange={(e) => updateFormData({ products_services: e.target.value })}
-                placeholder="Describe your main products or services..."
-              />
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Target Market / Customers *</Label>
-                <AIAssistBadge
-                  fieldLabel="Target Market / Customers"
-                  tooltip="AI can help you identify your target market"
-                  onApply={(text) => updateFormData({ target_market: text })}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Target Market / Customers *</Label>
+                  <AIAssistBadge
+                    fieldLabel="Target Market / Customers"
+                    tooltip="AI can help you identify your target market"
+                    onApply={(text) => updateFormData({ target_market: text })}
+                  />
+                </div>
+                <Textarea
+                  className="min-h-[120px] rounded-xl"
+                  value={formData.target_market || ""}
+                  onChange={(e) => updateFormData({ target_market: e.target.value })}
+                  placeholder="Who are your target customers?"
                 />
               </div>
-              <Textarea
-                className="min-h-[100px] rounded-xl"
-                value={formData.target_market || ""}
-                onChange={(e) => updateFormData({ target_market: e.target.value })}
-                placeholder="Who are your target customers?"
-              />
             </div>
           </div>
 
@@ -214,7 +218,7 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
             subtitle="What makes your business unique?"
           />
 
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Competitive Advantage / USP</Label>
@@ -225,7 +229,7 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
                 />
               </div>
               <Textarea
-                className="min-h-[100px] rounded-xl"
+                className="min-h-[120px] rounded-xl"
                 value={formData.competitive_advantage || ""}
                 onChange={(e) => updateFormData({ competitive_advantage: e.target.value })}
                 placeholder="Explain your unique selling proposition..."
@@ -242,7 +246,7 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
                 />
               </div>
               <Textarea
-                className="min-h-[100px] rounded-xl"
+                className="min-h-[120px] rounded-xl"
                 value={formData.promoter_experience || ""}
                 onChange={(e) => updateFormData({ promoter_experience: e.target.value })}
                 placeholder="Describe your relevant experience and qualifications..."

@@ -100,6 +100,47 @@ def pof(num, den):
     try:    return f"{float(num)/float(den)*100:.1f}%"
     except: return "N/A"
 
+def _o1_expense_breakdown(cma: dict, inp: dict) -> dict:
+    """Section O1's itemized monthly expense rows — reconciled to foot exactly
+    to their own displayed Sub-Total Fixed / Sub-Total Variable / TOTAL MONTHLY
+    EXPENSES.
+
+    BUG FIX: "fixed_total"/"variable_total"/"total_monthly_exp" are synced to
+    the annual income-statement's Year-1 figures (P1: Master Engine Sync in
+    generator.py) — which apply a PF/benefits loading to salary that
+    monthly_pnl.py's own (unsynced) "fixed_salary" never did. That left this
+    table's own listed rows short of its own displayed total whenever that
+    loading applied. Salary is derived as the residual against the
+    authoritative fixed_total; the "other variable" items are scaled
+    proportionally (relative shares preserved) against the authoritative
+    variable_total — same technique used for Section D2's capacity fix.
+    """
+    rent        = float(cma.get("rent") or inp.get("rent", 0) or inp.get("monthly_rent", 0) or 0)
+    fixed_total = float(cma.get("fixed_total", 0) or 0)
+    salary      = max(fixed_total - rent, 0)
+
+    cogs         = float(cma.get("cogs_monthly", cma.get("raw_material_monthly", 0)) or 0)
+    marketing    = float(cma.get("mktg_monthly", 0) or 0)
+    variable_total = float(cma.get("variable_total", 0) or 0)
+    other_items = {
+        "stationery":           float(inp.get("stationery",           0) or 0),
+        "electricity_water":    float(inp.get("electricity_water",    0) or 0),
+        "repair_maintenance":   float(inp.get("repair_maintenance",   0) or 0),
+        "transport_conveyance": float(inp.get("transport_conveyance", 0) or 0),
+        "telephone_internet":   float(inp.get("telephone_internet",   0) or 0),
+        "miscellaneous":        float(inp.get("miscellaneous",        0) or 0),
+    }
+    other_var_raw    = sum(other_items.values())
+    other_var_target = max(variable_total - cogs - marketing, 0)
+    other_scale      = (other_var_target / other_var_raw) if other_var_raw else 1
+
+    return {
+        "rent": rent, "salary": salary, "fixed_total": fixed_total,
+        "cogs": cogs, "marketing": marketing, "variable_total": variable_total,
+        "total_monthly_exp": float(cma.get("total_monthly_exp", 0) or 0),
+        **{k: v * other_scale for k, v in other_items.items()},
+    }
+
 def _fmt_payback(cma):
     """Return payback months as string or 'N/A' — never '0 months'."""
     if cma.get("payback_not_achievable"):
@@ -1535,21 +1576,22 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ════════════════════════════════════════════════════════════════
     SEC("SECTION O — MONTHLY INCOME & EXPENDITURE ANALYSIS", story)
     H2("O1. Monthly Expense Breakdown", story)
+    _o1 = _o1_expense_breakdown(cma, inp)
     exp_rows = [
         ["Expense Head","Amount (Rs./Month)","Type"],
-        ["Rent",                       rs(cma.get("rent") or inp.get("rent", 0) or inp.get("monthly_rent", 0)), "Fixed"],
-        ["Salary & Wages (all staff)",     rs(cma.get("fixed_salary", 0)),         "Fixed"],
-        ["Sub-Total Fixed",            rs((cma.get("rent") or inp.get("rent", 0) or inp.get("monthly_rent", 0)) + cma.get("fixed_salary", 0)), ""],
-        ["Raw Material / COGS",        rs(cma.get("cogs_monthly", cma.get("raw_material_monthly", 0))), "Variable"],
-        ["Stationery / Office",        rs(inp.get("stationery",0)),     "Variable"],
-        ["Electricity & Water",        rs(inp.get("electricity_water",0)),"Variable"],
-        ["Repair & Maintenance",       rs(inp.get("repair_maintenance",0)),"Variable"],
-        ["Transport & Conveyance",     rs(inp.get("transport_conveyance",0)),"Variable"],
-        ["Telephone & Internet",       rs(inp.get("telephone_internet",0)),"Variable"],
-        ["Marketing & Advertising",    rs(cma.get("mktg_monthly", 0)),  "Variable"],
-        ["Miscellaneous",              rs(inp.get("miscellaneous",0)),  "Variable"],
-        ["Sub-Total Variable",         rs(cma.get("variable_total", 0)),""],
-        ["TOTAL MONTHLY EXPENSES",     rs(cma.get("total_monthly_exp", 0)),""],
+        ["Rent",                       rs(_o1["rent"]), "Fixed"],
+        ["Salary & Wages (all staff)",     rs(_o1["salary"]),         "Fixed"],
+        ["Sub-Total Fixed",            rs(_o1["fixed_total"]), ""],
+        ["Raw Material / COGS",        rs(_o1["cogs"]), "Variable"],
+        ["Stationery / Office",        rs(_o1["stationery"]),     "Variable"],
+        ["Electricity & Water",        rs(_o1["electricity_water"]),"Variable"],
+        ["Repair & Maintenance",       rs(_o1["repair_maintenance"]),"Variable"],
+        ["Transport & Conveyance",     rs(_o1["transport_conveyance"]),"Variable"],
+        ["Telephone & Internet",       rs(_o1["telephone_internet"]),"Variable"],
+        ["Marketing & Advertising",    rs(_o1["marketing"]),  "Variable"],
+        ["Miscellaneous",              rs(_o1["miscellaneous"]),  "Variable"],
+        ["Sub-Total Variable",         rs(_o1["variable_total"]),""],
+        ["TOTAL MONTHLY EXPENSES",     rs(_o1["total_monthly_exp"]),""],
     ]
     exp_t = Table(exp_rows, colWidths=[90*mm,50*mm,30*mm])
     exp_t.setStyle(BTS())

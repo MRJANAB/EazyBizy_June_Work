@@ -905,5 +905,59 @@ class TestPdfProjectCostItems:
         assert sum(i["amount"] for i in items) == scheme_data["fixed_project_cost"]
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF Section O1 — itemized rows must foot to their own displayed totals
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestO1ExpenseBreakdown:
+    def test_salary_residual_absorbs_pf_benefits_loading(self):
+        # BUG FIX (pinned): income_statement.py loads Year-1 salary by
+        # hr_perquisites_rate (10% default) when computing the authoritative
+        # "fixed_total" that P1 sync writes into cma, but monthly_pnl.py's own
+        # "fixed_salary" (raw, no loading) fed this table directly — so the
+        # displayed rows summed to Rs.6,400 less than "TOTAL MONTHLY EXPENSES"
+        # for this exact fixture. Salary must now absorb that loading as the
+        # residual against fixed_total, so Rent + Salary == fixed_total exactly.
+        from pdf.builder import _o1_expense_breakdown
+        cma = {
+            "rent": 0, "fixed_total": 70400,          # 64,000 salary x 1.10 PF loading
+            "cogs_monthly": 45900, "mktg_monthly": 22950,
+            "variable_total": 98450, "total_monthly_exp": 168850,
+        }
+        inp = {
+            "stationery": 2500, "electricity_water": 12600, "repair_maintenance": 2000,
+            "transport_conveyance": 6000, "telephone_internet": 1500, "miscellaneous": 5000,
+        }
+        row = _o1_expense_breakdown(cma, inp)
+        assert row["rent"] + row["salary"] == row["fixed_total"] == 70400
+        assert row["salary"] == 70400  # the old bug would have shown 64,000 here
+        other_sum = (
+            row["stationery"] + row["electricity_water"] + row["repair_maintenance"]
+            + row["transport_conveyance"] + row["telephone_internet"] + row["miscellaneous"]
+        )
+        assert round(row["cogs"] + row["marketing"] + other_sum, 2) == row["variable_total"] == 98450
+        assert round(row["fixed_total"] + row["variable_total"], 2) == row["total_monthly_exp"] == 168850
+
+    def test_no_drift_when_raw_items_already_match_totals(self):
+        # When the raw itemized inputs already tie out exactly to the
+        # authoritative totals, the scale factor must be a no-op (1.0) — this
+        # fix should never distort an already-correct breakdown.
+        from pdf.builder import _o1_expense_breakdown
+        cma = {
+            "rent": 10000, "fixed_total": 74000,
+            "cogs_monthly": 472800, "mktg_monthly": 2500,
+            "variable_total": 504900, "total_monthly_exp": 578900,
+        }
+        inp = {
+            "stationery": 2500, "electricity_water": 12600, "repair_maintenance": 2000,
+            "transport_conveyance": 6000, "telephone_internet": 1500, "miscellaneous": 5000,
+        }
+        row = _o1_expense_breakdown(cma, inp)
+        assert row["salary"] == 64000
+        assert row["stationery"] == 2500
+        assert row["electricity_water"] == 12600
+        assert row["miscellaneous"] == 5000
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

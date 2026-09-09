@@ -247,7 +247,7 @@ def validate_report_data(report_data: dict, cma: dict, dpr: dict, inp: dict):
         )
 
 
-def _build_project_cost_items(project: dict, wc_sched: list, industry: str = "manufacturing") -> list:
+def _build_project_cost_items(project: dict, wc_sched: list, industry: str = "manufacturing", machinery_gross: float = 0.0) -> list:
     """Build project cost line items whose sum equals total project cost (Fix #1)."""
     items = []
     code = 1
@@ -260,10 +260,15 @@ def _build_project_cost_items(project: dict, wc_sched: list, industry: str = "ma
         items.append({"code": code, "particulars": "Building / Civil Works", "amount": building})
         code += 1
     industry_key = str(industry or "manufacturing").lower()
-    machinery_total = sum(
+    _raw_machinery_total = sum(
         float(m.get("quantity", 1)) * float(m.get("unit_price", 0))
         for m in project.get("machinery_items", [])
     ) + float(project.get("tools_installation", 0) or 0)
+    # Use the contingency-loaded Gross Block figure when available — it's what
+    # Means of Finance and the term-loan/equity split are actually sized against.
+    # Falling back to the raw sum made "Initial Project Investment" silently
+    # understate the true fixed cost by the whole contingency amount.
+    machinery_total = float(machinery_gross) if machinery_gross > 0 else _raw_machinery_total
     if machinery_total > 0:
         if industry_key in ("service", "services"):
             machinery_label = "Office Infrastructure, Service Equipment & Tools"
@@ -541,7 +546,7 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
     # that may include/exclude WC differently). This total is used for ALL ROI,
     # D:E, and asset-turnover calculations to guarantee cross-section consistency.
     _industry_key   = str(business.get("industry_type", "") or inp.get("industry", "manufacturing")).lower()
-    _pc_items       = _build_project_cost_items(project, wc_sched, _industry_key)
+    _pc_items       = _build_project_cost_items(project, wc_sched, _industry_key, float(dep.get("machinery_gross", 0) or 0))
     _pc_items_sum   = R(sum(item["amount"] for item in _pc_items), 2)
     _scheme_pc      = float(scheme.get("project_cost", 0) or 0)
     # If line items sum to non-zero, use that; fall back to scheme total only when
@@ -762,7 +767,7 @@ def _build_dpr_from_report(
     wc_loan = float(wc_sched[0].get("bank_loan", 0) if wc_sched else scheme.get("wc_loan", 0) or 0)
     promoter = float(scheme.get("promoter_amount", 0) or 0)
     # Compute master project cost from line items (same logic as generate_pdf's _total_pc)
-    _dpr_pc_items = _build_project_cost_items(project or {}, wc_sched, inp.get("industry", inp.get("industry_type", "manufacturing")))
+    _dpr_pc_items = _build_project_cost_items(project or {}, wc_sched, inp.get("industry", inp.get("industry_type", "manufacturing")), float(dep.get("machinery_gross", 0) or 0))
     _dpr_pc_sum   = R(sum(item["amount"] for item in _dpr_pc_items), 2)
     _scheme_pc    = float(scheme.get("project_cost", tl + promoter) or 0)
     total_proj    = _dpr_pc_sum if _dpr_pc_sum > 0 else _scheme_pc
@@ -795,7 +800,10 @@ def _build_dpr_from_report(
     }
 
     # Term loan dict — Fix #5: schedule rows match actual loan tenure (not hardcoded 5)
-    hi = R(tl / max(tenure_yrs * 2, 1))
+    # Read the half-yearly instalment straight off the actual schedule rather than
+    # recomputing tl/(tenure_yrs*2) — that formula ignores moratorium and disagrees
+    # with the schedule's own principal_repaid figures whenever moratorium > 0.
+    hi = R(loan_sched[0]["half_yearly_instalment"]) if loan_sched else 0.0
     tl_schedule = [
         {
             "year":             r["year"],

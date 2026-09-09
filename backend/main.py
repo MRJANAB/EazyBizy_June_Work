@@ -660,7 +660,10 @@ def dpr_from_cma(d: dict, cma: dict, industry: str) -> dict:
         "term_loan": {
             "amount": term_loan,
             "interest_rate": d.get("term_loan_interest", 0),
-            "half_yearly_instalment": R(term_loan / max(d.get("loan_tenure_years", 5) * 2, 1), 2),
+            # Read off the actual schedule rather than recomputing term_loan/(tenure*2) —
+            # that formula ignores moratorium and disagrees with the schedule's own
+            # principal_repaid figures whenever moratorium > 0.
+            "half_yearly_instalment": R(yr_schedule[0].get("half_yearly_instalment", 0), 2) if yr_schedule else 0.0,
             "total_interest": R(cma.get("total_interest_outgo", 0), 2),
             "schedule": [
                 {

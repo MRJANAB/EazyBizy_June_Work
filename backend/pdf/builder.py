@@ -141,20 +141,6 @@ def _display_risk_matrix(industry: str) -> list:
         {"category": "Quality Failures", "description": "Rejection, rework, or warranty claims can reduce profitability.", "probability": "Low", "impact": "High", "net_risk": "Medium"},
     ]
 
-def _objective_scorecard_rows(cma: dict, tl_de, total_leverage) -> list:
-    """Display objective credit indicators only; preserves backend score output."""
-    return [
-        ["Metric", "Value", "Benchmark", "View"],
-        ["DSCR (Year 1)", str(cma.get("dscr_y1", 0)), ">= 1.25x", cma.get("dscr_label", "")],
-        ["Average DSCR", str(cma.get("avg_dscr", cma.get("avg_dscr_5yr", 0))), ">= 1.25x", dscr_label(cma.get("avg_dscr", 0))],
-        ["ROI (EBITDA)", rp2(cma.get("roi_ebitda_pct", 0)), "> 15%", "Good" if cma.get("roi_ebitda_pct", 0) > 15 else "Monitor"],
-        ["Current Ratio", r2(cma.get("current_ratio", 0)), "> 1.33", "Good" if cma.get("current_ratio", 0) > 1.33 else "Monitor"],
-        ["D:E (TL / Fixed Equity)", f"{tl_de} : 1", "< 2", "Good" if tl_de < 2 else "High"],
-        ["Total Leverage", f"{total_leverage} : 1", "< 3", "Good" if total_leverage < 3 else "High"],
-        ["Promoter Contribution", rp2(cma.get("promoter_pct", 0)), ">= 10%", "Good" if cma.get("promoter_pct", 0) >= 10 else "Low"],
-        ["Interest Coverage", r2(cma.get("interest_coverage_y1", 0)), "> 2", "Good" if cma.get("interest_coverage_y1", 0) > 2 else "Monitor"],
-    ]
-
 def _scheme_advisory(inp: dict, cma: dict) -> str:
     scheme = str(inp.get("scheme", "")).lower()
     promoter_pct = float(cma.get("promoter_pct", 0) or 0)
@@ -1668,25 +1654,98 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(rep_t)
     NL(story, 5)
 
-    H2("Q2. Return & Efficiency Metrics", story)
-    # Display label only; approved backend ROI denominator is unchanged.
-    ret_t = Table([
-        ["Metric","Value","Metric","Value"],
-        ["ROI (EBITDA)",                  rp2(cma["roi_ebitda_pct"]),  "ROI (PAT)",                 rp2(cma["roi_pat_pct"])],
-        ["EBITDA Margin (EBITDA / Sales)",rp2(cma["ebitda_margin_pct"]),"Net Profit Margin (PAT / Sales)", rp2(cma["net_margin_pct"])],
-        ["Interest Coverage (EBITDA / Int)",r2(cma.get("interest_coverage_y1", 0)),"Asset Turnover (Sales / Investment)", r2(cma.get("asset_turnover_y1", 0))],
-        ["Total TL Interest Outgo",   rs(cma["total_interest_outgo"]),"Net Annual Surplus (PAT - EMI)", rs(R(cma["annual_pat"]-cma["annual_emi"],2))],
-    ], colWidths=[55*mm,30*mm,55*mm,30*mm])
-    ret_t.setStyle(BTS())
-    story.append(ret_t)
+    # Q2 consolidates every ratio previously repeated near-verbatim across the
+    # old Section Q2, Section T1 (Objective Credit Indicators), and Section U
+    # (Key Financial Ratios Summary) into one table — each ratio now appears
+    # exactly once in the report (DSCR itself already appears above, in Q1).
+    H2("Q2. Key Financial Ratios", story)
+    _q2_tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
+    _q2_tot_de = round((pc["term_loan"] + pc.get("wc_loan", 0)) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
+    _q2_net_annual_surplus = R(cma.get("surplus_monthly", 0) * 12, 2)
+    ratios = Table([
+        ["Ratio","Value","Benchmark","Assessment"],
+        ["Current Ratio",              r2(cma["current_ratio"]),      "> 1.33", "Good" if cma["current_ratio"]>1.33 else "Monitor"],
+        ["D:E (TL ÷ Promoter Fixed Equity)",          str(_q2_tl_de) + " : 1",  "< 2", "Good" if _q2_tl_de < 2 else "High"],
+        ["Total Leverage ((TL+WC) ÷ Total Promoter)", str(_q2_tot_de) + " : 1", "< 3", "Good" if _q2_tot_de < 3 else "High"],
+        ["Promoter Contribution",      rp2(cma["promoter_pct"]),       "> 10%", "Good" if cma["promoter_pct"]>10 else "Low"],
+        ["EBITDA Margin (EBITDA / Sales)",     rp2(cma["ebitda_margin_pct"]), "> 20%", "Good" if cma["ebitda_margin_pct"]>20 else "Monitor"],
+        ["Net Profit Margin (PAT / Sales)",    rp2(cma["net_margin_pct"]),    "> 10%", "Good" if cma["net_margin_pct"]>10 else "Monitor"],
+        ["ROI (EBITDA)",               rp2(cma["roi_ebitda_pct"]),    "> 15%",  "Good" if cma["roi_ebitda_pct"]>15 else "Monitor"],
+        ["ROI (PAT)",                  rp2(cma["roi_pat_pct"]),       "> 10%",  "Good" if cma["roi_pat_pct"]>10 else "Monitor"],
+        ["Interest Coverage (EBITDA / Int)",   r2(cma.get("interest_coverage_y1", 0)), "> 2", "Good" if cma.get("interest_coverage_y1", 0)>2 else "Monitor"],
+        ["Asset Turnover (Sales / Investment)",r2(cma.get("asset_turnover_y1", 0)),    "> 1", "Good" if cma.get("asset_turnover_y1", 0)>1 else "Monitor"],
+        ["Total TL Interest Outgo",    rs(cma["total_interest_outgo"]), "—", "—"],
+        ["Net Annual Surplus (PAT + Dep - TL Principal)", rs(_q2_net_annual_surplus), "> 0", "Positive" if _q2_net_annual_surplus>0 else "Negative"],
+    ], colWidths=[65*mm,28*mm,30*mm,47*mm])
+    ratios.setStyle(BTS())
+    story.append(ratios)
     NL(story, 2)
     story.append(Paragraph(
-        "ROI (EBITDA) = EBITDA / Initial Project Investment x 100  |  ROI (PAT) = PAT / Initial Project Investment x 100  |  Margins = Profit / Sales Revenue x 100",
+        "ROI (EBITDA) = EBITDA / Initial Project Investment x 100  |  ROI (PAT) = PAT / Initial Project Investment x 100  |  "
+        "Margins = Profit / Sales Revenue x 100  |  D:E: Term Loan D:E = TL / promoter fixed equity; "
+        "Total leverage = total debt / total promoter contribution.",
         ST["small"]))
+    NL(story, 2)
+    # Item #7: D:E Risk Warning — flag aggressive leverage without blocking
+    _de_tl_warn   = _q2_tl_de > 3
+    _de_tot_warn  = _q2_tot_de > 4
+    if _de_tl_warn or _de_tot_warn:
+        _de_warn_parts = []
+        if _de_tl_warn:
+            _de_warn_parts.append(f"Term Loan D:E of {_q2_tl_de}:1 exceeds 3:1")
+        if _de_tot_warn:
+            _de_warn_parts.append(f"Total Debt D:E of {_q2_tot_de}:1 exceeds 4:1")
+        _de_warn_tbl = Table(
+            [[Paragraph(
+                "⚠ High Leverage: " + " | ".join(_de_warn_parts) + ". "
+                "High leverage may reduce loan approval probability. "
+                "Consider increasing promoter equity or reducing borrowing.",
+                ST["small"]
+            )]],
+            colWidths=[170*mm]
+        )
+        _de_warn_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), AMB),
+            ("TOPPADDING",    (0,0),(-1,-1), 5),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ]))
+        story.append(_de_warn_tbl)
+        NL(story, 2)
+
+    # Item #11: Profitability Trend Warning — flag future-year deterioration
+    _trend_warnings = []
+    for _i, _yr in enumerate(cma.get("projections_5yr", []), start=1):
+        _yr_ebitda = float(_yr.get("ebitda", 0) or 0)
+        _yr_pat    = float(_yr.get("net_profit", _yr.get("profit_after_tax", 0)) or 0)
+        _yr_dscr   = float(_yr.get("dscr", 0) or 0)
+        if _yr_ebitda < 0:
+            _trend_warnings.append(f"Year {_i}: EBITDA turns negative (Rs.{_yr_ebitda:,.0f})")
+        elif _yr_pat < 0:
+            _trend_warnings.append(f"Year {_i}: PAT turns negative (Rs.{_yr_pat:,.0f})")
+        elif _yr_dscr > 0 and _yr_dscr < 1.0:
+            _trend_warnings.append(f"Year {_i}: DSCR falls below 1.0 ({_yr_dscr}x)")
+    if _trend_warnings:
+        NL(story, 2)
+        _trend_tbl = Table(
+            [[Paragraph(
+                "⚠ Projected Financial Stress in Later Years: " + " | ".join(_trend_warnings) + ". "
+                "Review long-term revenue growth and cost assumptions.",
+                ST["small"]
+            )]],
+            colWidths=[170*mm]
+        )
+        _trend_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0),(-1,-1), AMB),
+            ("TOPPADDING",    (0,0),(-1,-1), 5),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ]))
+        story.append(_trend_tbl)
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
-    # SECTION Q2 — PROMOTER NET WORTH
+    # SECTION Q3 — PROMOTER NET WORTH
     # ════════════════════════════════════════════════════════════════
     pnw = cma.get("promoter_net_worth", {})
     if pnw and any(float(v or 0) > 0 for v in pnw.values()):
@@ -1718,6 +1777,29 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             f"Promoter's net worth of Rs.{_net_nw:,.0f} provides additional comfort to the lending institution.",
             ST["small"]))
         NL(story, 5)
+
+    # Q4 — moved here from the old, now-removed Section T (Credit Scorecard &
+    # Recommendation) since T1's "Objective Credit Indicators" table duplicated
+    # every metric already shown in Q1/Q2 above; only this verdict was unique.
+    H2("Q4. Internal Viability Assessment", story)
+    fa_t = Table([
+        ["Internal Viability Grade","Feasibility Assessment","Risk Level","Weighted Score"],
+        [cma["credit_rating"], _rec_display, cma["risk_level"], str(cma["total_score"])],
+    ], colWidths=[42.5*mm]*4)
+    fa_t.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),DG),("TEXTCOLOR",(0,0),(-1,0),W),
+        ("FONTNAME",(0,0),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),10),
+        ("ALIGN",(0,0),(-1,-1),"CENTER"),("BACKGROUND",(0,1),(-1,1),LG),
+        ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+        ("GRID",(0,0),(-1,-1),0.5,W),
+    ]))
+    story.append(fa_t)
+    NL(story, 2)
+    story.append(Paragraph(
+        "Subjective factors such as market opportunity, competitive position, and business model are excluded "
+        "from the ratio table above. This grade may still use the approved backend scoring engine.",
+        ST["small"]))
+    PB(story)
 
     # ════════════════════════════════════════════════════════════════
     # SECTION R — 5-YEAR PROJECTIONS (CMA)
@@ -1773,128 +1855,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
-    # SECTION T — CREDIT SCORECARD & RECOMMENDATION
+    # SECTION T — PROFITABILITY INDEX (DPR Sheet 15)
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION T — CREDIT SCORECARD & RECOMMENDATION", story)
-    H2("T1. Objective Credit Indicators", story)
-    _score_tl_de = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
-    _score_total_leverage = round((pc["term_loan"] + pc.get("wc_loan", 0)) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
-    sc_rows = _objective_scorecard_rows(cma, _score_tl_de, _score_total_leverage)
-    sc_t = Table(sc_rows, colWidths=[62*mm,30*mm,35*mm,43*mm])
-    sc_t.setStyle(BTS()); sc_t.setStyle(TOT(len(sc_rows)-1))
-    story.append(sc_t)
-    NL(story, 2)
-    story.append(Paragraph(
-        "Subjective factors such as market opportunity, competitive position, and business model are excluded from this displayed scorecard. "
-        "Internal viability grade may still use the approved backend scoring engine.",
-        ST["small"]))
-    NL(story, 5)
-
-    H2("T2. Internal Viability Assessment", story)
-    fa_t = Table([
-        ["Internal Viability Grade","Feasibility Assessment","Risk Level","Weighted Score"],
-        [cma["credit_rating"], _rec_display, cma["risk_level"], str(cma["total_score"])],
-    ], colWidths=[42.5*mm]*4)
-    fa_t.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),DG),("TEXTCOLOR",(0,0),(-1,0),W),
-        ("FONTNAME",(0,0),(-1,1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),10),
-        ("ALIGN",(0,0),(-1,-1),"CENTER"),("BACKGROUND",(0,1),(-1,1),LG),
-        ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
-        ("GRID",(0,0),(-1,-1),0.5,W),
-    ]))
-    story.append(fa_t)
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION U — KEY FINANCIAL RATIOS
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION U — KEY FINANCIAL RATIOS SUMMARY", story)
-    # FIX #10: separate TL-only D:E from total leverage D:E for banker clarity
-    _u_tl_de = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
-    _u_tot_de = round((pc["term_loan"] + pc.get("wc_loan", 0)) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
-    ratios = Table([
-        ["Ratio","Value","Benchmark","Assessment"],
-        ["Current Ratio",              r2(cma["current_ratio"]),      "> 1.33", "Good" if cma["current_ratio"]>1.33 else "Monitor"],
-        ["EBITDA Margin %",            rp2(cma["ebitda_margin_pct"]), "> 20%",  "Good" if cma["ebitda_margin_pct"]>20 else "Monitor"],
-        ["Net Profit Margin %",        rp2(cma["net_margin_pct"]),    "> 10%",  "Good" if cma["net_margin_pct"]>10 else "Monitor"],
-        ["DSCR (Year 1)",              str(cma["dscr_y1"]),           f">{float(cma.get('dscr_benchmark',1.25) or 1.25)}", cma["dscr_label"]],
-        ["Avg DSCR (5-Year)",          str(cma.get("avg_dscr", 0)),   f">{float(cma.get('dscr_benchmark',1.25) or 1.25)}", dscr_label(cma.get("avg_dscr", 0))],
-        ["ROI (EBITDA)",               rp2(cma["roi_ebitda_pct"]),    "> 15%",  "Good" if cma["roi_ebitda_pct"]>15 else "Monitor"],
-        ["D:E (TL ÷ Promoter Fixed Equity)",          str(_u_tl_de) + " : 1",  "< 2", "Good" if _u_tl_de < 2 else "High"],
-        ["Total Leverage ((TL+WC) ÷ Total Promoter)", str(_u_tot_de) + " : 1", "< 3", "Good" if _u_tot_de < 3 else "High"],
-        ["Interest Coverage",          r2(cma.get("interest_coverage_y1", 0)), "> 2", "Good" if cma.get("interest_coverage_y1", 0)>2 else "Monitor"],
-        ["Asset Turnover (Sales/Investment)", r2(cma.get("asset_turnover_y1", 0)), "> 1", "Good" if cma.get("asset_turnover_y1", 0)>1 else "Monitor"],
-        ["Promoter Contribution",      rp2(cma["promoter_pct"]),       "> 10%", "Good" if cma["promoter_pct"]>10 else "Low"],
-    ], colWidths=[65*mm,28*mm,30*mm,47*mm])
-    ratios.setStyle(BTS())
-    story.append(ratios)
-    NL(story, 3)
-    story.append(Paragraph(
-        "<b>D:E Formula Note:</b> Term Loan D:E = TL / promoter fixed equity. "
-        "Total leverage = total debt / total promoter contribution.",
-        ST["small"]))
-    NL(story, 2)
-    # Item #7: D:E Risk Warning — flag aggressive leverage without blocking
-    _de_tl_warn   = _u_tl_de > 3
-    _de_tot_warn  = _u_tot_de > 4
-    if _de_tl_warn or _de_tot_warn:
-        _de_warn_parts = []
-        if _de_tl_warn:
-            _de_warn_parts.append(f"Term Loan D:E of {_u_tl_de}:1 exceeds 3:1")
-        if _de_tot_warn:
-            _de_warn_parts.append(f"Total Debt D:E of {_u_tot_de}:1 exceeds 4:1")
-        _de_warn_tbl = Table(
-            [[Paragraph(
-                "⚠ High Leverage: " + " | ".join(_de_warn_parts) + ". "
-                "High leverage may reduce loan approval probability. "
-                "Consider increasing promoter equity or reducing borrowing.",
-                ST["small"]
-            )]],
-            colWidths=[170*mm]
-        )
-        _de_warn_tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0,0),(-1,-1), AMB),
-            ("TOPPADDING",    (0,0),(-1,-1), 5),
-            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
-            ("LEFTPADDING",   (0,0),(-1,-1), 8),
-        ]))
-        story.append(_de_warn_tbl)
-
-    # Item #11: Profitability Trend Warning — flag future-year deterioration
-    _trend_warnings = []
-    for _i, _yr in enumerate(cma.get("projections_5yr", []), start=1):
-        _yr_ebitda = float(_yr.get("ebitda", 0) or 0)
-        _yr_pat    = float(_yr.get("net_profit", _yr.get("profit_after_tax", 0)) or 0)
-        _yr_dscr   = float(_yr.get("dscr", 0) or 0)
-        if _yr_ebitda < 0:
-            _trend_warnings.append(f"Year {_i}: EBITDA turns negative (Rs.{_yr_ebitda:,.0f})")
-        elif _yr_pat < 0:
-            _trend_warnings.append(f"Year {_i}: PAT turns negative (Rs.{_yr_pat:,.0f})")
-        elif _yr_dscr > 0 and _yr_dscr < 1.0:
-            _trend_warnings.append(f"Year {_i}: DSCR falls below 1.0 ({_yr_dscr}x)")
-    if _trend_warnings:
-        NL(story, 2)
-        _trend_tbl = Table(
-            [[Paragraph(
-                "⚠ Projected Financial Stress in Later Years: " + " | ".join(_trend_warnings) + ". "
-                "Review long-term revenue growth and cost assumptions.",
-                ST["small"]
-            )]],
-            colWidths=[170*mm]
-        )
-        _trend_tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0,0),(-1,-1), AMB),
-            ("TOPPADDING",    (0,0),(-1,-1), 5),
-            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
-            ("LEFTPADDING",   (0,0),(-1,-1), 8),
-        ]))
-        story.append(_trend_tbl)
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION V — PROFITABILITY INDEX (DPR Sheet 15)
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION V — PROFITABILITY INDEX (Based on Year 3)", story)
+    SEC("SECTION T — PROFITABILITY INDEX (Based on Year 3)", story)
     ref_t = Table([
         ["Reference Sales (Rs.)","Total Investment (Rs.)","Capital Employed (Rs.)"],
         [r(prof["sales"]), r(prof["total_investment"]), r(prof["capital_employed"])],
@@ -2073,10 +2036,10 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ST["small"]))
 
     # ════════════════════════════════════════════════════════════════
-    # SECTION W — FORM IV (COMPARATIVE STATEMENT)
+    # SECTION U — FORM IV (COMPARATIVE STATEMENT)
     # ════════════════════════════════════════════════════════════════
     PB(story)
-    SEC("SECTION W — FORM IV: COMPARATIVE CURRENT ASSETS & LIABILITIES", story)
+    SEC("SECTION U — FORM IV: COMPARATIVE CURRENT ASSETS & LIABILITIES", story)
     fiv = dpr.get("form_iv", [])
     if fiv:
         fiv_rows = [

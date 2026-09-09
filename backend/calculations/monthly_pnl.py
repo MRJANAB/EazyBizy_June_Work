@@ -10,7 +10,7 @@ CA Rule (PDF §7.5):
   Net Cash Surplus = PAT + Monthly Dep - Monthly Principal
   NOT: PAT - Full EMI (double-counts interest already in PAT)
 """
-from core.engine import R, calc_emi, annual_revenue_from_prod, get_industry_defaults
+from core.engine import R, annual_revenue_from_prod, get_industry_defaults
 
 _DEFAULT_TAX = 0.25
 
@@ -126,11 +126,14 @@ def calculate_monthly_pnl(
     ebitda      = R(monthly_rev - total_opex)
     monthly_dep = R(annual_dep / 12)
 
-    # EMI is for TERM LOAN only. WC interest is separate (revolving facility).
+    # "EMI" here means Year-1 TL debt service (interest + principal) — read off the
+    # actual half-yearly reducing-balance schedule below, NOT calc_emi()'s standard
+    # monthly-compounding formula. This platform never uses EMI for the TL; calc_emi()
+    # ignored moratorium entirely and disagreed with every other TL figure in the report.
     term_loan  = float(scheme_data.get("term_loan", 0) or 0)
-    emi        = R(calc_emi(term_loan, rate_pct, tenure_mo), 2) if term_loan and tenure_mo else 0.0
     monthly_int       = R(float(loan_schedule[0]["interest_paid"]) / 12)   # TL interest only
     monthly_principal = R(float(loan_schedule[0]["principal_paid"]) / 12)  # TL principal only
+    emi        = R(monthly_int + monthly_principal, 2)
     # Add WC interest (separate revolving charge)
     wc_y1 = wc_schedule[0] if wc_schedule else {}
     monthly_wc_int = R(float(wc_y1.get("wc_interest", 0) or 0) / 12)

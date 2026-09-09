@@ -156,6 +156,27 @@ class TestLoanSchedule:
         assert rows[3]["principal_paid"] == 0
         assert rows[4]["principal_paid"] == 0
 
+    def test_half_yearly_instalment_is_moratorium_aware(self):
+        # BUG FIX: pdf/generator.py and main.py each independently recomputed
+        # half_yearly_instalment as term_loan/(tenure_years*2), ignoring
+        # moratorium entirely — disagreeing with this function's own schedule
+        # rows whenever moratorium > 0. Both callers now read the value off
+        # these rows instead of recomputing it. Pin the correct math here:
+        # instalment must be spread over the REPAYMENT years only.
+        from calculations.loan_schedule import calculate_loan_schedule
+        data = _make_data(assumptions=_make_assumptions(
+            tenure_months=60, moratorium_months=12, interest_rate_pct=10.5,
+        ))
+        rows = calculate_loan_schedule(data, {"term_loan": 283830})
+        tenure_years, moratorium_years = 5, 1
+        repay_years = tenure_years - moratorium_years
+        expected_wrong  = R(283830 / (tenure_years * 2), 2)   # the bug's formula
+        expected_correct = R(283830 / (repay_years * 2), 2)
+        assert rows[0]["half_yearly_instalment"] == expected_correct
+        assert rows[0]["half_yearly_instalment"] != expected_wrong
+        # And it must actually match the schedule's own principal repayments.
+        assert rows[1]["principal_paid"] == R(expected_correct * 2, 2)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Depreciation
@@ -465,6 +486,35 @@ class TestIncomeStatement:
             f"Monthly COGS×12 {monthly_cogs12} ≠ Annual COGS {annual_cogs} (gap > Rs.100)"
         )
 
+    def test_emi_is_year1_actual_tl_service_not_flat_emi_formula(self):
+        # BUG FIX: "emi" (displayed in the PDF as "Monthly TL Service") used
+        # calc_emi() — the standard monthly-compounding EMI formula applied to
+        # the full loan/tenure — which ignored moratorium entirely and matched
+        # no real year's actual TL service. It must now equal Year-1's actual
+        # interest+principal off the real half-yearly schedule, so during a
+        # moratorium year (principal=0) it is interest-only, not a phantom EMI.
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.monthly_pnl import calculate_monthly_pnl
+        data = _make_data(assumptions=_make_assumptions(
+            tenure_months=60, moratorium_months=12, interest_rate_pct=10.5,
+        ))
+        scheme = {**SCHEME_PMEGP, "term_loan": 283830}
+        dep  = calculate_depreciation(data, scheme)
+        loan = calculate_loan_schedule(data, scheme)
+        wc   = calculate_wc_by_year(data, scheme)
+        monthly = calculate_monthly_pnl(data, scheme, dep, loan, wc)
+        # emi = rounded monthly interest + rounded monthly principal, matching
+        # how monthly_int/monthly_principal are already rounded elsewhere in
+        # this same function (R()'s default is whole-rupee rounding).
+        expected = R(R(loan[0]["interest_paid"] / 12) + R(loan[0]["principal_paid"] / 12), 2)
+        assert monthly["emi"] == expected
+        # Year 1 is a moratorium year: no principal, so emi is interest-only —
+        # nowhere near the old flat-EMI formula's answer for this fixture.
+        old_wrong = R(calc_emi(283830, 10.5, 60), 2)
+        assert abs(monthly["emi"] - old_wrong) > 1000
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. DSCR
@@ -757,6 +807,45 @@ class TestEngineHelpers:
         assert emi > 0
         # Total repayment should be more than principal (interest)
         assert emi * 60 > 1000000
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF project cost items — must match the actual financed (contingency-loaded) basis
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestPdfProjectCostItems:
+    def test_machinery_line_uses_loaded_gross_not_raw_sum(self):
+        # BUG FIX: the "Initial Project Investment" table's equipment line used
+        # the raw machinery_items sum, while Means of Finance / Gross Block
+        # elsewhere in the same PDF used the contingency-loaded figure — making
+        # the headline investment total silently understate what's actually
+        # being financed by the whole contingency amount. The items builder now
+        # takes the loaded Gross Block figure and uses it when provided.
+        from pdf.generator import _build_project_cost_items
+        project = {
+            "building_cost": 300000,
+            "machinery_items": [
+                {"quantity": 1, "unit_price": 18000},
+                {"quantity": 1, "unit_price": 35000},
+                {"quantity": 1, "unit_price": 12000},
+                {"quantity": 1, "unit_price": 12000},
+                {"quantity": 2, "unit_price": 15000},
+            ],  # raw sum = 107,000
+            "preliminary_expenses": 50000,
+        }
+        wc_sched = [{"margin": 929145}]
+        loaded_gross = 123050  # 107,000 x 1.15 (15% contingency)
+
+        items_without_loading = _build_project_cost_items(project, wc_sched, "service")
+        items_with_loading    = _build_project_cost_items(project, wc_sched, "service", machinery_gross=loaded_gross)
+
+        equip_raw   = next(i for i in items_without_loading if "Equipment" in i["particulars"])["amount"]
+        equip_loaded = next(i for i in items_with_loading if "Equipment" in i["particulars"])["amount"]
+
+        assert equip_raw == 107000
+        assert equip_loaded == 123050
+        total_with_loading = sum(i["amount"] for i in items_with_loading)
+        assert total_with_loading == 300000 + 123050 + 50000 + 929145
 
 
 if __name__ == "__main__":

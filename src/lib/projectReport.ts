@@ -9,6 +9,7 @@ import {
   calculatePMEGPPromoterContribution,
   calculatePMEGPBankFinance,
 } from "@/lib/loanRulesEngine";
+import { getSchemeRules } from "@/lib/schemeRulesStore";
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(Number(value || 0), min), max);
@@ -92,12 +93,23 @@ const SCHEME_TL_BAND: Record<string, [number, number]> = {
 // percentage a bank offers varies bank-to-bank and must NEVER be force-
 // clamped into this band; getBankFinancePct below only sanity-bounds to
 // 0-100%, it does not enforce the scheme-typical range.
+//
+// Not sourced from the Rules & Rates engine: the DB stores a single
+// term_loan_pct_default per scheme, not a [min,max] range, so there's no
+// backend value to reconcile this band against — it stays a local UI
+// heuristic (only consumed by caAdvisory.ts's advisePromoterMargin, and
+// only for schemes where the user's own % genuinely drives the report).
 export const getBankFinancePctBand = (formData: GTABFormData): [number, number] =>
   SCHEME_TL_BAND[formData.loan_scheme] ?? [0, 100];
 
 export const getBankFinancePct = (formData: GTABFormData) => {
   const merged = mergeProjectReportInputs(formData.project_report_inputs);
-  const raw    = Number(merged.dpr.term_loan_pct || 75);
+  // Prefer the Rules & Rates engine's scheme default (fetched via
+  // useSchemeRules) only when the user hasn't entered anything — schemes
+  // that don't have a configured default (Mudra, PMEGP) keep the flat 75
+  // fallback, which matches backend/models/input_schema.py's own default.
+  const fetchedDefault = getSchemeRules(formData.loan_scheme)?.term_loan_pct_default;
+  const raw = Number(merged.dpr.term_loan_pct || fetchedDefault || 75);
   // Banks set this per their own credit policy — never force it into a
   // scheme-typical band. Only guard basic numeric sanity (0-100%).
   return clamp(raw, 0, 100);
@@ -108,6 +120,14 @@ export const getBankFinancePct = (formData: GTABFormData) => {
 // small-MSME applicants here): WC requirement = 25% of turnover, of which the
 // bank finances a minimum of 20% of turnover = 80% of the assessed
 // requirement, borrower margin = the remaining 20%.
+//
+// This is DELIBERATELY not sourced from the Rules & Rates engine's
+// wc_loan_pct_default (60) — that DB value is the backend's conservative
+// absolute-safety-net fallback (used only if literally nothing is
+// supplied), while 80 here is the Nayak Committee ceiling this form's own
+// default state (types/gtab.ts) initialises every new application to.
+// They intentionally differ; reconciling them would lower every new
+// application's default WC bank-finance % from 80 to 60.
 const NAYAK_COMMITTEE_WC_BANK_FINANCE_PCT = 80;
 
 export const getWorkingCapitalBankFinancePct = (formData: GTABFormData) => {

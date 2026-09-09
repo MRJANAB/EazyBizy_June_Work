@@ -3,7 +3,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GTABFormData } from "@/types/gtab";
+import { GTABFormData, ProjectReportInputs } from "@/types/gtab";
 import { getFinancingPlan, getPromoterEquityPct } from "@/lib/projectReport";
 import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
 import { getStep6Tips } from "@/lib/caGuidance";
@@ -48,7 +48,13 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
+// Schemes where the bank actually sets its own Term Loan / WC Loan % and the
+// backend honours whatever the user enters — PMEGP/Mudra/CGTMSE compute a
+// scheme-mandated split by formula instead, so editing % there wouldn't
+// change the generated report (see schemes/*.py, backend/rules/engine.py).
+const SCHEMES_WITH_BANK_ADJUSTABLE_PCT = ["normal_msme", "msme_psu", "other_scheme"];
+
+const ProjectSummaryStep = ({ formData, updateFormData, totals }: ProjectSummaryStepProps) => {
   const machineryTotal = (formData.plant_machinery || []).reduce(
     (sum, item) => sum + (Number(item.cost) || (Number(item.quantity || 1) * Number(item.unit_cost || 0)) || 0),
     0
@@ -59,6 +65,21 @@ const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
   );
   const promoterEquityPct = getPromoterEquityPct(formData);
   const financingPlan = getFinancingPlan(formData);
+  const report = formData.project_report_inputs;
+  const canAdjustPct = SCHEMES_WITH_BANK_ADJUSTABLE_PCT.includes(formData.loan_scheme);
+
+  const updateReport = (updates: Partial<ProjectReportInputs>) => {
+    updateFormData({
+      project_report_inputs: {
+        ...report,
+        ...updates,
+      },
+    });
+  };
+
+  const updateDpr = (updates: Partial<ProjectReportInputs["dpr"]>) => {
+    updateReport({ dpr: { ...report.dpr, ...updates } });
+  };
 
   // CA standard: project cost = fixed capital + promoter's WC margin only.
   // The full WC requirement is a revolving bank facility — NOT part of project cost.
@@ -168,12 +189,36 @@ const ProjectSummaryStep = ({ formData, totals }: ProjectSummaryStepProps) => {
             <div className="space-y-2">
               <Label>Term Loan Amount (₹)</Label>
               <Input readOnly value={formatCurrency(financingPlan.termLoanAmount)} className="h-12 rounded-xl font-semibold" />
-              <p className="text-xs text-muted-foreground">{financingPlan.termLoanBankFinancePct}% of Fixed Capital, financed by the bank</p>
+              {canAdjustPct ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number" min={0} max={100} className="h-9 w-24 rounded-lg text-sm"
+                      value={report.dpr.term_loan_pct || ""}
+                      placeholder={String(financingPlan.termLoanBankFinancePct)}
+                      onChange={(e) => updateDpr({ term_loan_pct: Math.min(Math.max(Number(e.target.value) || 0, 0), 100) })}
+                    />
+                    <span className="text-xs text-muted-foreground">% of Fixed Capital — set to whatever your bank actually offers</span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {financingPlan.termLoanBankFinancePct}% of Fixed Capital — fixed by {formData.loan_scheme.toUpperCase()} scheme rules, not bank-adjustable
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Working Capital Loan Amount (₹)</Label>
               <Input readOnly value={formatCurrency(financingPlan.workingCapitalLoan)} className="h-12 rounded-xl font-semibold" />
-              <p className="text-xs text-muted-foreground">{financingPlan.wcBankFinancePct}% of monthly working capital requirement</p>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number" min={0} max={100} className="h-9 w-24 rounded-lg text-sm"
+                  value={report.dpr.wc_loan_pct || ""}
+                  placeholder={String(financingPlan.wcBankFinancePct)}
+                  onChange={(e) => updateDpr({ wc_loan_pct: Math.min(Math.max(Number(e.target.value) || 0, 0), 100) })}
+                />
+                <span className="text-xs text-muted-foreground">% of monthly working capital — set to whatever your bank actually offers</span>
+              </div>
             </div>
             {formData.loan_scheme === "pmegp" && (
               <div className="space-y-2">

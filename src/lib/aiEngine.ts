@@ -143,6 +143,10 @@ export function recommendScheme(formData: GTABFormData): SchemeRecommendation {
     subsidyAmt: number,
   ): SchemeOption => ({
     ...base,
+    // Prefer the fetched Rules & Rates benchmark over the caller's local
+    // fallback literal — keeps this comparison table in sync with an
+    // admin edit made via the Rules Admin UI without a code change.
+    minDSCR: getSchemeRules(base.id)?.benchmarks?.dscr_avg ?? base.minDSCR,
     subsidyAmount: subsidyAmt,
     dscrUnderScheme: annualCashAccruals > 0 ? estimateDSCR(annualCashAccruals, effectiveTermLoan, tenureYrs, intRate) : 0,
   });
@@ -397,6 +401,9 @@ export function getFieldBenchmarks(
 
 export function predictViability(formData: GTABFormData): ViabilityPrediction {
   const industry = (formData.industry_type || 'manufacturing').toLowerCase();
+  // Scheme-specific DSCR benchmark (Mudra Shishu/Kishor genuinely need only
+  // 1.10, not the full-CMA 1.25) — prefer the fetched Rules & Rates value.
+  const dscrBenchmark = getSchemeRules(formData.loan_scheme)?.benchmarks?.dscr_avg ?? 1.25;
 
   // ── Revenue ──────────────────────────────────────────────────────────────
   const cats = formData.project_report_inputs?.revenue?.product_categories ?? [];
@@ -474,9 +481,9 @@ export function predictViability(formData: GTABFormData): ViabilityPrediction {
 
   if (dscrEstimate > 0 && dscrEstimate < 1.0) {
     issues.push({ severity: 'error', label: `DSCR ${dscrEstimate.toFixed(2)}x (min 1.0)`, detail: 'Cash flow insufficient to cover loan repayment.', fix: 'Increase revenue, reduce loan amount, or extend tenure to 7 years.' });
-  } else if (dscrEstimate >= 1.0 && dscrEstimate < 1.25) {
-    issues.push({ severity: 'warning', label: `DSCR ${dscrEstimate.toFixed(2)}x (needs 1.25+)`, detail: 'Marginal debt coverage — bank will scrutinize.', fix: 'Consider increasing revenue projections or reducing expenses.' });
-  } else if (dscrEstimate >= 1.25) {
+  } else if (dscrEstimate >= 1.0 && dscrEstimate < dscrBenchmark) {
+    issues.push({ severity: 'warning', label: `DSCR ${dscrEstimate.toFixed(2)}x (needs ${dscrBenchmark}+)`, detail: 'Marginal debt coverage — bank will scrutinize.', fix: 'Consider increasing revenue projections or reducing expenses.' });
+  } else if (dscrEstimate >= dscrBenchmark) {
     strengths.push(`DSCR ${dscrEstimate.toFixed(2)}x — meets bank minimum`);
   }
 
@@ -513,8 +520,8 @@ export function predictViability(formData: GTABFormData): ViabilityPrediction {
   // ── Score ─────────────────────────────────────────────────────────────────
   let score = 60;
   if (monthlyRevenue > 0) score += 10;
-  if (dscrEstimate >= 1.5) score += 20;
-  else if (dscrEstimate >= 1.25) score += 12;
+  if (dscrEstimate >= dscrBenchmark + 0.25) score += 20;
+  else if (dscrEstimate >= dscrBenchmark) score += 12;
   else if (dscrEstimate >= 1.0) score += 5;
   else if (dscrEstimate > 0) score -= 20;
   if (grossMarginPct >= 20) score += 10;
@@ -550,6 +557,7 @@ export function generateBusinessPlanDraft(formData: GTABFormData): string {
   const industry = (formData.industry_type || 'manufacturing').toLowerCase();
   const products = formData.products_services || '';
   const scheme   = formData.loan_scheme || 'MSME';
+  const dscrNorm = getSchemeRules(scheme)?.benchmarks?.dscr_avg ?? 1.25;
   const financing = getFinancingPlan(formData);
   const loanAmt  = financing.totalBankFinance;
   const cats     = formData.project_report_inputs?.revenue?.product_categories ?? [];
@@ -568,7 +576,7 @@ The enterprise will be engaged in the manufacture of ${productList || products |
 The ${industry} sector in ${state} is witnessing sustained growth driven by domestic consumption and government initiatives under the MSME Development Act. The enterprise is well-positioned to cater to local and regional demand with competitive pricing and quality assurance.
 
 **Financial Viability**
-The project has been appraised on a five-year horizon. Revenue projections are based on conservative capacity utilisation of 50% in Year 1, growing to 80% by Year 5. The DSCR exceeds the minimum benchmark of 1.25, confirming adequate cash flow for loan servicing. The break-even point is achievable within the first operational year.
+The project has been appraised on a five-year horizon. Revenue projections are based on conservative capacity utilisation of 50% in Year 1, growing to 80% by Year 5. The DSCR exceeds the minimum benchmark of ${dscrNorm} applicable to the ${scheme.toUpperCase()} scheme, confirming adequate cash flow for loan servicing. The break-even point is achievable within the first operational year.
 
 **Promoter Background**
 ${name} is a qualified and experienced promoter with a sound understanding of the ${industry} sector. The enterprise will create direct employment for skilled and semi-skilled workers, contributing to local economic development.
@@ -585,7 +593,7 @@ The enterprise will render professional services in ${productList || products ||
 The service sector in ${city} presents a growing demand driven by urbanisation, digital adoption, and evolving consumer preferences. The enterprise targets ${cats.length > 0 ? 'multiple service lines as detailed in the revenue schedule' : 'a clearly defined customer segment'}, enabling consistent revenue from the first month of operations.
 
 **Financial Summary**
-The five-year financial projections demonstrate a healthy gross margin and positive cash flow from Year 1. Loan repayment is fully covered by projected cash accruals, with a DSCR above the 1.25 norm applicable to the selected scheme.
+The five-year financial projections demonstrate a healthy gross margin and positive cash flow from Year 1. Loan repayment is fully covered by projected cash accruals, with a DSCR above the ${dscrNorm} norm applicable to the selected scheme.
 
 **Promoter Profile**
 ${name} has the requisite professional background to manage and grow the enterprise. The venture will contribute to local employment and skill development in the service sector.

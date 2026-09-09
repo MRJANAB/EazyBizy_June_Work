@@ -151,7 +151,7 @@ export function useGTABValidation(formData: GTABFormData): GTABValidationResult 
         annualDebtRepayment,
       );
 
-      financialValidation = validateFinancialRatios(ratios);
+      financialValidation = validateFinancialRatios(ratios, formData.loan_scheme);
 
       const applicantAge = pri?.promoter?.date_of_birth
         ? new Date().getFullYear() - new Date(pri.promoter.date_of_birth).getFullYear()
@@ -164,6 +164,7 @@ export function useGTABValidation(formData: GTABFormData): GTABValidationResult 
         ratios,
         applicantAge,
         (formData.business_duration_months || 0) / 12,
+        formData.loan_scheme,
       );
     }
 

@@ -448,9 +448,9 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                     <div className="space-y-2">
                       <Label>State Capital Subsidy % (optional)</Label>
                       <Input type="number" className="h-11 rounded-xl" value={report.dpr.capital_subsidy_pct || 0}
-                        min={0} max={35}
-                        onChange={(e) => updateReport({ dpr: { ...report.dpr, capital_subsidy_pct: Math.min(Math.max(Number(e.target.value), 0), 35) } })} />
-                      <p className="text-xs text-muted-foreground">On fixed assets (land + building + P&amp;M). A source of finance — reduces the amount split by debt:equity. 0 = none.</p>
+                        min={0} max={100}
+                        onChange={(e) => updateReport({ dpr: { ...report.dpr, capital_subsidy_pct: Math.min(Math.max(Number(e.target.value), 0), 100) } })} />
+                      <p className="text-xs text-muted-foreground">On fixed assets (land + building + P&amp;M). Varies by state scheme (commonly up to 35%, higher for some SC/ST/women categories) — enter what your state's notification actually offers. A source of finance — reduces the amount split by debt:equity. 0 = none.</p>
                     </div>
                   )}
 
@@ -480,40 +480,42 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                     </div>
                   </div>
 
-                  {/* Tenure with Select + presets */}
+                  {/* Tenure — free entry (banks vary; presets are shortcuts, not a cap) */}
                   <div className="space-y-2">
-                    <Label>Loan Tenure</Label>
-                    <Select value={String(report.loan.tenure_months || 60)}
-                      onValueChange={(v) => updateSection("loan", { tenure_months: Number(v) })}>
-                      <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[24, 36, 48, 60, 72, 84, 96, 120].map(m => (
-                          <SelectItem key={m} value={String(m)}>{m} months ({(m / 12).toFixed(1)} years)</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Loan Tenure (months)</Label>
+                    <Input type="number" className="h-11 rounded-xl" min={1}
+                      value={report.loan.tenure_months || 60}
+                      onChange={(e) => updateSection("loan", { tenure_months: Math.max(Number(e.target.value) || 0, 1) })} />
+                    <div className="flex gap-1 flex-wrap">
+                      {[24, 36, 48, 60, 72, 84, 96, 120].map(m => (
+                        <button key={m} type="button"
+                          onClick={() => updateSection("loan", { tenure_months: m })}
+                          className={`px-2 py-0.5 rounded text-xs font-medium border transition ${Number(report.loan.tenure_months) === m ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
+                          {m}mo
+                        </button>
+                      ))}
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {isPMEGP ? "PMEGP standard: 3–5 years" : isMudra ? "Mudra: upto 5 years" : "MSME standard: 5–7 years"}
+                      {isPMEGP ? "PMEGP standard: 3–5 years" : isMudra ? "Mudra: upto 5 years" : "MSME standard: 5–7 years"} — enter any tenure your bank has actually sanctioned.
                     </p>
                   </div>
 
-                  {/* Moratorium with Select */}
+                  {/* Moratorium — free entry, presets are shortcuts only */}
                   <div className="space-y-2">
-                    <Label>Moratorium Period</Label>
-                    <Select value={String(report.loan.moratorium_months || 0)}
-                      onValueChange={(v) => updateSection("loan", { moratorium_months: Number(v) })}>
-                      <SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">No Moratorium (0 months)</SelectItem>
-                        <SelectItem value="3">3 months (Quarter)</SelectItem>
-                        <SelectItem value="6">6 months (Half year) ← Standard</SelectItem>
-                        <SelectItem value="9">9 months</SelectItem>
-                        <SelectItem value="12">12 months (1 year)</SelectItem>
-                        <SelectItem value="18">18 months</SelectItem>
-                        <SelectItem value="24">24 months (2 years)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">During moratorium only interest is paid — no principal.</p>
+                    <Label>Moratorium Period (months)</Label>
+                    <Input type="number" className="h-11 rounded-xl" min={0}
+                      value={report.loan.moratorium_months || 0}
+                      onChange={(e) => updateSection("loan", { moratorium_months: Math.max(Number(e.target.value) || 0, 0) })} />
+                    <div className="flex gap-1 flex-wrap">
+                      {[0, 3, 6, 9, 12, 18, 24].map(m => (
+                        <button key={m} type="button"
+                          onClick={() => updateSection("loan", { moratorium_months: m })}
+                          className={`px-2 py-0.5 rounded text-xs font-medium border transition ${Number(report.loan.moratorium_months || 0) === m ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
+                          {m === 0 ? "None" : `${m}mo`}{m === 6 ? " ★" : ""}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">During moratorium only interest is paid — no principal. Enter any period your bank has approved.</p>
                   </div>
 
                   {/* Processing Fee with presets */}

@@ -4,6 +4,8 @@
  * based on industry type + loan scheme combination.
  */
 
+import { getSchemeRules } from "@/lib/schemeRulesStore";
+
 export type Industry = "manufacturing" | "trading" | "service" | "agriculture" | "others";
 export type LoanScheme =
   | "pmegp"
@@ -35,6 +37,14 @@ const isPMEGP = (s: string) => s === "pmegp";
 const isMudra = (s: string) => s.startsWith("mudra");
 const isCGTMSE = (s: string) => s === "cgtmse";
 const isNormal = (s: string) => s === "normal_msme" || s === "other_scheme";
+
+/**
+ * Scheme-specific DSCR benchmark, preferring the fetched Rules & Rates
+ * value (populated via useSchemeRules) over a flat 1.25 fallback — Mudra
+ * Shishu/Kishor genuinely need only 1.10, and an admin-edited benchmark
+ * for any scheme should show up here without a code change.
+ */
+const dscrBenchmarkFor = (scheme: string) => getSchemeRules(scheme)?.benchmarks?.dscr_avg ?? 1.25;
 
 // ─── STEP 3: Business & Loan Details ────────────────────────────────────────
 export function getStep3Tips(ctx: CAContext): string[] {
@@ -196,8 +206,8 @@ export function getStep6Tips(ctx: CAContext): string[] {
     tips.push("Normal MSME: Promoter equity must be invested FIRST (before bank releases funds). Banks typically disburse in tranches — 30% on sanction, 40% on progress, 30% on completion for construction projects.");
   }
 
-  // Universal
-  tips.push("DSCR > 1.25 is the minimum threshold for most banks. DSCR = Net Cash Accrual ÷ Loan Repayment (Principal + Interest). This is computed automatically in Step 9 — check it before submitting.");
+  // Universal — benchmark is scheme-specific (Mudra Shishu/Kishor need only 1.10)
+  tips.push(`DSCR > ${dscrBenchmarkFor(scheme)} is the minimum threshold for this scheme. DSCR = Net Cash Accrual ÷ Loan Repayment (Principal + Interest). This is computed automatically in Step 9 — check it before submitting.`);
   tips.push("Promoter's own contribution must be verifiable — 6 months bank statement showing funds. Cash/informal sources are NOT accepted. Banks may reject if they find equity was borrowed.");
 
   return tips;
@@ -306,15 +316,17 @@ export function getStep9Tips(ctx: CAContext): string[] {
     tips.push("Agri subsidy income (PMFBY insurance, DBT, NHM subsidy): Do NOT include government subsidies in projected revenue for P&L — banks want to see viability WITHOUT subsidy dependence. Subsidies are treated as separate income below the line.");
   }
 
-  // Scheme-specific DSCR guidance
+  // Scheme-specific DSCR guidance — benchmark values come from the Rules
+  // & Rates engine (fetched via useSchemeRules), never hardcoded here.
+  const dscrBench = dscrBenchmarkFor(scheme);
   if (isPMEGP(scheme)) {
-    tips.push("PMEGP DSCR: Minimum 1.25x required. Remember: during the 3-year subsidy lock-in, EMI is on FULL loan (including subsidy component). After lock-in, subsidy is adjusted — EMI drops. Project both scenarios in your DPR.");
+    tips.push(`PMEGP DSCR: Minimum ${dscrBench}x required. Remember: during the 3-year subsidy lock-in, EMI is on FULL loan (including subsidy component). After lock-in, subsidy is adjusted — EMI drops. Project both scenarios in your DPR.`);
   } else if (isMudra(scheme)) {
-    tips.push(`Mudra DSCR: For Tarun/TarunPlus, banks require DSCR > 1.5x in all 5 years. If Y1 DSCR is below 1.25, consider: (1) reduce loan amount, (2) extend tenure, or (3) show higher revenue assumptions with supporting evidence.`);
+    tips.push(`Mudra DSCR: Banks require DSCR > ${dscrBench}x in all 5 years for this tier. If Y1 DSCR is below that, consider: (1) reduce loan amount, (2) extend tenure, or (3) show higher revenue assumptions with supporting evidence.`);
   } else if (isCGTMSE(scheme)) {
-    tips.push("CGTMSE DSCR: Bank is particularly careful here since there is no collateral. DSCR > 1.5x throughout projection period significantly improves sanction probability. Ensure this before submitting.");
+    tips.push(`CGTMSE DSCR: Bank is particularly careful here since there is no collateral. DSCR > ${dscrBench}x throughout projection period significantly improves sanction probability. Ensure this before submitting.`);
   } else if (isNormal(scheme)) {
-    tips.push("Normal MSME DSCR: PSU banks require DSCR > 1.33x (some require 1.5x). Internal Rate of Return (IRR) should be > bank's lending rate. Both metrics are computed in the generated report.");
+    tips.push(`Normal MSME DSCR: PSU banks require DSCR > ${dscrBench}x. Internal Rate of Return (IRR) should be > bank's lending rate. Both metrics are computed in the generated report.`);
   }
 
   tips.push("Interest Rate entry: Match the rate your bank has quoted in the sanction letter or term sheet. Typical range: 9.5–12.5%. Use 10.5% if not yet confirmed — standard CA projection rate for MSME.");

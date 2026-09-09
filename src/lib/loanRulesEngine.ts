@@ -284,6 +284,23 @@ function getMinPromoterContributionPct(
   return fetched ?? LOAN_SCHEME_RULES[scheme].min_promoter_contribution_pct;
 }
 
+/**
+ * DSCR / current-ratio benchmarks a scheme expects, preferring the backend
+ * Rules & Rates engine (fetched via useSchemeRules) over a flat local
+ * fallback. Mudra Shishu/Kishor genuinely require a lower DSCR (1.10) than
+ * full-CMA schemes (1.25) — a flat 1.25 check would unfairly warn/penalise
+ * those borrowers even when they clear their own scheme's real bar.
+ */
+function getSchemeDscrBenchmark(scheme?: GTABLoanScheme): number {
+  if (!scheme) return 1.25;
+  return getSchemeRules(scheme)?.benchmarks?.dscr_avg ?? 1.25;
+}
+
+function getSchemeCurrentRatioBenchmark(scheme?: GTABLoanScheme): number {
+  if (!scheme) return 1.33;
+  return getSchemeRules(scheme)?.benchmarks?.current_ratio ?? 1.33;
+}
+
 const PMEGP_PROJECT_LIMITS = {
   manufacturing: {
     first_loan: 5000000,    // ₹50 lakhs
@@ -552,15 +569,18 @@ export function validateMudraEligibility(
     }
   }
 
-  // Financial ratio warnings
+  // Financial ratio warnings — benchmarks are scheme-specific (Mudra
+  // Shishu/Kishor genuinely need only 1.10 DSCR, not the full-CMA 1.25).
   if (financialRatios) {
-    if (financialRatios.dscr < 1.25) {
-      warnings.push('DSCR below 1.25 indicates weak debt service capacity');
+    const dscrBenchmark = getSchemeDscrBenchmark(scheme);
+    const currentRatioBenchmark = getSchemeCurrentRatioBenchmark(scheme);
+    if (financialRatios.dscr < dscrBenchmark) {
+      warnings.push(`DSCR below ${dscrBenchmark} indicates weak debt service capacity`);
       recommendations.push('Improve cash flow projections or reduce loan amount');
     }
 
-    if (financialRatios.current_ratio < 1.33) {
-      warnings.push('Current ratio below 1.33 indicates liquidity concerns');
+    if (financialRatios.current_ratio < currentRatioBenchmark) {
+      warnings.push(`Current ratio below ${currentRatioBenchmark} indicates liquidity concerns`);
       recommendations.push('Strengthen working capital or improve current assets');
     }
 
@@ -919,14 +939,17 @@ export function validateSchemeEligibility(
       warnings.push('Applicant must have successfully repaid previous Mudra Tarun loan');
     }
 
-    // Add financial ratio warnings for Mudra schemes
+    // Add financial ratio warnings for Mudra schemes — benchmark is
+    // scheme-specific (Shishu/Kishor genuinely need only 1.10, not 1.25).
     if (financialRatios) {
-      if (financialRatios.dscr < 1.25) {
-        warnings.push('DSCR below 1.25 may affect loan approval for Mudra schemes');
+      const dscrBenchmark = getSchemeDscrBenchmark(scheme);
+      const currentRatioBenchmark = getSchemeCurrentRatioBenchmark(scheme);
+      if (financialRatios.dscr < dscrBenchmark) {
+        warnings.push(`DSCR below ${dscrBenchmark} may affect loan approval for Mudra schemes`);
       }
 
-      if (financialRatios.current_ratio < 1.33) {
-        warnings.push('Current ratio below 1.33 indicates potential liquidity issues');
+      if (financialRatios.current_ratio < currentRatioBenchmark) {
+        warnings.push(`Current ratio below ${currentRatioBenchmark} indicates potential liquidity issues`);
       }
 
       if (financialRatios.gross_margin < 15) {
@@ -990,11 +1013,20 @@ export function calculateFinancialRatios(
 }
 
 /**
- * Validate financial ratios against bank standards
+ * Validate financial ratios against bank standards.
+ *
+ * DSCR and current-ratio warning thresholds are scheme-specific (pass
+ * `scheme` when known) — Mudra Shishu/Kishor's real bar is 1.10 DSCR /
+ * 1.20 current ratio, not the full-CMA 1.25 / 1.33 used elsewhere. The
+ * `< 1` / `< 1` hard-error floors below are scheme-independent
+ * mathematical facts (can't service debt at all / can't cover current
+ * liabilities at all), not policy thresholds, so they never shift.
  */
-export function validateFinancialRatios(ratios: FinancialRatioResult): ValidationResult {
+export function validateFinancialRatios(ratios: FinancialRatioResult, scheme?: GTABLoanScheme): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
+  const dscrBenchmark = getSchemeDscrBenchmark(scheme);
+  const currentRatioBenchmark = getSchemeCurrentRatioBenchmark(scheme);
 
   // Debt-to-Equity Ratio (should be <= 2:1 for safety)
   if (ratios.debt_equity_ratio > 3) {
@@ -1003,11 +1035,11 @@ export function validateFinancialRatios(ratios: FinancialRatioResult): Validatio
     warnings.push('Debt-to-Equity ratio is high (2-3); higher risk project');
   }
 
-  // DSCR (should be >= 1.25 for safe loan repayment)
+  // DSCR
   if (ratios.dscr < 1) {
     errors.push('DSCR < 1.0; project cannot service debt from operations');
-  } else if (ratios.dscr < 1.25) {
-    warnings.push('DSCR < 1.25; margin for debt repayment is tight');
+  } else if (ratios.dscr < dscrBenchmark) {
+    warnings.push(`DSCR < ${dscrBenchmark}; margin for debt repayment is tight`);
   }
 
   // ROE (should be reasonable, >15% is good)
@@ -1017,11 +1049,11 @@ export function validateFinancialRatios(ratios: FinancialRatioResult): Validatio
     warnings.push('ROE < 15%; modest returns for equity investor');
   }
 
-  // Current Ratio (1.5 to 2.0 is ideal)
+  // Current Ratio
   if (ratios.current_ratio < 1) {
     errors.push('Current Ratio < 1; insufficient current assets to cover liabilities');
-  } else if (ratios.current_ratio < 1.5) {
-    warnings.push('Current Ratio < 1.5; working capital situation could be tighter');
+  } else if (ratios.current_ratio < currentRatioBenchmark) {
+    warnings.push(`Current Ratio < ${currentRatioBenchmark}; working capital situation could be tighter`);
   }
 
   // Gross Margin (>20% is healthy for most businesses)
@@ -1175,10 +1207,18 @@ export function generateBankScore(
   schemeValidation: SchemeEligibilityResult,
   ratios: FinancialRatioResult,
   applicantAge: number,
-  yearsInBusiness: number = 0
+  yearsInBusiness: number = 0,
+  scheme?: GTABLoanScheme,
 ): BankScoreResult {
   // Start from 100 and deduct for risk factors
   let score = 100;
+  // Scoring curves below are shifted relative to the scheme's own DSCR /
+  // current-ratio benchmark rather than a flat absolute number — Mudra
+  // Shishu/Kishor's real bar (1.10 DSCR / 1.20 current ratio) is lower
+  // than the full-CMA default (1.25 / 1.33), and scoring them against the
+  // stricter number would unfairly deduct points a real bank wouldn't.
+  const dscrBenchmark = getSchemeDscrBenchmark(scheme);
+  const currentRatioBenchmark = getSchemeCurrentRatioBenchmark(scheme);
 
   // ── Error penalties ────────────────────────────────────────────────────────
   score -= applicantValidation.errors.length * 12;   // KYC errors are serious
@@ -1191,10 +1231,10 @@ export function generateBankScore(
   score -= schemeValidation.warnings.length * 2;
 
   // ── DSCR — most critical metric for Indian banks ─────────────────────────
-  if (ratios.dscr >= 1.5)       { /* No deduction — strong */ }
-  else if (ratios.dscr >= 1.25) { score -= 5; }
-  else if (ratios.dscr >= 1.0)  { score -= 15; }
-  else                          { score -= 25; } // DSCR < 1 = cannot repay
+  if (ratios.dscr >= dscrBenchmark + 0.25)      { /* No deduction — strong */ }
+  else if (ratios.dscr >= dscrBenchmark)        { score -= 5; }
+  else if (ratios.dscr >= 1.0)                  { score -= 15; }
+  else                                          { score -= 25; } // DSCR < 1 = cannot repay
 
   // ── Debt-Equity ratio ─────────────────────────────────────────────────────
   if (ratios.debt_equity_ratio <= 2)      { /* OK */ }
@@ -1208,9 +1248,9 @@ export function generateBankScore(
   else                                { score -= 12; }
 
   // ── Current ratio ────────────────────────────────────────────────────────
-  if (ratios.current_ratio >= 1.5)     { /* OK */ }
-  else if (ratios.current_ratio >= 1.0) { score -= 5; }
-  else                                  { score -= 12; }
+  if (ratios.current_ratio >= currentRatioBenchmark)      { /* OK */ }
+  else if (ratios.current_ratio >= 1.0)                   { score -= 5; }
+  else                                                     { score -= 12; }
 
   // ── Promoter contribution (ROE proxy) ─────────────────────────────────────
   if (ratios.roe >= 20)      { /* Good */ }

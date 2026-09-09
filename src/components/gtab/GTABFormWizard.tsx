@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useGTABValidation } from "@/hooks/useGTABValidation";
+import { useSchemeRules } from "@/hooks/useSchemeRules";
 import {
   GTABFormData,
   GTABIndustryType,
@@ -216,6 +217,14 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
 
   // Validation hook
   const validation = useGTABValidation(formData);
+
+  // Fetches resolved financing rules (PMEGP subsidy tiers, promoter %,
+  // DSCR benchmark, etc.) from the backend's Rules & Rates engine and
+  // writes them into schemeRulesStore — loanRulesEngine.ts's PMEGP
+  // calculation functions pick these up automatically everywhere they're
+  // called (getFinancingPlan, ApplicationPreview, BankabilityBar, ...),
+  // with no other call site needing to change.
+  useSchemeRules(formData.loan_scheme);
 
   const validateCurrentStep = () => {
     // Nothing hard-blocks Next/Save Draft on any step. Marked-* fields, scheme

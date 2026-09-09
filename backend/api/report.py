@@ -16,6 +16,7 @@ from typing import Optional  # noqa: F401 — kept for type hints in other modul
 from models.input_schema import CMAReportInput
 from schemes.router import route_scheme
 from core.engine import get_scheme_benchmarks
+from rules import get_default_engine, MissingRuleError
 from calculations.depreciation    import calculate_depreciation
 from calculations.loan_schedule   import calculate_loan_schedule
 from calculations.working_capital import calculate_wc_by_year
@@ -217,11 +218,91 @@ async def get_schemes():
 
 # ── GET /api/v1/report/schemes/{scheme_id}/rules ─────────────────────────────
 
+def _financing_defaults(sid: str) -> dict:
+    """
+    Resolve the Rules & Rates engine's financing-split numbers for a scheme.
+    Every key is attempted independently — a scheme with no configured
+    value for a given key (e.g. moratorium override) simply omits it,
+    rather than failing the whole response. This is the same engine
+    schemes/*.py and calculations/dscr.py use to compute the actual PDF,
+    so this endpoint can never disagree with the generated report.
+    """
+    engine = get_default_engine()
+    out: dict = {}
+
+    try:
+        out["dscr_benchmark"] = engine.get_dscr_benchmark(sid)
+    except MissingRuleError:
+        pass
+
+    if sid == "pmegp":
+        try:
+            out["subsidy_matrix"] = {
+                "General_Urban": {
+                    "promoter_pct": round(engine.get_promoter_contribution_pct(sid, "general") * 100, 1),
+                    "subsidy_pct":  round(engine.get_margin_money_subsidy_pct("General", "Urban", sid) * 100, 1),
+                },
+                "General_Rural": {
+                    "promoter_pct": round(engine.get_promoter_contribution_pct(sid, "general") * 100, 1),
+                    "subsidy_pct":  round(engine.get_margin_money_subsidy_pct("General", "Rural", sid) * 100, 1),
+                },
+                "Special_Urban": {
+                    "promoter_pct": round(engine.get_promoter_contribution_pct(sid, "special") * 100, 1),
+                    "subsidy_pct":  round(engine.get_margin_money_subsidy_pct("Special", "Urban", sid) * 100, 1),
+                },
+                "Special_Rural": {
+                    "promoter_pct": round(engine.get_promoter_contribution_pct(sid, "special") * 100, 1),
+                    "subsidy_pct":  round(engine.get_margin_money_subsidy_pct("Special", "Rural", sid) * 100, 1),
+                },
+            }
+        except MissingRuleError:
+            pass
+    elif sid.startswith("mudra"):
+        try:
+            out["promoter_contribution_pct"] = round(engine.get_promoter_contribution_pct(sid) * 100, 1)
+        except MissingRuleError:
+            pass
+        moratorium = engine.get_moratorium_months_default(sid)
+        if moratorium is not None:
+            out["moratorium_months_default"] = moratorium
+    elif sid == "cgtmse":
+        try:
+            out["term_loan_pct_default"] = round(engine.get_term_loan_pct_default(sid) * 100, 1)
+        except MissingRuleError:
+            pass
+        moratorium = engine.get_moratorium_months_default(sid)
+        if moratorium is not None:
+            out["moratorium_months_default"] = moratorium
+    elif sid == "msme_psu":
+        for key, getter in (
+            ("term_loan_pct_default", lambda: engine.get_term_loan_pct_default(sid)),
+            ("wc_loan_pct_default", lambda: engine.get_wc_loan_pct_default(sid)),
+            ("interest_rate_pct_default", lambda: engine.get_interest_rate_pct_default(sid)),
+            ("promoter_floor_pct", lambda: engine.get_promoter_floor_pct(sid)),
+        ):
+            try:
+                value = getter()
+                out[key] = round(value * 100, 1) if key != "interest_rate_pct_default" else value
+            except MissingRuleError:
+                pass
+
+    return out
+
+
 @router.get("/schemes/{scheme_id}/rules", summary="Full rules for a specific scheme")
 async def get_scheme_rules(scheme_id: str):
     """
     Return complete rules for a scheme: subsidy matrix, DSCR benchmarks,
     eligibility conditions, max loan, moratorium, interest range.
+
+    The financing-split numbers (subsidy_matrix, promoter_contribution_pct,
+    term_loan_pct_default, wc_loan_pct_default, interest_rate_pct_default,
+    moratorium_months_default, promoter_floor_pct, dscr_benchmark) are
+    resolved live from the Rules & Rates engine (see _financing_defaults)
+    — the same engine schemes/*.py uses to build the actual PDF — rather
+    than hardcoded here, so this endpoint can never drift from the report.
+    Everything else (eligibility text, collateral notes, CGTMSE fee
+    slabs) is scheme metadata, not a financing rate, and stays static.
     """
     _RULES = {
         "pmegp": {
@@ -235,12 +316,6 @@ async def get_scheme_rules(scheme_id: str):
             "moratorium":     "6–12 months (bank decides)",
             "collateral":     "None — CGTMSE covers risk",
             "eligible":       "New businesses only",
-            "subsidy_matrix": {
-                "General_Urban":  {"promoter_pct": 10, "subsidy_pct": 15},
-                "General_Rural":  {"promoter_pct": 10, "subsidy_pct": 25},
-                "Special_Urban":  {"promoter_pct":  5, "subsidy_pct": 25},
-                "Special_Rural":  {"promoter_pct":  5, "subsidy_pct": 35},
-            },
             "special_categories": ["SC","ST","OBC","Minority","Women","Ex-Serviceman","PwD"],
             "negative_list": ["Tobacco","Alcohol","Pan Masala","Pure Trading (no value addition)"],
             "tdr_lock_in_years": 3,
@@ -303,18 +378,18 @@ async def get_scheme_rules(scheme_id: str):
         "msme_psu": {
             "name": "MSME PSU Bank Loan",
             "max_loan": "No fixed limit",
-            "promoter_pct": "20–25%",
             "interest_range": "9–14%",
             "tenure_years": "5–10 with 6–12 months moratorium",
             "cma_required": "Full CMA for all amounts",
-            "dscr_preferred": ">= 1.50",
             "benchmarks": get_scheme_benchmarks("msme_psu"),
         },
     }
     sid = scheme_id.lower().replace("-", "_")
     if sid not in _RULES:
         raise HTTPException(404, f"Scheme '{scheme_id}' not found. Available: {list(_RULES.keys())}")
-    return {"scheme_id": sid, "rules": _RULES[sid]}
+
+    rules = {**_RULES[sid], **_financing_defaults(sid)}
+    return {"scheme_id": sid, "rules": rules}
 
 
 # ── POST /api/v1/report/schemes/{scheme_id}/eligibility ───────────────────────

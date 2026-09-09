@@ -5,6 +5,7 @@
  */
 
 import type { GTABSocialCategory, GTABIndustryType, GTABLoanScheme } from '@/types/gtab';
+import { getSchemeRules } from '@/lib/schemeRulesStore';
 
 export interface ApplicantData {
   full_name: string;
@@ -279,17 +280,19 @@ export function calculatePMEGPSubsidy(
   applicantCategory: GTABSocialCategory,
   areaType: 'urban' | 'rural'
 ): number {
-  let subsidyRate = 0;
+  const isSpecial = applicantCategory !== 'general';
+  const matrixKey = `${isSpecial ? 'Special' : 'General'}_${areaType === 'rural' ? 'Rural' : 'Urban'}` as
+    'General_Urban' | 'General_Rural' | 'Special_Urban' | 'Special_Rural';
 
-  if (areaType === 'rural') {
-    subsidyRate = applicantCategory === 'general'
-      ? PMEGP_SUBSIDY_RULES.general_rural
-      : PMEGP_SUBSIDY_RULES.special_rural;
-  } else {
-    subsidyRate = applicantCategory === 'general'
-      ? PMEGP_SUBSIDY_RULES.general_urban
-      : PMEGP_SUBSIDY_RULES.special_urban;
-  }
+  // Prefer the backend Rules & Rates engine (fetched via useSchemeRules,
+  // populated in schemeRulesStore) — falls back to the local constants
+  // below only before the first fetch resolves, or if it fails.
+  const fetched = getSchemeRules('pmegp')?.subsidy_matrix?.[matrixKey]?.subsidy_pct;
+  const subsidyRate = fetched != null ? fetched / 100 : (
+    areaType === 'rural'
+      ? (applicantCategory === 'general' ? PMEGP_SUBSIDY_RULES.general_rural : PMEGP_SUBSIDY_RULES.special_rural)
+      : (applicantCategory === 'general' ? PMEGP_SUBSIDY_RULES.general_urban : PMEGP_SUBSIDY_RULES.special_urban)
+  );
 
   return Math.round(projectCost * subsidyRate);
 }
@@ -312,9 +315,14 @@ export function calculatePMEGPPromoterContribution(
   applicantCategory: GTABSocialCategory
 ): number {
   const isSpecial = applicantCategory !== 'general';
-  const pct = isSpecial
-    ? PMEGP_PROMOTER_CONTRIBUTION_RULES.special
-    : PMEGP_PROMOTER_CONTRIBUTION_RULES.general;
+  const matrixKey = `${isSpecial ? 'Special' : 'General'}_Urban` as
+    'General_Urban' | 'Special_Urban';
+  // promoter_pct doesn't vary by area, only category — either matrix
+  // entry for the resolved category carries the same value.
+  const fetched = getSchemeRules('pmegp')?.subsidy_matrix?.[matrixKey]?.promoter_pct;
+  const pct = fetched != null ? fetched / 100 : (
+    isSpecial ? PMEGP_PROMOTER_CONTRIBUTION_RULES.special : PMEGP_PROMOTER_CONTRIBUTION_RULES.general
+  );
   return Math.round(projectCost * pct);
 }
 

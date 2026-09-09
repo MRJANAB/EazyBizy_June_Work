@@ -17,6 +17,8 @@ calculate_msme_finance(fixed_project_cost, data) -> dict
 
 from __future__ import annotations
 
+from rules import get_default_engine
+
 
 def calculate_msme_finance(fixed_project_cost: float, data) -> dict:
     """
@@ -27,16 +29,22 @@ def calculate_msme_finance(fixed_project_cost: float, data) -> dict:
     fixed_project_cost : Fixed capital only (land + building + P&M + fixtures + prelim).
                          WC margin is NOT included here — it is handled separately.
     data               : CMAReportInput — used for assumption overrides
-                         (term_loan_pct, wc_loan_pct, interest_rate_pct).
+                         (term_loan_pct, wc_loan_pct, interest_rate_pct). Falls back to
+                         the Rules & Rates engine's scheme defaults when the user hasn't
+                         overridden a field.
 
     Returns
     -------
     dict with promoter_amount, term_loan, margin_money (0), and metadata.
     """
+    engine   = get_default_engine()
     a        = getattr(data, "assumptions", None)
-    tl_pct   = float(getattr(a, "term_loan_pct", 75) or 75) / 100
-    wc_pct   = float(getattr(a, "wc_loan_pct",   60) or 60) / 100
-    int_rate = float(getattr(a, "interest_rate_pct", 10.5) or 10.5)
+    tl_raw   = getattr(a, "term_loan_pct", None)
+    wc_raw   = getattr(a, "wc_loan_pct", None)
+    rate_raw = getattr(a, "interest_rate_pct", None)
+    tl_pct   = float(tl_raw) / 100 if tl_raw else engine.get_term_loan_pct_default("msme_psu")
+    wc_pct   = float(wc_raw) / 100 if wc_raw else engine.get_wc_loan_pct_default("msme_psu")
+    int_rate = float(rate_raw) if rate_raw else engine.get_interest_rate_pct_default()
     sub_pct  = float(getattr(a, "capital_subsidy_pct", 0) or 0) / 100
 
     # Capital-investment subsidy on FIXED ASSETS only (land + building + P&M),
@@ -53,9 +61,9 @@ def calculate_msme_finance(fixed_project_cost: float, data) -> dict:
     term_loan       = round(net * tl_pct)
     promoter_amount = round(fixed_project_cost - subsidy - term_loan)
 
-    # Promoter minimum: 10% of fixed project cost. If breached, top up promoter,
-    # reduce term loan (keeps promoter + subsidy + term loan = fixed_project_cost).
-    floor = round(fixed_project_cost * 0.10)
+    # Promoter minimum: floor % of fixed project cost (Rules Master). If breached,
+    # top up promoter, reduce term loan (keeps promoter + subsidy + term loan = fixed_project_cost).
+    floor = round(fixed_project_cost * engine.get_promoter_floor_pct("msme_psu"))
     if promoter_amount < floor:
         promoter_amount = floor
         term_loan       = round(fixed_project_cost - subsidy - promoter_amount)

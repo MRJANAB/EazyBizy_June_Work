@@ -88,9 +88,19 @@ SCHEME_BENCHMARKS = {
 }
 
 def get_scheme_benchmarks(scheme: str) -> dict:
-    """Return benchmark thresholds for the given scheme (case-insensitive)."""
+    """
+    Return benchmark thresholds for the given scheme (case-insensitive).
+
+    Sourced from the Rules & Rates engine (rules/engine.py) — the dict
+    above is kept only as a defensive fallback if the engine raises
+    unexpectedly; it is never the primary source once wired.
+    """
     key = scheme.strip().lower().replace("-", "_").replace(" ", "_") if scheme else "default"
-    return SCHEME_BENCHMARKS.get(key, SCHEME_BENCHMARKS["default"])
+    try:
+        from rules import get_default_engine
+        return get_default_engine().get_scorecard_benchmarks(key)
+    except Exception:
+        return SCHEME_BENCHMARKS.get(key, SCHEME_BENCHMARKS["default"])
 
 
 # ── Industry-specific calculation defaults (CA standard norms) ───────────────

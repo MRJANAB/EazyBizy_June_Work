@@ -6,10 +6,12 @@ BUG 8 FIX:
   DSCR_YearN       = Numerator / Denominator
   Average_DSCR     = mean of all 5 years
 
-  If ANY year DSCR < 1.25 → reportStatus = "REJECT"
-  If ALL years DSCR >= 1.25 → reportStatus = "APPROVE"
+  If ANY year DSCR < the scheme's own benchmark (Rules & Rates engine,
+  e.g. 1.10 for Mudra Shishu/Kishor, 1.25 for most other schemes) →
+  reportStatus = "REJECT". If ALL years clear it → "APPROVE".
 """
 from core.engine import R, dscr_label
+from rules import get_default_engine
 
 
 def calculate_dscr(income: list, loan_schedule: list, scheme_data: dict) -> dict:
@@ -17,7 +19,8 @@ def calculate_dscr(income: list, loan_schedule: list, scheme_data: dict) -> dict
     Compute DSCR for each year and the 5-year average.
     Uses only TL interest (not WC interest) per CA/RBI standards.
     """
-    benchmark = float(scheme_data.get("dscr_benchmark", 1.25))
+    default_benchmark = get_default_engine().get_dscr_benchmark("default")
+    benchmark = float(scheme_data.get("dscr_benchmark") or default_benchmark)
     rows      = []
     dscr_sum  = 0.0
     dscr_count = 0
@@ -50,8 +53,10 @@ def calculate_dscr(income: list, loan_schedule: list, scheme_data: dict) -> dict
     average  = R(dscr_sum / dscr_count, 2) if dscr_count else 0.0
     min_dscr = min((r["dscr"] for r in rows), default=0.0)
 
-    # BUG 8 FIX: REJECT if ANY year DSCR < 1.25; APPROVE if all years >= 1.25
-    any_below = any(r["dscr"] < 1.25 and r["total_b"] > 0 for r in rows)
+    # BUG 8 FIX: REJECT if ANY year DSCR < scheme's own benchmark; APPROVE if all years pass.
+    # (Previously hardcoded 1.25 here regardless of scheme, which could contradict
+    # `meets_benchmark` below for schemes with a lower benchmark, e.g. Mudra Shishu/Kishor's 1.10.)
+    any_below = any(r["dscr"] < benchmark and r["total_b"] > 0 for r in rows)
     report_status = "REJECT" if any_below else "APPROVE"
 
     return {

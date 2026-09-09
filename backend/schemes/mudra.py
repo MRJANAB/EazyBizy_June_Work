@@ -10,6 +10,9 @@ Kishor    : Rs. 50,001 – Rs. 5,00,000
 Tarun     : Rs. 5,00,001 – Rs. 10,00,000
 TarunPlus : Rs. 10,00,001 – Rs. 20,00,000  (RBI circular 2023)
 
+Promoter-contribution % per tier is read from the Rules & Rates engine
+(rules/engine.py) rather than hardcoded here.
+
 Exports
 -------
 calculate_mudra_finance(project_cost, scheme_type) -> dict
@@ -17,7 +20,10 @@ validate_mudra(project_cost, scheme_type) -> None
 MudraValidationError
 """
 
-# ── Tier definitions ──────────────────────────────────────────────────────────
+from rules import get_default_engine
+
+# ── Tier definitions (loan-amount ceilings — these are RBI/scheme
+#    eligibility BANDS, not a financing-split rate, so they stay here) ────────
 
 MUDRA_TIERS = {
     "mudra_shishu":    {"label": "Shishu",     "min": 0,          "max": 50_000},
@@ -26,13 +32,9 @@ MUDRA_TIERS = {
     "mudra_tarunplus": {"label": "Tarun Plus",  "min": 1_000_001,  "max": 2_000_000},
 }
 
-# Promoter contribution % per tier
-PROMOTER_PCT = {
-    "mudra_shishu":    0.10,
-    "mudra_kishor":    0.10,
-    "mudra_tarun":     0.10,
-    "mudra_tarunplus": 0.10,
-}
+
+def _promoter_pct(key: str) -> float:
+    return get_default_engine().get_promoter_contribution_pct(key)
 
 
 class MudraValidationError(ValueError):
@@ -59,7 +61,7 @@ def validate_mudra(project_cost: float, scheme_type) -> None:
             f"Unknown MUDRA tier: '{scheme_type}'. "
             f"Valid tiers: {', '.join(MUDRA_TIERS.keys())}"
         )
-    loan_estimate = project_cost * (1 - PROMOTER_PCT[key])
+    loan_estimate = project_cost * (1 - _promoter_pct(key))
     if loan_estimate > tier["max"]:
         raise MudraValidationError(
             f"MUDRA {tier['label']} max bank loan is Rs.{tier['max']:,}. "
@@ -86,7 +88,7 @@ def calculate_mudra_finance(fixed_project_cost: float, scheme_type) -> dict:
     key  = _tier_key(scheme_type)
     tier = MUDRA_TIERS.get(key, MUDRA_TIERS["mudra_kishor"])
 
-    promoter_pct    = PROMOTER_PCT[key]
+    promoter_pct    = _promoter_pct(key)
     promoter_amount = round(fixed_project_cost * promoter_pct)
     raw_loan        = fixed_project_cost - promoter_amount
     # Cap bank loan at tier ceiling

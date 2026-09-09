@@ -12,13 +12,13 @@ CA-Standard Project Finance Formula:
 
   WC Loan is a REVOLVING facility — never mixed with term loan or fixed project cost.
 
-Scheme constants (never hardcoded in calculation functions):
-  MUDRA_KISHOR:  TL=90%, Subsidy=0%,  Promoter=10%
-  PMEGP:         TL=75%, Subsidy=15%, Promoter=10%
-  CGTMSE:        TL=85%, Subsidy=0%,  Promoter=15%
+Scheme-specific financing-split rates (term-loan %, DSCR benchmark,
+moratorium override) are read from the Rules & Rates engine
+(rules/engine.py), never hardcoded in this module.
 """
 
 from models.input_schema import CMAReportInput, SchemeType, SocialCategory
+from rules            import get_default_engine, normalize_scheme_id
 from schemes.pmegp   import calculate_pmegp_finance, validate_pmegp
 from schemes.mudra   import calculate_mudra_finance, validate_mudra
 from schemes.cgtmse  import calculate_cgtmse_fee
@@ -48,6 +48,7 @@ def route_scheme(data: CMAReportInput) -> dict:
         scheme, report_type, dscr_benchmark, moratorium_months
     """
     scheme                       = data.scheme
+    engine                       = get_default_engine()
     fixed_pc, wc_margin, wc_loan = _compute_project_cost(data)
     total_pc                     = fixed_pc + wc_margin   # Total Project Cost for PDF display
 
@@ -64,19 +65,22 @@ def route_scheme(data: CMAReportInput) -> dict:
             "wc_loan_note":      f"Working Capital Facility (Revolving): ₹{round(wc_loan):,} — not part of project cost",
             "scheme":            "PMEGP",
             "report_type":       "FULL_CMA",
-            "dscr_benchmark":    1.25,
+            "dscr_benchmark":    engine.get_dscr_benchmark("pmegp"),
             "moratorium_months": data.assumptions.moratorium_months,
         }
 
     if scheme in _MUDRA_SCHEMES:
         validate_mudra(fixed_pc, scheme)
         finance = calculate_mudra_finance(fixed_pc, scheme)
-        if scheme == SchemeType.Mudra_Shishu:
-            report_type, dscr_bench, moratorium = "SIMPLIFIED", 1.10, 0
-        elif scheme == SchemeType.Mudra_Kishor:
-            report_type, dscr_bench, moratorium = "LIGHT_CMA",  1.10, 6
-        else:
-            report_type, dscr_bench, moratorium = "FULL_CMA",   1.25, 6
+        tier_key = scheme.value.strip().lower().replace("-", "_").replace(" ", "_")
+        report_type = {
+            "mudra_shishu": "SIMPLIFIED",
+            "mudra_kishor": "LIGHT_CMA",
+        }.get(tier_key, "FULL_CMA")
+        dscr_bench = engine.get_dscr_benchmark(tier_key)
+        moratorium = engine.get_moratorium_months_default(tier_key)
+        if moratorium is None:
+            moratorium = data.assumptions.moratorium_months
         return {
             **finance,
             "project_cost":      round(total_pc),
@@ -91,11 +95,14 @@ def route_scheme(data: CMAReportInput) -> dict:
         }
 
     if scheme == SchemeType.CGTMSE:
-        # CA standard: TL = 85% of fixed capital only, Promoter = 15% of fixed capital
-        tl_pct   = 0.85
-        loan     = round(fixed_pc * tl_pct)
-        promoter = round(fixed_pc - loan)
-        cgtmse   = calculate_cgtmse_fee(loan)
+        # CA standard: TL = fixed % of fixed capital only (Rules Master), Promoter = residual
+        tl_pct     = engine.get_term_loan_pct_default("cgtmse")
+        loan       = round(fixed_pc * tl_pct)
+        promoter   = round(fixed_pc - loan)
+        cgtmse     = calculate_cgtmse_fee(loan)
+        moratorium = engine.get_moratorium_months_default("cgtmse")
+        if moratorium is None:
+            moratorium = data.assumptions.moratorium_months
         return {
             "promoter_amount":     promoter,
             "promoter_pct":        round(promoter / fixed_pc * 100, 1) if fixed_pc else 0,
@@ -114,8 +121,8 @@ def route_scheme(data: CMAReportInput) -> dict:
             "wc_loan_note":        f"Working Capital Facility (Revolving): ₹{round(wc_loan):,} — not part of project cost",
             "scheme":              "CGTMSE",
             "report_type":         "FULL_CMA",
-            "dscr_benchmark":      1.25,
-            "moratorium_months":   6,
+            "dscr_benchmark":      engine.get_dscr_benchmark("cgtmse"),
+            "moratorium_months":   moratorium,
         }
 
     if scheme == SchemeType.MSME_PSU:
@@ -129,7 +136,7 @@ def route_scheme(data: CMAReportInput) -> dict:
             "wc_loan_note":      f"Working Capital Facility (Revolving): ₹{round(wc_loan):,} — not part of project cost",
             "scheme":            "MSME",
             "report_type":       "FULL_CMA",
-            "dscr_benchmark":    1.25,
+            "dscr_benchmark":    engine.get_dscr_benchmark("msme_psu"),
             "moratorium_months": data.assumptions.moratorium_months,
         }
 
@@ -148,7 +155,11 @@ def _compute_project_cost(data: CMAReportInput) -> tuple:
     Returns (fixed_project_cost, wc_margin, wc_loan)
     """
     contingency_pct = float(getattr(data.assumptions, "contingency_pct", 0) or 0) / 100
-    wc_loan_pct     = float(getattr(data.assumptions, "wc_loan_pct", 60) or 60) / 100
+    wc_loan_pct_raw = getattr(data.assumptions, "wc_loan_pct", None)
+    wc_loan_pct     = (
+        float(wc_loan_pct_raw) / 100 if wc_loan_pct_raw
+        else get_default_engine().get_wc_loan_pct_default(normalize_scheme_id(data.scheme.value))
+    )
 
     machinery_base = sum(
         float(m.quantity) * float(m.unit_price)

@@ -5,6 +5,11 @@ PMEGP Finance Calculator
 Prime Minister's Employment Generation Programme — scheme-specific
 financing split: Promoter Equity, Margin Money Subsidy, and Term Loan.
 
+Promoter-contribution % and Margin-Money subsidy tiers are read from the
+Rules & Rates engine (rules/engine.py — backed by the loan_scheme_rules
+table, offline-seeded with the same KVIC PMEGP guideline values when
+Supabase isn't configured) rather than hardcoded here.
+
 Exports
 -------
 calculate_pmegp_finance(project_cost, social_category, area_type, industry, business_status)
@@ -12,19 +17,7 @@ validate_pmegp(project_cost, industry_type, business_status)
 PMEGPValidationError
 """
 
-# ── Scheme Constants ──────────────────────────────────────────────────────────
-
-PROMOTER_CONTRIBUTION = {
-    "General": 0.10,
-    "Special": 0.05,   # SC/ST/OBC/Women/Minority/Ex-Serviceman/PwD
-}
-
-MARGIN_MONEY = {
-    ("General", "Urban"): 0.15,
-    ("General", "Rural"): 0.25,
-    ("Special", "Urban"): 0.25,
-    ("Special", "Rural"): 0.35,
-}
+from rules import get_default_engine
 
 # Raw social category strings that qualify as "Special"
 _SPECIAL_RAW = {
@@ -134,8 +127,9 @@ def calculate_pmegp_finance(
     category_type = _resolve_category_type(social_category)
     area_key      = _resolve_area_key(area_type)
 
-    promoter_pct  = PROMOTER_CONTRIBUTION[category_type]
-    subsidy_pct   = MARGIN_MONEY[(category_type, area_key)]
+    engine        = get_default_engine()
+    promoter_pct  = engine.get_promoter_contribution_pct("pmegp", category_type)
+    subsidy_pct   = engine.get_margin_money_subsidy_pct(category_type, area_key, scheme_id="pmegp")
     bank_loan_pct = 1.0 - promoter_pct - subsidy_pct
 
     return {

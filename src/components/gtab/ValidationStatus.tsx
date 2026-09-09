@@ -228,17 +228,17 @@ function buildPositives(formData: GTABFormData | undefined, validation: GTABVali
 }
 
 export function ValidationStatus({ validation, currentStep, formData, onNavigate }: ValidationStatusProps) {
-  // Step 3 — scheme eligibility
-  const showSchemeCard = currentStep === 3;
-  // Step 10 — full credit score coach
-  const showScoreCard  = currentStep === 10;
+  // Step 2 — scheme eligibility
+  const showSchemeCard = currentStep === 2;
+  // Step 9 — full credit score coach
+  const showScoreCard  = currentStep === 9;
 
-  // Non-step-10 hints (steps 1-9)
+  // Non-step-9 hints (steps 1-8)
   const { warnings: stepWarnings, infos: stepInfos } = (() => {
     switch (currentStep) {
       case 1: return { warnings: validation.applicant.warnings, infos: validation.applicant.errors.map(e => `Review: ${e}`) };
-      case 3: return { warnings: validation.scheme.warnings, infos: validation.scheme.errors.map(e => `Scheme note: ${e}`) };
-      case 5: case 6: case 7: case 8:
+      case 2: return { warnings: validation.scheme.warnings, infos: validation.scheme.errors.map(e => `Scheme note: ${e}`) };
+      case 4: case 5: case 6: case 7:
         return { warnings: validation.financial.warnings, infos: validation.financial.errors.map(e => `Financial note: ${e}`) };
       default: return { warnings: [], infos: [] };
     }
@@ -284,7 +284,7 @@ export function ValidationStatus({ validation, currentStep, formData, onNavigate
     );
   }
 
-  // ── Step 3: Scheme eligibility card ──────────────────────────────────────
+  // ── Step 2: Scheme eligibility card ──────────────────────────────────────
   if (showSchemeCard) {
     return (
       <div className="mt-2">
@@ -306,7 +306,7 @@ export function ValidationStatus({ validation, currentStep, formData, onNavigate
     );
   }
 
-  // ── Step 10: Full Credit Score Coach ─────────────────────────────────────
+  // ── Step 9: Full Credit Score Coach ──────────────────────────────────────
   return (
     <div className="space-y-4 mt-2">
 

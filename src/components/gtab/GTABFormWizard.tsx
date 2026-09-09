@@ -35,16 +35,15 @@ import AIInsightPanel from "./AIInsightPanel";
 import BankabilityBar from "./BankabilityBar";
 
 const STEPS = [
-  { id: 1, title: "KYC Details", icon: "👤" },
-  { id: 2, title: "Business Address", icon: "🏢" },
-  { id: 3, title: "Loan & Scheme", icon: "📋" },
-  { id: 4, title: "Business Profile", icon: "📝" },
-  { id: 5, title: "Capital Expenditure", icon: "🔧" },
-  { id: 6, title: "Means of Finance", icon: "📊" },
-  { id: 7, title: "Operating Expenses", icon: "💰" },
-  { id: 8, title: "Working Capital", icon: "🎯" },
-  { id: 9, title: "Promoter Net Worth", icon: "🧾" },
-  { id: 10, title: "Final Review", icon: "👁️" },
+  { id: 1, title: "KYC & Business Details", icon: "👤" },
+  { id: 2, title: "Loan & Scheme", icon: "📋" },
+  { id: 3, title: "Business Profile", icon: "📝" },
+  { id: 4, title: "Capital Expenditure", icon: "🔧" },
+  { id: 5, title: "Means of Finance", icon: "📊" },
+  { id: 6, title: "Operating Expenses", icon: "💰" },
+  { id: 7, title: "Working Capital", icon: "🎯" },
+  { id: 8, title: "Promoter Net Worth", icon: "🧾" },
+  { id: 9, title: "Final Review", icon: "👁️" },
 ];
 
 const DEFAULT_TENURE_MONTHS = 60;
@@ -218,39 +217,9 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
   const validation = useGTABValidation(formData);
 
   const validateCurrentStep = () => {
-    // ── Rules:
-    // ONLY hard-block on missing data that makes the step meaningless.
-    // Scheme eligibility, financial ratios, warnings → shown inside the form,
-    // NEVER block navigation. Users must be able to reach Step 9 to fix inputs.
-    switch (currentStep) {
-      case 1: // Personal Information — only require name
-        if (!formData.first_name?.trim() || !formData.last_name?.trim()) {
-          return { canProceed: false, message: "Please enter your first and last name." };
-        }
-        break;
-
-      case 2: // Business Address — no hard blocks; address fields are optional
-        break;
-
-      case 3: // Business & Loan Details — require business name (field lives here)
-        if (!formData.business_entity_name?.trim()) {
-          return { canProceed: false, message: "Please enter your business / enterprise name." };
-        }
-        break;
-
-      // Steps 4–9: never block, only inform via ValidationStatus panel
-      case 4:
-      case 5:
-      case 6:
-      case 7:
-      case 8:
-      case 9:
-        break;
-
-      case 10: // Preview — soft warning, still allow download
-        break;
-    }
-
+    // Nothing hard-blocks Next/Save Draft on any step. Marked-* fields, scheme
+    // eligibility, and financial ratios are informational only (ValidationStatus
+    // panel) so users can save and move on, then come back to fix inputs later.
     return { canProceed: true, message: "" };
   };
 
@@ -1002,7 +971,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
     if (currentStep < STEPS.length) {
       const nextStepNumber = currentStep + 1;
       let nextFormData = formData;
-      if (currentStep === 5 || currentStep === 7) {
+      if (currentStep === 4 || currentStep === 6) {
         nextFormData = { ...formData, ...calculateTotals(formData) };
         setFormData(nextFormData);
       }
@@ -1033,21 +1002,23 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
   const isStepComplete = (id: number): boolean => {
     const p = formData.project_report_inputs?.promoter;
     switch (id) {
-      case 1: return !!(formData.first_name && formData.last_name && p?.pan_number && p?.aadhar_number && p?.date_of_birth);
-      case 2: return !!(formData.address_line_1 && formData.city && formData.state && formData.pincode && formData.contact_mobile?.length === 10);
-      case 3: return !!(formData.business_entity_name && formData.loan_scheme && formData.type_of_business);
-      case 4: return !!(formData.business_description || formData.products_services);
-      case 5: return Number(totals.total_project_cost) > 0 || (formData.plant_machinery?.length ?? 0) > 0;
-      case 6: return Number(totals.total_project_cost) > 0;
-      case 7: return Number(totals.total_monthly_expenses) > 0;
-      case 8: return true; // working capital is optional at input stage
-      case 9: {
+      case 1: return !!(
+        formData.first_name && formData.last_name && p?.pan_number && p?.aadhar_number && p?.date_of_birth
+        && formData.address_line_1 && formData.city && formData.state && formData.pincode && formData.contact_mobile?.length === 10
+      );
+      case 2: return !!(formData.business_entity_name && formData.loan_scheme && formData.type_of_business);
+      case 3: return !!(formData.business_description || formData.products_services);
+      case 4: return Number(totals.total_project_cost) > 0 || (formData.plant_machinery?.length ?? 0) > 0;
+      case 5: return Number(totals.total_project_cost) > 0;
+      case 6: return Number(totals.total_monthly_expenses) > 0;
+      case 7: return true; // working capital is optional at input stage
+      case 8: {
         const r = formData.project_report_inputs;
         return (r?.revenue?.product_categories?.length ?? 0) > 0
           || Number(r?.dpr?.selling_price_per_unit || 0) > 0
           || Number(r?.dpr?.selling_price_per_kg || 0) > 0;
       }
-      case 10: return true;
+      case 9: return true;
       default: return false;
     }
   };
@@ -1055,16 +1026,19 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
   const renderStep = () => {
     switch (currentStep) {
       case 1:
-        return <PersonalInfoStep formData={formData} updateFormData={updateFormData} />;
+        return (
+          <div className="space-y-4 sm:space-y-6">
+            <PersonalInfoStep formData={formData} updateFormData={updateFormData} />
+            <BusinessInfoStep formData={formData} updateFormData={updateFormData} />
+          </div>
+        );
       case 2:
-        return <BusinessInfoStep formData={formData} updateFormData={updateFormData} />;
-      case 3:
         return <BusinessLoanDetailsStep formData={formData} updateFormData={updateFormData} />;
-      case 4:
+      case 3:
         return <BusinessDescriptionStep formData={formData} updateFormData={updateFormData} />;
-      case 5:
+      case 4:
         return <ProjectRequirementsStep formData={formData} updateFormData={updateFormData} />;
-      case 6:
+      case 5:
         return (
           <ProjectSummaryStep
             formData={formData}
@@ -1072,13 +1046,13 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
             totals={totals}
           />
         );
-      case 7:
+      case 6:
         return <MonthlyExpensesStep formData={formData} updateFormData={updateFormData} />;
-      case 8:
+      case 7:
         return <WorkingCapitalStep formData={formData} updateFormData={updateFormData} />;
-      case 9:
+      case 8:
         return <ProjectReportInputsStep formData={formData} updateFormData={updateFormData} />;
-      case 10:
+      case 9:
         return (
           <ApplicationPreview
             formData={formData}
@@ -1383,7 +1357,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
   return (
     <div className="gtab-application-shell mx-auto w-full max-w-none overflow-x-hidden bg-white text-gray-900">
       {/* AI Insight Panel — floats as right-side panel across all steps */}
-      {currentStep < 10 && (
+      {currentStep < 9 && (
         <AIInsightPanel
           formData={formData}
           currentStep={currentStep}
@@ -1403,7 +1377,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
         <Progress value={progress} className="mt-5 h-2 bg-[#1f2937] [&>div]:bg-[#35d4c6]" />
 
         {/* Step Indicators — click any step to jump directly */}
-        <div className="gtab-step-scroll mt-6 flex snap-x gap-4 overflow-x-auto pb-3 lg:grid lg:grid-cols-10 lg:gap-2 lg:overflow-visible lg:pb-2">
+        <div className="gtab-step-scroll mt-6 flex snap-x gap-4 overflow-x-auto pb-3 lg:grid lg:grid-cols-9 lg:gap-2 lg:overflow-visible lg:pb-2">
           {STEPS.map((step) => {
             const isActive   = step.id === currentStep;
             const isDone     = step.id < currentStep;
@@ -1457,7 +1431,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
       </div>
 
       {/* Bankability strip — live figures a banker checks first (money steps) */}
-      {currentStep >= 5 && currentStep <= 9 && (
+      {currentStep >= 4 && currentStep <= 8 && (
         <div className="mt-4">
           <BankabilityBar formData={formData} />
         </div>

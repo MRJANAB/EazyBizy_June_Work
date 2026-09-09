@@ -146,9 +146,9 @@ export default function AIInsightPanel({ formData, currentStep, onSwitchScheme }
 
   // Default the active tab based on current step
   const defaultTab: Tab =
-    currentStep === 3 ? 'scheme' :
-    currentStep === 5 || currentStep === 7 ? 'tips' :
-    currentStep === 9 ? 'viability' : 'scheme';
+    currentStep === 2 ? 'scheme' :
+    currentStep === 4 || currentStep === 6 ? 'tips' :
+    currentStep === 8 ? 'viability' : 'scheme';
 
   const activeTab = open ? tab : defaultTab;
 

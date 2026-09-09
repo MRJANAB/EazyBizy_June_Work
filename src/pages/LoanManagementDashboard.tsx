@@ -1922,7 +1922,7 @@ const LoanManagementDashboard = () => {
     date: formatDate(application.created_at),
     applicationId: application.id,
     businessName: application.business_entity_name || "saved application",
-    progress: Math.min(Math.max(application.current_step ?? 0, 0), 10) * 10,
+    progress: Math.round(Math.min(Math.max(application.current_step ?? 0, 0), 9) * (100 / 9)),
   }));
 
   const filteredApplicationRows = useMemo(() => {

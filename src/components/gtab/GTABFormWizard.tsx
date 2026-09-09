@@ -1356,13 +1356,13 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
           onSwitchScheme={(schemeId) => updateFormData({ loan_scheme: schemeId as any })}
         />
       )}
-      {/* Progress Header */}
-      <div className="bg-white pb-2 sm:pb-0">
-        <div className="mt-2 flex items-center justify-between gap-4 pl-4 sm:mt-3 sm:pl-10">
+      {/* Progress Header — a distinct raised panel, not flat white-on-white */}
+      <div className="relative rounded-[1.1rem] border border-gray-100 bg-gradient-to-b from-white to-slate-50/60 p-4 pb-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_14px_32px_-10px_rgba(15,23,42,0.10)] sm:p-6 sm:pb-6">
+        <div className="flex items-center justify-between gap-4">
           <h2 className="min-w-0 text-3xl font-extrabold leading-tight text-gray-900">
             {STEPS[currentStep - 1].title}
           </h2>
-          <span className="shrink-0 pr-0 text-lg font-medium text-gray-500 sm:pr-8" style={{ fontFamily: "'DM Sans', sans-serif", letterSpacing: '0.01em' }}>
+          <span className="shrink-0 text-lg font-medium text-gray-500" style={{ fontFamily: "'DM Sans', sans-serif", letterSpacing: '0.01em' }}>
             Step {currentStep} of {STEPS.length}
           </span>
         </div>

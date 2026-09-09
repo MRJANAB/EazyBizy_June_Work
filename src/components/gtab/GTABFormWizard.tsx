@@ -1369,7 +1369,9 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
         <Progress value={progress} className="mt-5 h-2 bg-[#1f2937] shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] [&>div]:bg-[#35d4c6] [&>div]:shadow-[0_0_8px_rgba(53,212,198,0.6)]" />
 
         {/* Step Indicators — click any step to jump directly */}
-        <div className="gtab-step-scroll mt-6 flex snap-x gap-4 overflow-x-auto pb-3 lg:grid lg:grid-cols-9 lg:gap-2 lg:overflow-visible lg:pb-2">
+        {/* lg:grid-cols must equal STEPS.length (currently 10) — a mismatch
+            here is exactly what wrapped "Final Review" onto its own row. */}
+        <div className="gtab-step-scroll mt-6 flex snap-x gap-4 overflow-x-auto pb-3 lg:grid lg:grid-cols-10 lg:gap-2 lg:overflow-visible lg:pb-2">
           {STEPS.map((step) => {
             const isActive   = step.id === currentStep;
             const isDone     = step.id < currentStep;

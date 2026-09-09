@@ -44,16 +44,25 @@ def validate_report(report_data: dict) -> None:
         return abs(R(float(a), 2) - R(float(b), 2)) <= tol
 
     project_cost    = float(scheme_data.get("project_cost",    0) or 0)
+    # schemes/router.py: project_cost = fixed_project_cost + wc_margin (the
+    # promoter's own WC contribution) — see _compute_project_cost's docstring.
+    # Every scheme's 3-way MoF split (promoter + subsidy + term loan) is
+    # computed purely against fixed_project_cost and never touches wc_margin,
+    # so MoF must reconcile against fixed_project_cost, NOT project_cost —
+    # comparing against project_cost was off by wc_margin on every single
+    # application that has any working-capital requirement (nearly all of
+    # them), producing a false "MoF must reconcile" error on a healthy report.
+    fixed_project_cost = float(scheme_data.get("fixed_project_cost", project_cost) or project_cost)
     term_loan       = float(scheme_data.get("term_loan",       0) or 0)
     promoter        = float(scheme_data.get("promoter_amount", 0) or 0)
     subsidy         = float(scheme_data.get("margin_money",    0) or 0)
     wc_loan_scheme  = float(scheme_data.get("wc_loan",         0) or 0)
 
-    # V1: MoF total == ProjectCost (WC_Loan must NOT be in MoF)
+    # V1: MoF total == FixedProjectCost (WC_Loan and WC_Margin must NOT be in MoF)
     mof_total = R(promoter + subsidy + term_loan, 2)
-    if project_cost > 0 and not close(mof_total, project_cost, 1):
+    if fixed_project_cost > 0 and not close(mof_total, fixed_project_cost, 1):
         errors.append(
-            f"V1 FAIL — MoF (₹{mof_total:,.0f}) ≠ ProjectCost (₹{project_cost:,.0f}). "
+            f"V1 FAIL — MoF (₹{mof_total:,.0f}) ≠ Fixed Project Cost (₹{fixed_project_cost:,.0f}). "
             "MoF must reconcile. Check promoter/subsidy/TL split."
         )
 
@@ -100,7 +109,10 @@ def validate_report(report_data: dict) -> None:
         if float(row.get("total_b", 0) or 0) > 0 and dv <= 0:
             errors.append(
                 f"V5 FAIL — Year {row.get('year')}: DSCR is {dv:.2f} (must be > 0). "
-                "Check RM cost basis — likely RM is calculated from grossMarginPct instead of unit costs."
+                "Cash accruals do not cover loan repayment this year — the project as "
+                "assumed cannot service this debt. Review selling price vs. raw material "
+                "cost per unit, capacity utilisation, and fixed overheads (manpower, rent) "
+                "relative to revenue before resubmitting."
             )
 
     # V6: Warn if all PAT are negative

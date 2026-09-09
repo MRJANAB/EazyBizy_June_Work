@@ -757,6 +757,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
         cost:
           Number(item.cost) ||
           (Number(item.quantity) || 1) * (Number(item.unit_cost) || Number(item.cost) || 0),
+        purchase_date: item.purchase_date,
         supplier_name: item.supplier_name,
         supplier_city: item.supplier_city,
         supplier_phone: item.supplier_phone,

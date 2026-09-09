@@ -144,7 +144,7 @@ export function getStep5Tips(ctx: CAContext): string[] {
     tips.push("Shop Renovation: Include interior work, flooring, false ceiling, AC installation, and electrical fittings. Bank inspector will visit the premises — it should match the amounts stated.");
   } else if (isSvc(ind)) {
     tips.push("Service Equipment: Computers, printers, diagnostic machines, salon equipment, gym equipment etc. — each needs a GST invoice from a registered dealer for bank records.");
-    tips.push("Security Deposit (advance rent) is pre-operative expenditure — include it under 'Pre-Operative / Other Initial Expenditure'. This is a legitimate capital item banks accept.");
+    tips.push("Security Deposit / advance rent paid to the landlord before occupancy goes under 'Office Rent Deposit' above — a legitimate one-time capital item banks accept.");
     tips.push("Software licenses and subscriptions (paid annually) are pre-operative costs IF paid upfront before commencement. Monthly recurring subscriptions go into Monthly Expenses (Step 7).");
   } else if (isAgri(ind)) {
     tips.push("Farm Equipment: Tractors, tillers, sprayers must be from registered dealers with GST invoices. Khasra/Khatauni (land records) must show your name as cultivator for agri-purpose loans.");

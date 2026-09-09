@@ -29,6 +29,7 @@ export interface MachineryItem {
   cost: number;
   quantity?: number;
   unit_cost?: number;
+  purchase_date?: string;
   supplier_name: string;
   supplier_city?: string;
   supplier_phone: string;
@@ -57,6 +58,7 @@ export function parsePlantMachinery(value: unknown): MachineryItem[] {
       cost:
         Number(item.cost) ||
         (Number(item.quantity) || 1) * (Number(item.unit_cost) || Number(item.cost) || 0),
+      purchase_date: item.purchase_date ?? "",
       supplier_name: item.supplier_name ?? "",
       supplier_city: item.supplier_city ?? "",
       supplier_phone: item.supplier_phone ?? "",

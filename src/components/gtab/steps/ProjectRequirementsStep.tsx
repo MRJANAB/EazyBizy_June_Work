@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Plus, Trash2, Wrench, Building, Package, Calculator, IndianRupee, Lightbulb, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -137,7 +138,7 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
   const addMachineryItem = () => {
     const newId = crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
     const newItem: MachineryItem = {
-      id: newId, machine_name: "", cost: 0, quantity: 1, unit_cost: 0,
+      id: newId, machine_name: "", cost: 0, quantity: 1, unit_cost: 0, purchase_date: "",
       supplier_name: "", supplier_city: "", supplier_phone: "", supplier_email: "",
     };
     updateFormData({ plant_machinery: [...(formData.plant_machinery || []), newItem] });
@@ -236,10 +237,10 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
             )}
             <div className="space-y-2">
               <CurrencyInput
-                label={isTrading ? "Shop Setup / Renovation Cost (₹)" : isService ? "Office Setup / Interior Works (₹)" : isAgriculture ? "Farm Shed / Storage Construction (₹)" : "Factory Shed / Building Cost (₹)"}
+                label={isTrading ? "Shop Setup / Renovation Cost (₹)" : isService ? "Office Rent Deposit (₹)" : isAgriculture ? "Farm Shed / Storage Construction (₹)" : "Factory Shed / Building Cost (₹)"}
                 value={formData.shed_building_cost}
                 onChange={(v) => updateFormData({ shed_building_cost: v })}
-                hint={isManufacturing ? "Construction cost @ prevailing rate per sq.ft × built-up area" : "Actual renovation/setup quotation amount"}
+                hint={isManufacturing ? "Construction cost @ prevailing rate per sq.ft × built-up area" : isService ? "Advance rent / security deposit paid to the landlord before occupying the premises" : "Actual renovation/setup quotation amount"}
               />
               {(() => {
                 const hint = BUILDING_COST_HINTS[formData.industry_type || "manufacturing"];
@@ -317,6 +318,7 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
                                   quantity: s.quantity,
                                   unit_cost: s.unit_cost,
                                   cost: s.quantity * s.unit_cost,
+                                  purchase_date: '',
                                   supplier_name: '',
                                   supplier_city: '',
                                   supplier_phone: '',
@@ -356,7 +358,7 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
                   </div>
 
                   {/* Name + Qty + Unit Price → auto-computes Total */}
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                     <div className="space-y-1.5 md:col-span-2">
                       <Label>Item / Asset Name *</Label>
                       <Input className="h-11 rounded-xl" value={item.machine_name}
@@ -380,6 +382,16 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
                           const qty = item.quantity || 1;
                           updateMachineryItem(item.id, { unit_cost: uc, cost: qty * uc });
                         }} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Date of Purchase</Label>
+                      <DatePicker
+                        className="h-11 rounded-xl"
+                        value={item.purchase_date || ""}
+                        onChange={(v) => updateMachineryItem(item.id, { purchase_date: v })}
+                        placeholder="Select date"
+                        disableFuture
+                      />
                     </div>
                   </div>
                   {/* Auto-computed total shown when both qty and price entered */}
@@ -467,12 +479,14 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
                 hint="Labour + transport for installation — typically 5–10% of machine cost"
               />
             )}
-            <CurrencyInput
-              label={isService ? "Security Deposit / Pre-Operative Expenses (₹)" : isAgriculture ? "Advance Payment / Pre-Operative Costs (₹)" : "Pre-Operative / Other Initial Expenditure (₹)"}
-              value={formData.other_initial_expenditure}
-              onChange={(v) => updateFormData({ other_initial_expenditure: v })}
-              hint="Registration, legal, license, advance rent, brand setup"
-            />
+            {!isService && (
+              <CurrencyInput
+                label={isAgriculture ? "Advance Payment / Pre-Operative Costs (₹)" : "Pre-Operative / Other Initial Expenditure (₹)"}
+                value={formData.other_initial_expenditure}
+                onChange={(v) => updateFormData({ other_initial_expenditure: v })}
+                hint="Registration, legal, license, advance rent, brand setup"
+              />
+            )}
           </div>
 
           {/* CA AI Tips */}
@@ -512,7 +526,7 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">A. Fixed Capital</p>
             {[
               { label: "Land", value: landCost, show: isManufacturing },
-              { label: isTrading ? "Shop Setup / Renovation" : isService ? "Office Setup / Interior" : isAgriculture ? "Farm Shed / Storage" : "Shed / Factory Building", value: buildingCost, show: true },
+              { label: isTrading ? "Shop Setup / Renovation" : isService ? "Office Rent Deposit" : isAgriculture ? "Farm Shed / Storage" : "Shed / Factory Building", value: buildingCost, show: true },
               { label: isManufacturing ? "Plant & Machinery" : isAgriculture ? "Farm Equipment" : "Assets & Equipment", value: machineryTotal, show: true },
             ].filter(r => r.show).map(({ label, value }) => (
               <div key={label} className="flex justify-between items-center py-1 border-b border-white/8">
@@ -523,14 +537,14 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
 
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-2">B. Preliminary / Initial Expenditure</p>
             {[
-              { label: isAgriculture ? "Equipment / Tools" : "Computers / Laptops", value: computersCost },
-              { label: isTrading ? "Furniture / Racks / Display" : "Furniture & Fixtures", value: furnitureCost },
-              { label: "Electrification & Power Backup", value: electrification },
-              { label: isTrading ? "Initial Inventory / Stock" : isService ? "Software / Licenses" : isAgriculture ? "Seeds / Inputs" : "Racks & Storage", value: racksCost },
-              { label: isAgriculture ? "Farm Transport / Vehicle" : "Transport / Loading", value: transportCost },
-              ...(isManufacturing ? [{ label: "Machinery Installation", value: installCost }] : []),
-              { label: isService ? "Deposit / Pre-Operative" : "Other Pre-Operative Expenses", value: otherCost },
-            ].map(({ label, value }) => (
+              { label: isAgriculture ? "Equipment / Tools" : "Computers / Laptops", value: computersCost, show: true },
+              { label: isTrading ? "Furniture / Racks / Display" : "Furniture & Fixtures", value: furnitureCost, show: true },
+              { label: "Electrification & Power Backup", value: electrification, show: true },
+              { label: isTrading ? "Initial Inventory / Stock" : isService ? "Software / Licenses" : isAgriculture ? "Seeds / Inputs" : "Racks & Storage", value: racksCost, show: true },
+              { label: isAgriculture ? "Farm Transport / Vehicle" : "Transport / Loading", value: transportCost, show: true },
+              { label: "Machinery Installation", value: installCost, show: isManufacturing },
+              { label: "Other Pre-Operative Expenses", value: otherCost, show: !isService },
+            ].filter(r => r.show).map(({ label, value }) => (
               <div key={label} className="flex justify-between items-center py-1 border-b border-white/8">
                 <span className="text-sm text-slate-300">{label}</span>
                 <span className={`text-sm font-semibold tabular-nums ${value > 0 ? "text-white" : "text-slate-500"}`}>{value > 0 ? fmt(value) : "₹ 0"}</span>

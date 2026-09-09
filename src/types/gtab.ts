@@ -199,7 +199,7 @@ export interface ProjectReportInputs {
     loan_tenure_years:          number;
     moratorium_years:           number;
     // ── Financial assumptions (all sent to backend as-is) ────────────────
-    building_dep_rate_pct:      number;   // building SLM depreciation %
+    building_dep_rate_pct:      number;   // building WDV depreciation %
     salary_increase_pct:        number;   // annual salary hike % (CA standard: 8-10%)
     admin_increase_rate_pct:    number;   // admin expense growth %
     marketing_expense_pct:      number;   // marketing as % of revenue

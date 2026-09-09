@@ -1295,7 +1295,7 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
 
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 space-y-1">
             <p><strong>CA Standard Defaults (RBI/ICAI norms):</strong></p>
-            <p>• Machinery Dep 10% SLM · Building Dep 5% SLM · Tax Rate 25% (mandatory under Income Tax Act)</p>
+            <p>• Machinery Dep 10% WDV · Building Dep 5% WDV · Tax Rate 25% (mandatory under Income Tax Act)</p>
             <p>• Revenue Growth 7% p.a. · Fixed Expense Growth 5% p.a. · Salary Hike 10% p.a. · DSCR benchmark ≥ 1.25</p>
             <p>• Contingency on P&amp;M 5–10% — a cost-overrun buffer banks expect on new machinery purchases</p>
             <p>• {isServiceOrTrading ? "Service/Trading Capacity: 60→70→80→85→90%" : isAgriculture ? "Agriculture Capacity: 80→85→90→95→100%" : "Manufacturing Capacity: 50→60→70→75→80%"}</p>
@@ -1303,13 +1303,13 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
             <NumberField
-              label="Machinery / Equipment Depreciation % (SLM) *"
+              label="Machinery / Equipment Depreciation % (WDV) *"
               value={report.revenue.depreciation_pct || 10}
               onChange={(value) => updateSection("revenue", { depreciation_pct: value })}
               placeholder="10"
             />
             <NumberField
-              label="Building / Setup Depreciation % (SLM) *"
+              label="Building / Setup Depreciation % (WDV) *"
               value={report.dpr.building_dep_rate_pct || 5}
               onChange={(value) => updateSection("dpr", { building_dep_rate_pct: value })}
               placeholder="5"

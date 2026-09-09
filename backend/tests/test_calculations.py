@@ -168,12 +168,13 @@ class TestDepreciation:
         dep = calculate_depreciation(data, SCHEME_PMEGP)
         assert dep["annual_dep"] > 0
 
-    def test_slm_label_consistency(self):
+    def test_wdv_label_consistency(self):
         from calculations.depreciation import calculate_depreciation
         data = _make_data()
         dep = calculate_depreciation(data, SCHEME_PMEGP)
-        # SLM: dep_building + dep_machinery = annual_dep
-        assert abs(dep["dep_building_slm"] + dep["dep_machinery_slm"] - dep["annual_dep"]) < 1
+        # WDV: Year-1 building + machinery depreciation = annual_dep
+        assert abs(dep["dep_building_wdv"] + dep["dep_machinery_wdv"] - dep["annual_dep"]) < 1
+        assert dep["method"] == "WDV"
 
     def test_gross_block_equals_building_plus_pm(self):
         from calculations.depreciation import calculate_depreciation
@@ -181,6 +182,26 @@ class TestDepreciation:
         dep = calculate_depreciation(data, SCHEME_PMEGP)
         expected_gross = dep["building_gross"] + dep["pm_with_contingency"]
         assert abs(dep["gross_block"] - expected_gross) < 1
+
+    def test_wdv_depreciation_declines_year_over_year(self):
+        """WDV must decline each year (reducing balance) — never flat like SLM."""
+        from calculations.depreciation import calculate_depreciation
+        data = _make_data()
+        dep = calculate_depreciation(data, SCHEME_PMEGP)
+        schedule = dep["schedule"]
+        assert len(schedule) == 5
+        for i in range(1, 5):
+            assert schedule[i]["depreciation"] < schedule[i - 1]["depreciation"]
+            assert schedule[i]["opening_wdv"] == schedule[i - 1]["closing_wdv"]
+
+    def test_wdv_never_goes_negative(self):
+        from calculations.depreciation import calculate_depreciation
+        data = _make_data()
+        dep = calculate_depreciation(data, SCHEME_PMEGP)
+        for row in dep["schedule"]:
+            assert row["closing_wdv"] >= 0
+            assert row["building_closing_wdv"] >= 0
+            assert row["machinery_closing_wdv"] >= 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────

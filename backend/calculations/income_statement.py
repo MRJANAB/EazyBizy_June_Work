@@ -94,6 +94,9 @@ def calculate_income_statement(
         tax_rate = _DEFAULT_TAX_RATE
 
     annual_dep     = float(dep.get("annual_dep", 0) or 0)
+    # WDV — each year has its own (declining) depreciation figure; fall back
+    # to the flat Year-1 value only if a real schedule wasn't supplied.
+    dep_schedule   = dep.get("schedule") or []
     annual_rev_100 = annual_revenue_from_prod(data.production, industry)
 
     # Capacity schedule — resolve FIRST so _compute_rm_at_100pct can use cap_y1
@@ -204,7 +207,10 @@ def calculate_income_statement(
 
         total_opex = R(cogs + marketing + other_var + fixed_exp)
         ebitda     = R(rev - total_opex)
-        dep_yr     = R(annual_dep)
+        # WDV: pull this year's own depreciation from the schedule (declining
+        # each year on the reducing WDV balance) — never the same figure
+        # repeated across all 5 years like SLM would give.
+        dep_yr     = R(float(dep_schedule[i]["depreciation"])) if i < len(dep_schedule) else R(annual_dep)
 
         interest   = float(loan_schedule[i]["interest_paid"])
         wc_int     = float(wc_schedule[i]["wc_interest"]) if wc_schedule else 0.0

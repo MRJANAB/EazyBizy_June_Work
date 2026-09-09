@@ -42,7 +42,7 @@ const navItems = [
 ];
 
 const EMI_STORAGE_KEY_PREFIX = "eazybizy:emi-paid-count";
-const TOTAL_WIZARD_STEPS = 9;
+const TOTAL_WIZARD_STEPS = 10;
 
 const panelClass =
   "min-w-0 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 ring-1 ring-white/5 shadow-[0_20px_80px_rgba(0,194,209,0.16)] backdrop-blur-xl sm:rounded-[2rem] sm:p-6";

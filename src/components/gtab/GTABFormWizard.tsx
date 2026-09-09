@@ -28,6 +28,7 @@ import ProjectSummaryStep from "./steps/ProjectSummaryStep";
 import MonthlyExpensesStep from "./steps/MonthlyExpensesStep";
 import WorkingCapitalStep from "./steps/WorkingCapitalStep";
 import ProjectReportInputsStep from "./steps/ProjectReportInputsStep";
+import DepreciationScheduleStep from "./steps/DepreciationScheduleStep";
 import ApplicationPreview from "./ApplicationPreview";
 import { ValidationStatus } from "./ValidationStatus";
 import AIInsightPanel from "./AIInsightPanel";
@@ -42,7 +43,8 @@ const STEPS = [
   { id: 6, title: "Operating Expenses", icon: "💰" },
   { id: 7, title: "Working Capital", icon: "🎯" },
   { id: 8, title: "Financial Projections", icon: "🧾" },
-  { id: 9, title: "Final Review", icon: "👁️" },
+  { id: 9, title: "Depreciation Schedule", icon: "📉" },
+  { id: 10, title: "Final Review", icon: "👁️" },
 ];
 
 const DEFAULT_TENURE_MONTHS = 60;
@@ -996,7 +998,8 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
           || Number(r?.dpr?.selling_price_per_unit || 0) > 0
           || Number(r?.dpr?.selling_price_per_kg || 0) > 0;
       }
-      case 9: return true;
+      case 9: return true; // depreciation schedule is auto-calculated, always complete
+      case 10: return true;
       default: return false;
     }
   };
@@ -1031,6 +1034,8 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
       case 8:
         return <ProjectReportInputsStep formData={formData} updateFormData={updateFormData} />;
       case 9:
+        return <DepreciationScheduleStep formData={formData} />;
+      case 10:
         return (
           <ApplicationPreview
             formData={formData}
@@ -1335,7 +1340,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
   return (
     <div className="gtab-application-shell mx-auto w-full max-w-none overflow-x-hidden bg-white text-gray-900">
       {/* AI Insight Panel — floats as right-side panel across all steps */}
-      {currentStep < 9 && (
+      {currentStep < 10 && (
         <AIInsightPanel
           formData={formData}
           currentStep={currentStep}
@@ -1409,7 +1414,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
       </div>
 
       {/* Bankability strip — live figures a banker checks first (money steps) */}
-      {currentStep >= 4 && currentStep <= 8 && (
+      {currentStep >= 4 && currentStep <= 9 && (
         <div className="mt-4">
           <BankabilityBar formData={formData} />
         </div>

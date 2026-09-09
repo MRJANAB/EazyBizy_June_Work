@@ -1,8 +1,15 @@
-"""calculations/depreciation.py — SLM depreciation for CMAReportInput.
+"""calculations/depreciation.py — WDV (Written Down Value / reducing-balance)
+depreciation for CMAReportInput.
 
-BUG 5 FIX: Gross Block for P&M must use PM_with_contingency.
+WDV only — no SLM anywhere in this module. Each year:
+  depreciation = opening WDV × rate
+  closing WDV  = opening WDV − depreciation
+carried forward year over year, tracked separately for Building and for
+Plant & Machinery + Fixtures (each can have its own rate).
+
+BUG 5 FIX (kept): Gross Block for P&M must use PM_with_contingency.
   PM_with_contingency = PM_base × (1 + contingencyPct)
-  GrossBlock = Building + PM_with_contingency
+  GrossBlock = Building + PM_with_contingency + Fixtures
   Depreciation base uses PM_with_contingency (not PM_base).
 """
 from core.engine import R
@@ -10,12 +17,16 @@ from core.engine import R
 
 def calculate_depreciation(data, scheme_data: dict) -> dict:
     """
-    Calculate straight-line depreciation from structured CMAReportInput.
+    Calculate WDV (reducing-balance) depreciation from structured CMAReportInput.
 
     Returns
     -------
     dict: building_gross, machinery_gross (pre-contingency), pm_with_contingency,
-          gross_block, dep_building_slm, dep_machinery_slm, total_per_year, annual_dep
+          gross_block, dep_building_wdv, dep_machinery_wdv (Year-1 values),
+          total_per_year, annual_dep (both = Year-1 total, kept for backward
+          compatibility with callers that only want a single figure),
+          schedule (list of 5 dicts, one per year, with opening/depreciation/
+          closing WDV for building, machinery+fixtures, and combined).
     """
     building      = float(data.project.building_cost or 0)
     machinery_base = (
@@ -38,11 +49,34 @@ def calculate_depreciation(data, scheme_data: dict) -> dict:
     mach_rate  = float(getattr(data.assumptions, "depreciation_pct",      10) or 10) / 100
     bldg_rate  = float(getattr(data.assumptions, "building_dep_rate_pct",  5) or  5) / 100
 
-    dep_building  = R(building             * bldg_rate)
-    # BUG 5 FIX: Depreciation base uses PM_with_contingency
-    dep_machinery = R(pm_with_contingency  * mach_rate)
-    dep_fixtures  = R(fixtures             * mach_rate)
-    total_dep     = R(dep_building + dep_machinery + dep_fixtures)
+    # Machinery pool depreciates alongside fixtures at the same rate (matches
+    # the original grouping — fixtures were always depreciated at mach_rate).
+    machinery_pool_opening = R(pm_with_contingency + fixtures)
+    building_pool_opening  = building
+
+    schedule = []
+    bld_opening  = building_pool_opening
+    mach_opening = machinery_pool_opening
+    for year in range(1, 6):
+        bld_dep  = R(bld_opening  * bldg_rate)
+        mach_dep = R(mach_opening * mach_rate)
+        bld_closing  = R(max(bld_opening  - bld_dep,  0))
+        mach_closing = R(max(mach_opening - mach_dep, 0))
+        schedule.append({
+            "year":                   year,
+            "opening_wdv":            R(bld_opening + mach_opening),
+            "building_opening_wdv":   bld_opening,
+            "building_depreciation":  bld_dep,
+            "building_closing_wdv":   bld_closing,
+            "machinery_opening_wdv":  mach_opening,
+            "machinery_depreciation": mach_dep,
+            "machinery_closing_wdv":  mach_closing,
+            "depreciation":           R(bld_dep + mach_dep),
+            "closing_wdv":            R(bld_closing + mach_closing),
+        })
+        bld_opening, mach_opening = bld_closing, mach_closing
+
+    year1 = schedule[0]
 
     return {
         "building_gross":       building,
@@ -50,9 +84,16 @@ def calculate_depreciation(data, scheme_data: dict) -> dict:
         "pm_with_contingency":  pm_with_contingency,  # BUG 5 — used for gross block & V10 check
         "fixtures_gross":       fixtures,
         "gross_block":          R(building + pm_with_contingency + fixtures),
-        "dep_building_slm":     dep_building,
-        "dep_machinery_slm":    dep_machinery,
-        "dep_fixtures_slm":     dep_fixtures,
-        "total_per_year":       total_dep,
-        "annual_dep":           total_dep,
+        "dep_building_wdv":     year1["building_depreciation"],
+        "dep_machinery_wdv":    year1["machinery_depreciation"],
+        "dep_fixtures_wdv":     year1["machinery_depreciation"],  # fixtures share the machinery pool/rate
+        # Kept for backward compatibility with callers expecting a single
+        # figure (monthly_pnl, income_statement fallback, balance_sheet
+        # fallback) — always the Year-1 WDV depreciation, never a flat SLM
+        # amount repeated across years. Real per-year figures live in
+        # "schedule" below.
+        "total_per_year":       year1["depreciation"],
+        "annual_dep":           year1["depreciation"],
+        "schedule":             schedule,
+        "method":               "WDV",
     }

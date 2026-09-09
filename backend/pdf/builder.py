@@ -1045,7 +1045,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["WC Loan %",                rp(inp["wc_loan_pct"]),              "Term Loan Interest",   rp(inp["term_loan_interest"])],
         ["WC Interest Rate",         rp(inp["wc_interest_rate"]),         "Annual Salary Hike",   rp(inp["salary_increase_rate"])],
         ["Admin Expense Increase",   rp(inp["admin_increase_rate"]),      "Marketing % of Rev",   rp(inp["marketing_expense_pct"])],
-        ["Building Dep (SLM)",       rp(inp["building_dep_rate_slm"]),    "Asset Dep (SLM)" if _is_service else "Machinery Dep (SLM)", rp(inp["machinery_dep_rate_slm"])],
+        ["Building Dep (WDV)",       rp(inp["building_dep_rate_wdv"]),    "Asset Dep (WDV)" if _is_service else "Machinery Dep (WDV)", rp(inp["machinery_dep_rate_wdv"])],
         ["Revenue Growth (CMA)",     rp2(inp["revenue_growth_pct"]),      "Salary Hike (CMA)",    rp2(inp["salary_increase_pct"])],
     ]
     if _is_service:
@@ -1074,7 +1074,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ════════════════════════════════════════════════════════════════
     # SECTION G — DEPRECIATION
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION G — CALCULATION OF DEPRECIATION (SLM Method)", story)
+    SEC("SECTION G — CALCULATION OF DEPRECIATION (WDV Method)", story)
     H2("Gross Block", story)
     _dep_building_label = (
         "Shop / Showroom Space"              if _is_trading else
@@ -1089,15 +1089,15 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "Plant, Machinery & Equipment (incl. contingency)"
     )
     gb_t = Table([
-        ["Asset", "Gross Value (Rs.)", "Dep Rate", "Annual Dep (Rs.)"],
+        ["Asset", "Gross Value (Rs.)", "Dep Rate", "Year 1 Dep (Rs.)"],
         [_dep_building_label,
          rs(dep["building_gross"]),
-         rp(inp["building_dep_rate_slm"]),
-         rs(dep["dep_building_slm"])],
+         rp(inp["building_dep_rate_wdv"]),
+         rs(dep["dep_building_wdv"])],
         [_dep_machinery_label,
          rs(dep.get("pm_with_contingency", dep["machinery_gross"])),
-         rp(inp["machinery_dep_rate_slm"]),
-         rs(dep["dep_machinery_slm"])],
+         rp(inp["machinery_dep_rate_wdv"]),
+         rs(dep["dep_machinery_wdv"])],
         ["Total Gross Block",
          rs(dep["gross_block"]),
          "",
@@ -1108,17 +1108,32 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(gb_t)
     NL(story, 5)
 
-    H2("Book Depreciation (SLM) — 5-Year Schedule", story)
+    H2("Book Depreciation (WDV) — 5-Year Schedule", story)
+    _dep_sched = dep.get("schedule") or []
+    _sched_opening = [r(row["opening_wdv"]) for row in _dep_sched] or [r(dep["gross_block"])] * 5
+    _sched_dep     = [r(row["depreciation"]) for row in _dep_sched] or [r(dep["total_per_year"])] * 5
+    _sched_closing = [r(row["closing_wdv"]) for row in _dep_sched] or [r(dep["gross_block"])] * 5
+    _accum = 0.0
+    _sched_accum = []
+    for row in (_dep_sched or []):
+        _accum += float(row["depreciation"])
+        _sched_accum.append(r(_accum))
+    if not _sched_accum:
+        _sched_accum = [r(dep["total_per_year"] * y) for y in range(1, 6)]
     dep_t = Table([
-        ["Particulars",                "Year 1",               "Year 2",                   "Year 3",                   "Year 4",                   "Year 5"],
-        ["Gross Block (Fixed)"]         + [r(dep["gross_block"])] * 5,
-        ["Annual Depreciation"]         + [r(dep["total_per_year"])] * 5,
-        ["Accumulated Depreciation"]    + [r(dep["total_per_year"] * y) for y in range(1, 6)],
-        ["Net Block (Closing)"]         + [r(max(dep["gross_block"] - dep["total_per_year"] * y, 0)) for y in range(1, 6)],
+        ["Particulars",                "Year 1",       "Year 2",       "Year 3",       "Year 4",       "Year 5"],
+        ["Opening WDV"]                 + _sched_opening,
+        ["Depreciation (WDV × Rate)"]   + _sched_dep,
+        ["Accumulated Depreciation"]    + _sched_accum,
+        ["Closing WDV (Net Block)"]     + _sched_closing,
     ], colWidths=[60*mm] + [22*mm] * 5)
     dep_t.setStyle(BTS())
     dep_t.setStyle(TOT(4))
     story.append(dep_t)
+    story.append(Paragraph(
+        "WDV Method: each year's depreciation = Opening WDV × Rate; Closing WDV = Opening WDV − Depreciation, "
+        "carried forward as next year's Opening WDV.",
+        ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1378,7 +1393,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Land"]                       + [r(pb["land"])                  for pb in pbs],
         ["  Gross Block (Fixed Assets)"] + [r(pb["gross_block"])           for pb in pbs],
         ["  Less: Accumulated Dep."]     + [r(pb["accum_dep"])             for pb in pbs],
-        ["  Net Block (NBV — SLM)"]      + [r(pb["net_block"])             for pb in pbs],
+        ["  Net Block (NBV — WDV)"]      + [r(pb["net_block"])             for pb in pbs],
         ["  Other Long-Term Assets"]     + [r(pb["other_assets"])          for pb in pbs],
         ["  (b) Current Assets","","","","","",""],
         ["  Stock / Debtors / WC Assets"]+ [r(pb["current_assets"])        for pb in pbs],

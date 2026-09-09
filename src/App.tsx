@@ -26,7 +26,6 @@ const LearningSegmentModules = lazy(() => import("./pages/LearningSegmentModules
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const CreditAnalystDashboard = lazy(() => import("./pages/credit-analyst/CreditAnalystDashboard"));
 const ConsultantDashboard = lazy(() => import("./pages/consultant/ConsultantDashboard"));
-const DepreciationApp = lazy(() => import("./pages/depreciation/DepreciationApp"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
 const LoanSchemes = lazy(() => import("./pages/LoanSchemes"));
@@ -160,14 +159,6 @@ const App = () => (
             <Route path="/learning/paid-courses" element={<Learning />} />
             <Route path="/learning/settings" element={<Learning />} />
             <Route path="/learning/segments/:segmentId" element={<LearningSegmentModules />} />
-            <Route
-              path="/depreciation"
-              element={
-                <ProtectedRoute>
-                  <DepreciationApp />
-                </ProtectedRoute>
-              }
-            />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/credit-analyst" element={<CreditAnalystDashboard />} />
             <Route path="/consultant" element={<ConsultantDashboard />} />

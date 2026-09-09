@@ -230,8 +230,8 @@ function buildPositives(formData: GTABFormData | undefined, validation: GTABVali
 export function ValidationStatus({ validation, currentStep, formData, onNavigate }: ValidationStatusProps) {
   // Step 2 — scheme eligibility
   const showSchemeCard = currentStep === 2;
-  // Step 9 — full credit score coach
-  const showScoreCard  = currentStep === 9;
+  // Step 10 — full credit score coach
+  const showScoreCard  = currentStep === 10;
 
   // Non-step-9 hints (steps 1-8)
   const { warnings: stepWarnings, infos: stepInfos } = (() => {

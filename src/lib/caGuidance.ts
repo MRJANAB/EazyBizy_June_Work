@@ -291,7 +291,7 @@ export function getStep9Tips(ctx: CAContext): string[] {
   if (isMfg(ind)) {
     tips.push("Manufacturing revenue = Installed Capacity × Capacity Utilisation% × Selling Price per Unit. Start at 50% utilisation in Y1. Banks compare this with your machinery specs — if the machine cannot produce that much, they will reduce the projections.");
     tips.push("COGS percentage for manufacturing should be 45–60% of revenue. Raw material cost drives COGS — enter monthly RM cost in Step 7 and this engine will compute it automatically.");
-    tips.push("Depreciation: Machinery typically depreciates at 15% SLM or WDV. Building at 5% SLM. This is automatically computed. Ensure machinery cost in Step 5 is accurate — depreciation drives tax shield and Net Cash Accrual.");
+    tips.push("Depreciation: Machinery typically depreciates at 10% WDV, Building at 5% WDV (reducing balance — declines every year). This is automatically computed. Ensure machinery cost in Step 5 is accurate — depreciation drives tax shield and Net Cash Accrual.");
   } else if (isTrad(ind)) {
     tips.push("Trading revenue = Units Sold × Selling Price per product. Enter each product category separately in the Products section. Banks verify: is total revenue achievable given your shop size and local market?");
     tips.push("Trading GP Margin = (Selling Price − Purchase Price) ÷ Selling Price × 100. Target: 20–35% GP margin. A GP below 15% makes loan repayment very difficult. A GP above 50% looks unrealistic without strong justification.");

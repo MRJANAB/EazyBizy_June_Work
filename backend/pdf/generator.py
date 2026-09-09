@@ -454,8 +454,8 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
               max(float(income[0].get("revenue", 1) or 1), 1), 4)
             if income else 0.0
         ),
-        "building_dep_rate_slm":  float(assum.get("building_dep_rate_pct", 5) or 5) / 100,
-        "machinery_dep_rate_slm": float(assum.get("depreciation_pct", 10) or 10) / 100,
+        "building_dep_rate_wdv":  float(assum.get("building_dep_rate_pct", 5) or 5) / 100,
+        "machinery_dep_rate_wdv": float(assum.get("depreciation_pct", 10) or 10) / 100,
         "revenue_growth_pct":  float(assum.get("revenue_growth_pct", 7) or 7),
         "salary_increase_pct": float(assum.get("salary_increase_pct", 10) or 10),
         "admin_increase_pct":  float(assum.get("expense_growth_pct", 5) or 5),

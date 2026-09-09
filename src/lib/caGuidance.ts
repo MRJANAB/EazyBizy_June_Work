@@ -257,7 +257,7 @@ export function getStep8Tips(ctx: CAContext): string[] {
   const tips: string[] = [];
 
   if (isMfg(ind)) {
-    tips.push("Manufacturing WC (Tandon Committee norm): Banks finance up to 75% of WC requirement as Bank WC Loan. Your 25% contribution (Promoter Margin) is included in Total Project Cost. Never understate WC — it causes operational stress in Y1.");
+    tips.push("Manufacturing WC (RBI/Nayak Committee turnover method — mandatory for MSE borrowers with turnover up to Rs.5 crore): Banks finance a minimum of 80% of WC requirement as Bank WC Loan. Your 20% contribution (Promoter Margin) is included in Total Project Cost. Never understate WC — it causes operational stress in Y1.");
     tips.push("Manufacturing WC components: RM stock (15–30 days) + WIP (7–15 days production) + Finished Goods (15–30 days) + Debtors (30–60 days). Add these up to get your actual WC cycle.");
   } else if (isTrad(ind)) {
     tips.push("Trading WC norm: Stock holding (30–60 days of purchase) + Debtors (if credit sales: 15–45 days) − Creditors (if you get credit from suppliers: deduct 15–30 days). CA multiplier: 2× monthly expenses.");
@@ -278,7 +278,7 @@ export function getStep8Tips(ctx: CAContext): string[] {
     tips.push("CGTMSE covers both term loans AND working capital/CC limits up to Rs. 5 Crore total. If WC loan is also needed, ask your bank to include it under CGTMSE guarantee — no additional collateral.");
   }
 
-  tips.push("Tandon Committee principle (RBI): Banks should finance WC so promoter contributes at least 25% as margin. A lower promoter margin is a risk signal — banks may reduce WC loan or ask for security.");
+  tips.push("RBI/Nayak Committee simplified turnover method (mandatory for MSE borrowers, turnover up to Rs.5 crore): banks finance a minimum of 80% of WC requirement, promoter contributes at least 20% as margin. A lower promoter margin is a risk signal — banks may reduce WC loan or ask for security.");
 
   return tips;
 }

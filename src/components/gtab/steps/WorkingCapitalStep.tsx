@@ -63,11 +63,11 @@ const WorkingCapitalStep = ({ formData, updateFormData }: WorkingCapitalStepProp
   // Trading       2.0x: stock holding + debtor days, no WIP/FG
   // Service       1.5x: no stock; just salary/overhead until payment collected
   // Agriculture   3.5x: full crop cycle (sowing → harvest → sale) per NABARD norms
-  const WC_MULTIPLIERS: Record<string, { months: number; reason: string; bankPctLabel: string }> = {
-    manufacturing: { months: 2.5, reason: "RM stock + WIP + Finished Goods + Debtor days (Tandon Committee norms)", bankPctLabel: "75%" },
-    trading:       { months: 2.0, reason: "Stock holding + debtor days; no WIP or FG component", bankPctLabel: "65%" },
-    service:       { months: 1.5, reason: "No inventory; covers salary, rent & overhead until payment collected", bankPctLabel: "60%" },
-    agriculture:   { months: 3.5, reason: "Full crop cycle funding: seeds → cultivation → harvest → sale (NABARD norms)", bankPctLabel: "70%" },
+  const WC_MULTIPLIERS: Record<string, { months: number; reason: string }> = {
+    manufacturing: { months: 2.5, reason: "RM stock + WIP + Finished Goods + Debtor days (Tandon Committee norms)" },
+    trading:       { months: 2.0, reason: "Stock holding + debtor days; no WIP or FG component" },
+    service:       { months: 1.5, reason: "No inventory; covers salary, rent & overhead until payment collected" },
+    agriculture:   { months: 3.5, reason: "Full crop cycle funding: seeds → cultivation → harvest → sale (NABARD norms)" },
   };
   const industryKey  = (formData.industry_type === "others" ? "manufacturing" : formData.industry_type || "manufacturing").toLowerCase();
   const wcNorm       = WC_MULTIPLIERS[industryKey] ?? WC_MULTIPLIERS["manufacturing"];
@@ -82,7 +82,9 @@ const WorkingCapitalStep = ({ formData, updateFormData }: WorkingCapitalStepProp
   const activeMultiplier = userMultiplier ?? wcNorm.months;
   const caWCSuggestion   = Math.round(totalMonthly * activeMultiplier);
 
-  // Bank WC loan (60-75% of WC) — from actual financing plan
+  // Bank WC loan — RBI/Nayak Committee turnover method mandates a minimum of
+  // 80% for MSE borrowers (turnover ≤ ₹5 crore), applied uniformly regardless
+  // of industry — from actual financing plan.
   const bankWCLoan     = plan.workingCapitalLoan;
   const promoterMargin = Math.max(monthlyWC - bankWCLoan, 0);
   const wcBankPct      = plan.wcBankFinancePct;
@@ -116,7 +118,7 @@ const WorkingCapitalStep = ({ formData, updateFormData }: WorkingCapitalStepProp
     caWCSuggestion > 0
       ? `Using ${activeMultiplier}× multiplier (${activeOption?.tag ?? "Custom"}): ${fmt(totalMonthly)}/month × ${activeMultiplier} = ${fmt(caWCSuggestion)}.${userMultiplier && userMultiplier !== wcNorm.months ? ` (CA recommends ${wcNorm.months}× for ${industryLabel})` : ""}`
       : "Fill Step 7 expenses to get an industry-calibrated WC auto-suggestion.",
-    `Bank funds ${Math.round(wcBankPct)}% of WC as Bank WC Loan (${industryLabel} norm: up to ${wcNorm.bankPctLabel}). You contribute ${100 - Math.round(wcBankPct)}% as Promoter Margin.`,
+    `Bank funds ${Math.round(wcBankPct)}% of WC as Bank WC Loan (RBI/Nayak Committee turnover method — mandatory minimum 80% for MSE borrowers). You contribute ${100 - Math.round(wcBankPct)}% as Promoter Margin.`,
     ...(serviceFloatSuggestion ? [serviceFloatSuggestion] : []),
   ];
 
@@ -228,7 +230,18 @@ const WorkingCapitalStep = ({ formData, updateFormData }: WorkingCapitalStepProp
               <Label className="font-semibold">Is this a Monthly or Annual amount?</Label>
               <RadioGroup
                 value={formData.working_capital_period}
-                onValueChange={(v: GTABWorkingCapitalPeriod) => updateFormData({ working_capital_period: v })}
+                onValueChange={(v: GTABWorkingCapitalPeriod) => {
+                  if (v === formData.working_capital_period) return;
+                  // Rescale the entered number so it keeps meaning the same real
+                  // amount — flipping the unit must not silently change the
+                  // underlying WC requirement by 12x.
+                  const currentAmount = Number(formData.working_capital_required || 0);
+                  const convertedAmount = v === "annual" ? currentAmount * 12 : currentAmount / 12;
+                  updateFormData({
+                    working_capital_period: v,
+                    working_capital_required: Math.round(convertedAmount),
+                  });
+                }}
                 className="flex gap-8"
               >
                 <div className="flex items-center gap-2">

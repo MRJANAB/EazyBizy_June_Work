@@ -19,7 +19,6 @@ import type { Json } from "@/integrations/supabase/types";
 import {
   getFinancingPlan,
 } from "@/lib/projectReport";
-import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
 import PersonalInfoStep from "./steps/PersonalInfoStep";
 import BusinessInfoStep from "./steps/BusinessInfoStep";
 import BusinessLoanDetailsStep from "./steps/BusinessLoanDetailsStep";
@@ -642,32 +641,10 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
 
   // Calculate totals
   const calculateTotals = (data: GTABFormData = formData) => {
-    const machineryTotal = data.plant_machinery.reduce(
-      (sum, item) => sum + (Number(item.cost) || 0),
-      0
-    );
-    const monthlyWorkingCapital = getMonthlyWorkingCapital(
-      Number(data.working_capital_required || 0),
-      data.working_capital_period,
-    );
-
-    const totalProjectCost =
-      Number(data.land_cost || 0) +
-      Number(data.shed_building_cost || 0) +
-      machineryTotal +
-      Number(data.computers_cost || 0) +
-      Number(data.furniture_cost || 0) +
-      Number(data.electrification_cost || 0) +
-      Number(data.racks_storage_cost || 0) +
-      Number(data.transportation_cost || 0) +
-      Number(data.machinery_installation_cost || 0) +
-      Number(data.other_initial_expenditure || 0) +
-      monthlyWorkingCapital;
-
-    const financingPlan = getFinancingPlan({
-      ...data,
-      total_project_cost: totalProjectCost,
-    });
+    // getFinancingPlan (→ getProjectCostBreakdown) is the single source of
+    // truth for Total Project Cost: Fixed Capital + promoter's WC margin
+    // only — never the full WC requirement. Don't duplicate that formula here.
+    const financingPlan = getFinancingPlan(data);
     const normalizedProjectCost = financingPlan.totalProjectCost;
     const marginMoney = financingPlan.promoterContribution;
     const eligibleLoanAmount = financingPlan.totalBankFinance;

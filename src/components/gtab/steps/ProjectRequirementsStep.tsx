@@ -83,6 +83,146 @@ const CurrencyInput = ({
   );
 };
 
+const itemCost = (m: MachineryItem) => Number(m.cost) || Number(m.quantity || 1) * Number(m.unit_cost || 0);
+const sumItems = (items: MachineryItem[]) => (items || []).reduce((s, m) => s + itemCost(m), 0);
+
+/** Itemized "add as many as you need" list — name, qty, unit price, purchase date, supplier per row. */
+const CostItemList = ({
+  items,
+  onChange,
+  addLabel,
+  namePlaceholder,
+}: {
+  items: MachineryItem[];
+  onChange: (items: MachineryItem[]) => void;
+  addLabel: string;
+  namePlaceholder: string;
+}) => {
+  const total = sumItems(items);
+
+  const addItem = () => {
+    const newId = crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+    onChange([
+      ...items,
+      { id: newId, machine_name: "", cost: 0, quantity: 1, unit_cost: 0, purchase_date: "", supplier_name: "", supplier_city: "", supplier_phone: "", supplier_email: "" },
+    ]);
+  };
+  const updateItem = (id: string, updates: Partial<MachineryItem>) => {
+    onChange(items.map((item) => (item.id === id ? { ...item, ...updates } : item)));
+  };
+  const removeItem = (id: string) => {
+    onChange(items.filter((item) => item.id !== id));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {items.length === 0 ? "No items added yet. Click Add to start." : `${items.length} item(s) · Total: ${fmt(total)}`}
+        </p>
+        <Button type="button" variant="outline" onClick={addItem} className="gap-2 border-primary/40 text-primary hover:bg-primary/10">
+          <Plus className="w-4 h-4" />
+          {addLabel}
+        </Button>
+      </div>
+
+      {items.length === 0 && (
+        <div className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+          Click "{addLabel}" to add your first item.
+        </div>
+      )}
+
+      {items.map((item, index) => {
+        const cost = itemCost(item);
+        return (
+          <div key={item.id} className="rounded-xl border bg-card p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold">
+                Item #{index + 1}
+                {cost > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{fmt(cost)}</span>}
+              </span>
+              <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 text-destructive hover:bg-destructive/10 text-xs" onClick={() => removeItem(item.id)}>
+                <Trash2 className="w-3.5 h-3.5" /> Remove
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+              <div className="space-y-1.5 md:col-span-2">
+                <Label>Item Name *</Label>
+                <Input className="h-11 rounded-xl" value={item.machine_name}
+                  onChange={(e) => updateItem(item.id, { machine_name: e.target.value })}
+                  placeholder={namePlaceholder} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Quantity (Nos.)</Label>
+                <Input type="number" className="h-11 rounded-xl" value={item.quantity || 1} min={1}
+                  onChange={(e) => {
+                    const qty = Number(e.target.value) || 1;
+                    const uc = Number(item.unit_cost || item.cost || 0);
+                    updateItem(item.id, { quantity: qty, unit_cost: uc, cost: qty * uc });
+                  }} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Unit Price (₹) *</Label>
+                <Input type="number" className="h-11 rounded-xl" value={item.unit_cost || item.cost || ""} placeholder="₹ 0"
+                  onChange={(e) => {
+                    const uc = parseFloat(e.target.value) || 0;
+                    const qty = item.quantity || 1;
+                    updateItem(item.id, { unit_cost: uc, cost: qty * uc });
+                  }} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Date of Purchase</Label>
+                <DatePicker
+                  className="h-11 rounded-xl"
+                  value={item.purchase_date || ""}
+                  onChange={(v) => updateItem(item.id, { purchase_date: v })}
+                  placeholder="Select date"
+                  disableFuture
+                />
+              </div>
+            </div>
+
+            {cost > 0 && (
+              <div className="text-xs text-muted-foreground">
+                Total for this item: <strong>{fmt(cost)}</strong>
+                {Number(item.quantity || 1) > 1 ? ` (${item.quantity} × ${fmt(Number(item.unit_cost || 0))})` : ""}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label>Supplier / Vendor Name</Label>
+                <Input className="h-11 rounded-xl" value={item.supplier_name}
+                  onChange={(e) => updateItem(item.id, { supplier_name: e.target.value })}
+                  placeholder="Supplier name" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Supplier City</Label>
+                <Input className="h-11 rounded-xl" value={item.supplier_city || ""}
+                  onChange={(e) => updateItem(item.id, { supplier_city: e.target.value })}
+                  placeholder="City" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Supplier Phone</Label>
+                <Input className="h-11 rounded-xl" value={item.supplier_phone}
+                  onChange={(e) => updateItem(item.id, { supplier_phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                  placeholder="10-digit mobile" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Supplier Email</Label>
+                <Input type="email" className="h-11 rounded-xl" value={item.supplier_email}
+                  onChange={(e) => updateItem(item.id, { supplier_email: e.target.value })}
+                  placeholder="supplier@email.com" />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequirementsStepProps) => {
   const isTrading      = formData.industry_type === "trading";
   const isService      = formData.industry_type === "service";
@@ -90,24 +230,44 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
   const isManufacturing= formData.industry_type === "manufacturing";
   const isPMEGP        = formData.loan_scheme === "pmegp";
 
+  const pri = formData.project_report_inputs;
+  const capexItems = pri?.capex_items ?? { computers: [], furniture: [], electrification: [], racks_storage: [], transportation: [] };
+
+  const updateCapexItems = (category: keyof typeof capexItems, items: MachineryItem[]) => {
+    updateFormData({
+      project_report_inputs: {
+        ...pri,
+        capex_items: { ...capexItems, [category]: items },
+      },
+    });
+  };
+
   // ── Live cost calculations (all from actual form data — no hardcodes) ────────
   const landCost         = Number(formData.land_cost            || 0);
   const buildingCost     = Number(formData.shed_building_cost   || 0);
-  const machineryTotal   = (formData.plant_machinery || []).reduce(
-    (s, m) => s + (Number(m.cost) || Number(m.quantity || 1) * Number(m.unit_cost || 0)), 0
-  );
-  const computersCost    = Number(formData.computers_cost            || 0);
-  const furnitureCost    = Number(formData.furniture_cost            || 0);
-  const electrification  = Number(formData.electrification_cost     || 0);
-  const racksCost        = Number(formData.racks_storage_cost        || 0);
-  const transportCost    = Number(formData.transportation_cost       || 0);
+  const machineryTotal   = sumItems(formData.plant_machinery || []);
+  // These 5 categories are itemized — their totals are always derived live from
+  // capex_items, not read from the (possibly one-render-stale) scalar fields.
+  const computersCost    = sumItems(capexItems.computers);
+  const furnitureCost    = sumItems(capexItems.furniture);
+  const electrification  = sumItems(capexItems.electrification);
+  const racksCost        = sumItems(capexItems.racks_storage);
+  const transportCost    = sumItems(capexItems.transportation);
   const installCost      = Number(formData.machinery_installation_cost || 0);
   const otherCost        = Number(formData.other_initial_expenditure || 0);
   const preliminaryTotal = computersCost + furnitureCost + electrification + racksCost + transportCost + installCost + otherCost;
   const fixedCapital     = landCost + buildingCost + machineryTotal + preliminaryTotal;
 
-  // Use getFinancingPlan for ALL financing numbers — scheme-aware, no hardcodes
-  const plan = getFinancingPlan(formData);
+  // Use getFinancingPlan for ALL financing numbers — scheme-aware, no hardcodes.
+  // Patch in the live itemized totals so this render never uses a stale scalar.
+  const plan = getFinancingPlan({
+    ...formData,
+    computers_cost: computersCost,
+    furniture_cost: furnitureCost,
+    electrification_cost: electrification,
+    racks_storage_cost: racksCost,
+    transportation_cost: transportCost,
+  });
   const totalProjectCost   = plan.totalProjectCost || fixedCapital;
   const termLoanAmount     = plan.termLoanAmount;
   const wcLoan             = plan.workingCapitalLoan;
@@ -121,7 +281,8 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
     ? Math.max(totalProjectCost - promoterEquity - termLoanAmount - wcLoan, 0)
     : 0;
 
-  // ── Sync computed totals back to formData so Step 7 & 8 always have latest ──
+  // ── Sync computed totals back to formData so Step 7 & 8 (and the backend
+  // report pipeline, which reads these scalars directly) always have latest ──
   useEffect(() => {
     const updates: Partial<GTABFormData> = {};
     if (formData.total_project_cost !== totalProjectCost) {
@@ -131,8 +292,13 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
     if (formData.eligible_loan_amount !== eligibleLoan) {
       updates.eligible_loan_amount = eligibleLoan;
     }
+    if (formData.computers_cost !== computersCost) updates.computers_cost = computersCost;
+    if (formData.furniture_cost !== furnitureCost) updates.furniture_cost = furnitureCost;
+    if (formData.electrification_cost !== electrification) updates.electrification_cost = electrification;
+    if (formData.racks_storage_cost !== racksCost) updates.racks_storage_cost = racksCost;
+    if (formData.transportation_cost !== transportCost) updates.transportation_cost = transportCost;
     if (Object.keys(updates).length > 0) updateFormData(updates);
-  }, [totalProjectCost, totalBankFinance]);
+  }, [totalProjectCost, totalBankFinance, computersCost, furnitureCost, electrification, racksCost, transportCost]);
 
   // ── Machinery handlers ─────────────────────────────────────────────────────
   const addMachineryItem = () => {
@@ -440,53 +606,89 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
           <SectionTitle
             icon={Package}
             title={isTrading ? "Furniture, Computers & Initial Stock" : isService ? "Computers, Software & Initial Setup" : isAgriculture ? "Tools, Irrigation & Initial Inputs" : "Preliminary & Other Capital Expenditure"}
-            subtitle="One-time setup costs that form part of Initial Project Investment."
+            subtitle="One-time setup costs that form part of Initial Project Investment. Add each item separately — bank verifies these against quotations."
           />
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
-            <CurrencyInput
-              label={isAgriculture ? "Equipment / Power Tools (₹)" : "Computers / Laptops / Printers (₹)"}
-              value={formData.computers_cost}
-              onChange={(v) => updateFormData({ computers_cost: v })}
-              hint="Separate from machinery. Include peripherals."
-            />
-            <CurrencyInput
-              label={isTrading ? "Furniture / Racks / Display Units (₹)" : isAgriculture ? "Storage Racks / Poly-house Fixtures (₹)" : "Furniture & Office Fixtures (₹)"}
-              value={formData.furniture_cost}
-              onChange={(v) => updateFormData({ furniture_cost: v })}
-            />
-            <CurrencyInput
-              label="Electrification / Internal Wiring / Power Backup — one-time (₹)"
-              value={formData.electrification_cost}
-              onChange={(v) => updateFormData({ electrification_cost: v })}
-              hint="Internal wiring, meter, generator, stabiliser"
-            />
-            <CurrencyInput
-              label={isTrading ? "Initial Inventory / Opening Stock (₹)" : isService ? "Software Licenses / Subscriptions (₹)" : isAgriculture ? "Seeds, Fertilisers, Initial Inputs (₹)" : "Storage Racks / Material Handling (₹)"}
-              value={formData.racks_storage_cost}
-              onChange={(v) => updateFormData({ racks_storage_cost: v })}
-            />
-            <CurrencyInput
-              label={isAgriculture ? "Farm Vehicle / Transport — one-time (₹)" : "Transport / Vehicle / Loading Cost — one-time (₹)"}
-              value={formData.transportation_cost}
-              onChange={(v) => updateFormData({ transportation_cost: v })}
-            />
-            {isManufacturing && (
-              <CurrencyInput
-                label="Machinery Installation & Commissioning (₹)"
-                value={formData.machinery_installation_cost}
-                onChange={(v) => updateFormData({ machinery_installation_cost: v })}
-                hint="Labour + transport for installation — typically 5–10% of machine cost"
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">{isAgriculture ? "Equipment / Power Tools" : "Computers / Laptops / Printers"}</p>
+              <CostItemList
+                items={capexItems.computers}
+                onChange={(items) => updateCapexItems("computers", items)}
+                addLabel="Add Item"
+                namePlaceholder="e.g. Laptop / Printer"
               />
-            )}
-            {!isService && (
-              <CurrencyInput
-                label={isAgriculture ? "Advance Payment / Pre-Operative Costs (₹)" : "Pre-Operative / Other Initial Expenditure (₹)"}
-                value={formData.other_initial_expenditure}
-                onChange={(v) => updateFormData({ other_initial_expenditure: v })}
-                hint="Registration, legal, license, advance rent, brand setup"
+            </div>
+
+            <div className="border-t" />
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">{isTrading ? "Furniture / Racks / Display Units" : isAgriculture ? "Storage Racks / Poly-house Fixtures" : "Furniture & Office Fixtures"}</p>
+              <CostItemList
+                items={capexItems.furniture}
+                onChange={(items) => updateCapexItems("furniture", items)}
+                addLabel="Add Item"
+                namePlaceholder="e.g. Office Chairs / Display Rack"
               />
-            )}
+            </div>
+
+            <div className="border-t" />
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">Electrification / Internal Wiring / Power Backup</p>
+              <p className="text-xs text-muted-foreground -mt-2">Internal wiring, meter, generator, stabiliser</p>
+              <CostItemList
+                items={capexItems.electrification}
+                onChange={(items) => updateCapexItems("electrification", items)}
+                addLabel="Add Item"
+                namePlaceholder="e.g. Generator / Stabiliser"
+              />
+            </div>
+
+            <div className="border-t" />
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">{isTrading ? "Initial Inventory / Opening Stock" : isService ? "Software Licenses / Subscriptions" : isAgriculture ? "Seeds, Fertilisers, Initial Inputs" : "Storage Racks / Material Handling"}</p>
+              <CostItemList
+                items={capexItems.racks_storage}
+                onChange={(items) => updateCapexItems("racks_storage", items)}
+                addLabel="Add Item"
+                namePlaceholder={isService ? "e.g. Accounting Software License" : "e.g. Storage Rack"}
+              />
+            </div>
+
+            <div className="border-t" />
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">{isAgriculture ? "Farm Vehicle / Transport" : "Transport / Vehicle / Loading Cost"}</p>
+              <CostItemList
+                items={capexItems.transportation}
+                onChange={(items) => updateCapexItems("transportation", items)}
+                addLabel="Add Item"
+                namePlaceholder="e.g. Delivery Vehicle / Handcart"
+              />
+            </div>
+
+            {(isManufacturing || !isService) && <div className="border-t" />}
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+              {isManufacturing && (
+                <CurrencyInput
+                  label="Machinery Installation & Commissioning (₹)"
+                  value={formData.machinery_installation_cost}
+                  onChange={(v) => updateFormData({ machinery_installation_cost: v })}
+                  hint="Labour + transport for installation — typically 5–10% of machine cost"
+                />
+              )}
+              {!isService && (
+                <CurrencyInput
+                  label={isAgriculture ? "Advance Payment / Pre-Operative Costs (₹)" : "Pre-Operative / Other Initial Expenditure (₹)"}
+                  value={formData.other_initial_expenditure}
+                  onChange={(v) => updateFormData({ other_initial_expenditure: v })}
+                  hint="Registration, legal, license, advance rent, brand setup"
+                />
+              )}
+            </div>
           </div>
 
           {/* CA AI Tips */}

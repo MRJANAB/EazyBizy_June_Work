@@ -153,6 +153,14 @@ export interface ProjectReportInputs {
     transportation_vehicle: number;
     preoperative_expenses: number;
   };
+  /** Itemized breakdown for each preliminary capex category — name, qty, unit price, purchase date, supplier. */
+  capex_items: {
+    computers: MachineryItem[];
+    furniture: MachineryItem[];
+    electrification: MachineryItem[];
+    racks_storage: MachineryItem[];
+    transportation: MachineryItem[];
+  };
   promoter_contribution: {
     own_savings: number;
     family_contribution: number;
@@ -306,6 +314,13 @@ export const createInitialProjectReportInputs = (): ProjectReportInputs => ({
     transportation_vehicle: 0,
     preoperative_expenses: 0,
   },
+  capex_items: {
+    computers: [],
+    furniture: [],
+    electrification: [],
+    racks_storage: [],
+    transportation: [],
+  },
   promoter_contribution: {
     own_savings: 0,
     family_contribution: 0,
@@ -406,6 +421,13 @@ export const mergeProjectReportInputs = (
       ...base.project_cost,
       ...inputs.project_cost,
       plant_machinery_items: parsePlantMachinery(inputs.project_cost?.plant_machinery_items),
+    },
+    capex_items: {
+      computers: parsePlantMachinery(inputs.capex_items?.computers),
+      furniture: parsePlantMachinery(inputs.capex_items?.furniture),
+      electrification: parsePlantMachinery(inputs.capex_items?.electrification),
+      racks_storage: parsePlantMachinery(inputs.capex_items?.racks_storage),
+      transportation: parsePlantMachinery(inputs.capex_items?.transportation),
     },
     promoter_contribution: {
       ...base.promoter_contribution,

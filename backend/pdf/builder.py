@@ -880,13 +880,21 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         else:
             sales_rows = [["Product / Service Category","Annual Revenue (Rs.)","% Mix"]]
             if products and len(products) > 0 and products[0].get("category") and products[0].get("category") != "Products/Services":
-                total_rev = sum(p.get("monthly_revenue", 0) * 12 for p in products)
+                # BUG FIX: entered monthly_revenue is the Year-1 (current-capacity)
+                # figure, not 100%-capacity — summing it straight gave a "Total at
+                # 100% Capacity" that was actually the Year-1 total (e.g. 60% of
+                # the real 100% figure). Scale every row up to the SAME
+                # ps["revenue_at_100pct"] already used in D1 and Section J, so
+                # this table's total is never a different, silently-wrong basis.
+                total_rev_y1 = sum(p.get("monthly_revenue", 0) * 12 for p in products)
+                total_rev_100pct = float(ps.get("revenue_at_100pct", 0) or 0) or total_rev_y1
+                scale = (total_rev_100pct / total_rev_y1) if total_rev_y1 else 1
                 for p in products:
-                    ann_rev = p.get("monthly_revenue", 0) * 12
+                    ann_rev_y1 = p.get("monthly_revenue", 0) * 12
                     name = p.get("name") or p.get("category") or "Product"
-                    mix = (ann_rev / total_rev * 100) if total_rev else 0
-                    sales_rows.append([name, r(ann_rev), rp2(mix)])
-                sales_rows.append(["Total at 100% Capacity", r(total_rev), "100.0%"])
+                    mix = (ann_rev_y1 / total_rev_y1 * 100) if total_rev_y1 else 0
+                    sales_rows.append([name, r(ann_rev_y1 * scale), rp2(mix)])
+                sales_rows.append(["Total at 100% Capacity", r(total_rev_100pct), "100.0%"])
             else:
                 sales_rows.append([primary_product, r(ps["revenue_at_100pct"]), "100.0%"])
                 sales_rows.append(["Total at 100% Capacity", r(ps["revenue_at_100pct"]), "100.0%"])

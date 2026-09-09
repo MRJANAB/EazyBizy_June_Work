@@ -39,7 +39,7 @@ const titleCase = (s: string) => (s || "").replace(/_/g, " ").replace(/\b\w/g, c
 /** CA Readiness Score — shows how complete Step 9 is for loan approval. */
 const CAReadiness = ({ formData, report, isTrading, isService, isAgriculture }: any) => {
   const checks = [
-    { label: "Promoter PAN & Aadhaar",    ok: !!(report.promoter.pan_number && report.promoter.aadhar_number), required: true },
+    { label: "Promoter PAN Number",       ok: !!report.promoter.pan_number, required: true },
     { label: "Father's Name & Date of Birth", ok: !!(report.promoter.fathers_name && report.promoter.date_of_birth), required: true },
     { label: "Business Commencement Date", ok: !!report.business.commencement_date, required: true },
     { label: isTrading ? "Trading Products Added" : isService ? "Service Revenue Lines Added" : isAgriculture ? "Agriculture Revenue Lines Added" : "Production Parameters Filled",
@@ -393,11 +393,11 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
           <SectionTitle
             icon={UserRound}
             title="1. Promoter Profile"
-            subtitle="Identity and experience details. Banks verify PAN + Aadhaar. These appear in the report cover page."
+            subtitle="Identity and experience details. Banks verify PAN. These appear in the report cover page."
           />
 
           <CATip tips={[
-            "Name, DOB, PAN, Aadhaar and Years of Experience were captured in Step 1 (KYC) — they flow into this report automatically. No need to re-enter.",
+            "Name, DOB, PAN and Years of Experience were captured in Step 1 (KYC) — they flow into this report automatically. No need to re-enter.",
             "Previous employment shows income history — leave blank if self-employed/homemaker.",
           ]} />
 

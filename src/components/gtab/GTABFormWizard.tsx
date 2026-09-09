@@ -1003,7 +1003,7 @@ const GTABFormWizard = forwardRef<GTABFormWizardHandle, GTABFormWizardProps>(({ 
     const p = formData.project_report_inputs?.promoter;
     switch (id) {
       case 1: return !!(
-        formData.first_name && formData.last_name && p?.pan_number && p?.aadhar_number && p?.date_of_birth
+        formData.first_name && formData.last_name && p?.pan_number && p?.date_of_birth
         && formData.address_line_1 && formData.city && formData.state && formData.pincode && formData.contact_mobile?.length === 10
       );
       case 2: return !!(formData.business_entity_name && formData.loan_scheme && formData.type_of_business);

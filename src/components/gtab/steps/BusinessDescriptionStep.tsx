@@ -1,14 +1,12 @@
 import { useEffect, useCallback } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GTABFormData, NATURE_OF_BUSINESS_OPTIONS } from "@/types/gtab";
-import { Building2, FileText, Lightbulb, Target, TrendingUp, Wand2 } from "lucide-react";
+import { Building2, FileText, Lightbulb, Target, Wand2 } from "lucide-react";
 import AIAssistBadge from "@/components/AIAssistPanel";
 import { getStep4Tips } from "@/lib/caGuidance";
-import { numberToWords } from "@/lib/numberToWords";
 
 interface BusinessDescriptionStepProps {
   formData: GTABFormData;
@@ -214,42 +212,6 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
                 value={formData.target_market || ""}
                 onChange={(e) => updateFormData({ target_market: e.target.value })}
                 placeholder="Who are your target customers?"
-              />
-            </div>
-          </div>
-
-          <div className="border-t" />
-
-          <SectionTitle
-            icon={TrendingUp}
-            title="Business Projections"
-            subtitle="Expected financial and employment projections"
-          />
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
-            <div className="space-y-2">
-              <Label>Expected Monthly Revenue (₹)</Label>
-              <Input
-                type="number"
-                className="h-12 rounded-xl"
-                value={formData.expected_monthly_revenue || ""}
-                onChange={(e) => updateFormData({ expected_monthly_revenue: Number(e.target.value) || 0 })}
-                placeholder="e.g., 500000"
-                min={0}
-              />
-              {formData.expected_monthly_revenue > 0 && (
-                <p className="text-xs font-medium text-primary/80">₹ {numberToWords(formData.expected_monthly_revenue)}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Expected Direct Employment</Label>
-              <Input
-                type="number"
-                className="h-12 rounded-xl"
-                value={formData.expected_employment || ""}
-                onChange={(e) => updateFormData({ expected_employment: Number(e.target.value) || 0 })}
-                placeholder="e.g., 10"
-                min={0}
               />
             </div>
           </div>

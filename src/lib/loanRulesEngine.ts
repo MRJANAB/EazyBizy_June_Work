@@ -639,11 +639,6 @@ export function validateApplicant(applicant: ApplicantData): ValidationResult {
     errors.push('Valid PAN number is required');
   }
 
-  // Aadhaar validation
-  if (!applicant.aadhaar_number || applicant.aadhaar_number.length !== 12) {
-    errors.push('Valid 12-digit Aadhaar number is required');
-  }
-
   // Mobile validation
   if (!applicant.mobile_number || applicant.mobile_number.length !== 10) {
     errors.push('Valid 10-digit mobile number is required');

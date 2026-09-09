@@ -198,7 +198,7 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
           <SectionTitle
             icon={ShieldCheck}
             title="KYC & Identity Documents"
-            subtitle="PAN and Aadhaar are mandatory for Section A of the bank loan report"
+            subtitle="PAN is required for Section A of the bank loan report"
           />
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
@@ -216,31 +216,13 @@ const PersonalInfoStep = ({ formData, updateFormData }: PersonalInfoStepProps) =
                 <p className="text-xs text-amber-400">Format: 5 letters · 4 digits · 1 letter — e.g. ABCDE1234F</p>
               )}
             </div>
-
-            {/* Aadhaar */}
-            <div className="space-y-2">
-              <FieldLabel required>Aadhaar Number</FieldLabel>
-              <Input
-                className={fieldCls}
-                value={pri?.promoter?.aadhar_number || ""}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, "").slice(0, 12);
-                  updatePromoter({ aadhar_number: digits });
-                }}
-                placeholder="12-digit Aadhaar"
-                maxLength={12}
-              />
-              {pri?.promoter?.aadhar_number && pri.promoter.aadhar_number.length > 0 && pri.promoter.aadhar_number.length !== 12 && (
-                <p className="text-xs text-amber-400">Aadhaar must be exactly 12 digits (entered: {pri.promoter.aadhar_number.length})</p>
-              )}
-            </div>
           </div>
 
           <div className="rounded-[0.8rem] border border-[#00C2D1]/20 bg-[#00C2D1]/8 px-4 py-3">
             <p className="text-xs leading-5 text-slate-300">
               <span className="font-semibold text-[#7BE7F0]">Demo data pre-filled.</span>{" "}
-              Replace PAN and Aadhaar with your actual details before submitting to the bank.
-              These fields auto-populate Section A of your project report.
+              Replace PAN with your actual details before submitting to the bank.
+              This field auto-populates Section A of your project report.
             </p>
           </div>
 

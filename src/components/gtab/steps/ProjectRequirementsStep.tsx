@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Plus, Trash2, Wrench, Building, Package, Calculator, IndianRupee, Lightbulb } from "lucide-react";
+import { Plus, Trash2, Wrench, Building, Package, Calculator, IndianRupee, Lightbulb, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -180,6 +180,43 @@ const ProjectRequirementsStep = ({ formData, updateFormData }: ProjectRequiremen
             advisories={[adviseProjectCostCeiling(formData), adviseLandBuildingShare(formData), advisePromoterMargin(formData)]}
             onApply={updateFormData}
           />
+
+          {/* ── Business Projections ────────────────────────────────────────── */}
+          <SectionTitle
+            icon={TrendingUp}
+            title="Business Projections"
+            subtitle="Expected financial and employment projections"
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+            <div className="space-y-2">
+              <Label>Expected Monthly Revenue (₹)</Label>
+              <Input
+                type="number"
+                className="h-12 rounded-xl"
+                value={formData.expected_monthly_revenue || ""}
+                onChange={(e) => updateFormData({ expected_monthly_revenue: Number(e.target.value) || 0 })}
+                placeholder="e.g., 500000"
+                min={0}
+              />
+              {formData.expected_monthly_revenue > 0 && (
+                <p className="text-xs font-medium text-primary/80">₹ {numberToWords(formData.expected_monthly_revenue)}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Expected Direct Employment</Label>
+              <Input
+                type="number"
+                className="h-12 rounded-xl"
+                value={formData.expected_employment || ""}
+                onChange={(e) => updateFormData({ expected_employment: Number(e.target.value) || 0 })}
+                placeholder="e.g., 10"
+                min={0}
+              />
+            </div>
+          </div>
+
+          <div className="border-t" />
 
           {/* ── Fixed Capital (Infrastructure) ─────────────────────────────── */}
           <SectionTitle

@@ -12,3 +12,7 @@ services:
         value: "3.12.4"
       - key: ALLOWED_ORIGINS
         sync: false   # set to your Vercel URL(s), comma-separated, in the Render dashboard
+      - key: SUPABASE_URL
+        sync: false   # same value as the frontend's VITE_SUPABASE_URL — set in the Render dashboard
+      - key: SUPABASE_ANON_KEY
+        sync: false   # same value as the frontend's VITE_SUPABASE_PUBLISHABLE_KEY — set in the Render dashboard

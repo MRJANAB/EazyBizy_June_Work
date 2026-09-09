@@ -11,6 +11,7 @@
 import type { GTABFormData } from '@/types/gtab';
 import { getFinancingPlan } from '@/lib/projectReport';
 import { getSchemeRules } from '@/lib/schemeRulesStore';
+import { getYear1LoanFigures, calculateDscr } from '@/lib/loanSchedule';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -95,12 +96,14 @@ function pmegpSubsidyPct(category: string, area: string): number {
 }
 
 // ── DSCR helper: estimate DSCR for a given effective term loan ───────────────
-function estimateDSCR(annualCashAccruals: number, termLoan: number, tenureYrs: number, intRate: number): number {
+// Uses the same half-yearly equal-principal, reducing-balance schedule the
+// backend actually amortises with (src/lib/loanSchedule.ts) instead of a
+// "x0.9" reducing-balance guess, so this comparison table doesn't disagree
+// with the real report.
+function estimateDSCR(annualCashAccruals: number, termLoan: number, tenureYrs: number, intRatePct: number): number {
   if (termLoan <= 0 || tenureYrs <= 0) return 0;
-  const annualPrincipal = termLoan / tenureYrs;
-  const annualInterest  = termLoan * intRate * 0.9; // reducing-balance approx
-  const debtService     = annualPrincipal + annualInterest;
-  return debtService > 0 ? (annualCashAccruals + annualInterest) / debtService : 0;
+  const { interestPaid, principalPaid } = getYear1LoanFigures(termLoan, intRatePct, tenureYrs * 12, 0);
+  return calculateDscr(annualCashAccruals, interestPaid, principalPaid);
 }
 
 export function recommendScheme(formData: GTABFormData): SchemeRecommendation {
@@ -116,7 +119,7 @@ export function recommendScheme(formData: GTABFormData): SchemeRecommendation {
 
   // ── Base financial data for DSCR estimates ─────────────────────────────────
   const ri           = formData.project_report_inputs;
-  const intRate      = Number(ri?.loan?.interest_rate_pct || 10.5) / 100;
+  const intRatePct   = Number(ri?.loan?.interest_rate_pct || 10.5);
   const tenureYrs    = Number(ri?.loan?.tenure_months || 60) / 12 || 5;
   const monthlyRev   = Number(formData.expected_monthly_revenue || 0);
   const monthlyExp   =
@@ -148,7 +151,7 @@ export function recommendScheme(formData: GTABFormData): SchemeRecommendation {
     // admin edit made via the Rules Admin UI without a code change.
     minDSCR: getSchemeRules(base.id)?.benchmarks?.dscr_avg ?? base.minDSCR,
     subsidyAmount: subsidyAmt,
-    dscrUnderScheme: annualCashAccruals > 0 ? estimateDSCR(annualCashAccruals, effectiveTermLoan, tenureYrs, intRate) : 0,
+    dscrUnderScheme: annualCashAccruals > 0 ? estimateDSCR(annualCashAccruals, effectiveTermLoan, tenureYrs, intRatePct) : 0,
   });
 
   // ── Mudra Shishu (≤ 50,000) ──────────────────────────────────────────────
@@ -219,7 +222,7 @@ export function recommendScheme(formData: GTABFormData): SchemeRecommendation {
   // PMEGP: term loan = 75% of project cost; subsidy is FREE (not repaid)
   const pmegpTermLoan = projectCost * 0.75;
   // DSCR-boosted score: subsidy reduces effective principal, improving DSCR
-  const pmegpDSCR     = annualCashAccruals > 0 ? estimateDSCR(annualCashAccruals, pmegpTermLoan, tenureYrs, intRate) : 0;
+  const pmegpDSCR     = annualCashAccruals > 0 ? estimateDSCR(annualCashAccruals, pmegpTermLoan, tenureYrs, intRatePct) : 0;
   const pmegpScore    = pmegpOk
     ? Math.round(88 + (subsidyPctVal >= 0.25 ? 7 : 0) + (pmegpDSCR >= 1.5 ? 5 : 0))
     : 10;
@@ -441,14 +444,18 @@ export function predictViability(formData: GTABFormData): ViabilityPrediction {
   // ── Financing ─────────────────────────────────────────────────────────────
   const financing   = getFinancingPlan(formData);
   const loanAmount  = financing.totalBankFinance;
-  const ri          = formData.project_report_inputs;
-  const interestPct = Number(ri?.loan?.interest_rate_pct || 10.5) / 100;
-  const tenureMonths = Number(ri?.loan?.tenure_months || 60);
+  const ri               = formData.project_report_inputs;
+  const interestRatePct  = Number(ri?.loan?.interest_rate_pct || 10.5);
+  const tenureMonths     = Number(ri?.loan?.tenure_months || 60);
+  const moratoriumMonths = Number(ri?.loan?.moratorium_months || 0);
 
-  // EMI approximation (flat method)
-  const totalInterest   = loanAmount * interestPct * (tenureMonths / 12);
-  const monthlyEMI      = tenureMonths > 0 ? (loanAmount + totalInterest) / tenureMonths : 0;
-  const annualDebtService = monthlyEMI * 12;
+  // Year-1 interest/principal from the same half-yearly equal-principal,
+  // reducing-balance schedule the backend actually amortises with (not a
+  // flat-interest EMI approximation).
+  const { interestPaid: annualInterest, principalPaid: annualPrincipal } =
+    getYear1LoanFigures(loanAmount, interestRatePct, tenureMonths, moratoriumMonths);
+  const annualDebtService = annualInterest + annualPrincipal;
+  const monthlyEMI         = annualDebtService / 12;
 
   // ── DSCR estimate ─────────────────────────────────────────────────────────
   const annualRevenue  = monthlyRevenue * 12;
@@ -459,7 +466,7 @@ export function predictViability(formData: GTABFormData): ViabilityPrediction {
   );
   const annualDepreciation = machineryTotal * 0.10;
   const cashAccruals = Math.max(annualRevenue - annualExpenses - annualDepreciation * 0, 0);
-  const dscrEstimate  = annualDebtService > 0 ? (cashAccruals + annualDebtService * interestPct) / annualDebtService : 0;
+  const dscrEstimate  = calculateDscr(cashAccruals, annualInterest, annualPrincipal);
 
   // ── Gross margin ──────────────────────────────────────────────────────────
   const cogs         = Number(formData.raw_material_cost || 0) * 12;

@@ -22,6 +22,7 @@ import {
   type IndustryInputs,
   type SchemeDetails,
 } from '@/lib/loanRulesEngine';
+import { getYear1LoanFigures } from '@/lib/loanSchedule';
 
 export interface GTABValidationResult {
   applicant: ValidationResult;
@@ -134,13 +135,13 @@ export function useGTABValidation(formData: GTABFormData): GTABValidationResult 
     const annualExpense = (formData.total_monthly_expenses || 0) * 12;
 
     if (annualRevenue > 0 && annualExpense > 0) {
-      const loanAmt = formData.eligible_loan_amount || 0;
-      const rate    = (pri?.loan?.interest_rate_pct || 10.5) / 100 / 12;
-      const n       = pri?.loan?.tenure_months || 60;
-      const emi     = rate > 0
-        ? (loanAmt * rate * Math.pow(1 + rate, n)) / (Math.pow(1 + rate, n) - 1)
-        : loanAmt / n;
-      const annualDebtRepayment = emi * 12;
+      const loanAmt     = formData.eligible_loan_amount || 0;
+      const rate        = pri?.loan?.interest_rate_pct || 10.5;
+      const tenure      = pri?.loan?.tenure_months || 60;
+      const moratorium  = pri?.loan?.moratorium_months || 0;
+      // Year-1 interest/principal from the same half-yearly equal-principal,
+      // reducing-balance schedule the backend actually uses — not an EMI approximation.
+      const { interestPaid, principalPaid } = getYear1LoanFigures(loanAmt, rate, tenure, moratorium);
 
       const ratios = calculateFinancialRatios(
         formData.total_project_cost || 0,
@@ -148,7 +149,8 @@ export function useGTABValidation(formData: GTABFormData): GTABValidationResult 
         formData.margin_money || 0,
         annualRevenue,
         annualExpense,
-        annualDebtRepayment,
+        principalPaid,
+        interestPaid,
       );
 
       financialValidation = validateFinancialRatios(ratios, formData.loan_scheme);

@@ -21,6 +21,7 @@ import { CASuggestionTip } from "@/components/gtab/CASuggestionTip";
 import { advisePromoterMargin } from "@/lib/caAdvisory";
 import { getMonthlyWorkingCapital } from "@/lib/workingCapital";
 import { getStep9Tips } from "@/lib/caGuidance";
+import { buildLoanSchedule } from "@/lib/loanSchedule";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -382,46 +383,26 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                   ? "No physical collateral required. CGTMSE guarantee covers upto 75-85% of loan default."
                   : "Hypothecation of business assets (stock, equipment, receivables). Personal guarantee of promoter.";
 
-            // ── Live loan schedule preview — mirrors backend/calculations/loan_schedule.py
-            // EXACTLY (half-yearly equal-principal, reducing balance) so this preview
-            // never disagrees with the actual generated report. The backend does NOT
-            // use the EMI formula — it amortises fixed-capital term loans as equal
-            // half-yearly principal instalments, with interest recalculated on the
-            // declining balance each half-year.
+            // ── Live loan schedule preview — uses the SAME shared utility
+            // (src/lib/loanSchedule.ts) that mirrors backend/calculations/
+            // loan_schedule.py exactly, so this preview never disagrees with
+            // the actual generated report. The backend does NOT use the EMI
+            // formula — it amortises fixed-capital term loans as equal
+            // half-yearly principal instalments, with interest recalculated
+            // on the declining balance each half-year.
             const loanAmt   = financingPlan.termLoanAmount;
             const rate      = Number(report.loan.interest_rate_pct || 10.5);
             const tenure    = Number(report.loan.tenure_months || 60);
             const morat     = Number(report.loan.moratorium_months || 0);
-            const annualRate = rate / 100;
+            const fullSchedule    = buildLoanSchedule(loanAmt, rate, tenure, morat);
             const tenureYears     = Math.ceil(tenure / 12);
             const moratoriumYears = Math.ceil(morat / 12);
             const repayYears      = Math.max(tenureYears - moratoriumYears, 1);
-            const halfInst  = loanAmt > 0 ? Math.round((loanAmt / (repayYears * 2)) * 100) / 100 : 0;
-
-            let balance = loanAmt;
-            let totalInterest = 0;
-            let moratInterest = 0;
-            for (let yr = 1; yr <= tenureYears && loanAmt > 0; yr++) {
-              const opening = Math.round(balance * 100) / 100;
-              let ih1: number, ih2: number, repaid: number, closing: number;
-              if (yr <= moratoriumYears) {
-                ih1 = Math.round(opening * annualRate / 2 * 100) / 100;
-                ih2 = Math.round(opening * annualRate / 2 * 100) / 100;
-                repaid = 0;
-                closing = opening;
-                moratInterest += ih1 + ih2;
-              } else {
-                ih1 = Math.round(opening * annualRate / 2 * 100) / 100;
-                const mid = Math.round(Math.max(opening - halfInst, 0) * 100) / 100;
-                ih2 = Math.round(mid * annualRate / 2 * 100) / 100;
-                repaid = Math.round(halfInst * 2 * 100) / 100;
-                closing = Math.round(Math.max(opening - repaid, 0) * 100) / 100;
-              }
-              totalInterest += ih1 + ih2;
-              balance = closing;
-            }
-            totalInterest = Math.round(totalInterest);
-            moratInterest = Math.round(moratInterest);
+            const halfInst        = fullSchedule.find(r => r.principalPaid > 0)?.halfYearlyInstalment ?? 0;
+            const totalInterest   = Math.round(fullSchedule.reduce((s, r) => s + r.interestPaid, 0));
+            const moratInterest   = Math.round(
+              fullSchedule.filter(r => r.principalPaid === 0).reduce((s, r) => s + r.interestPaid, 0),
+            );
             const nRepay         = repayYears * 12;
             const grandInterest  = totalInterest;
             const debtEquity     = financingPlan.promoterContribution > 0

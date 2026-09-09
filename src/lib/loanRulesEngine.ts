@@ -993,17 +993,22 @@ export function calculateFinancialRatios(
   promoterContribution: number,
   annualRevenue: number,
   annualExpense: number,
-  annualDebtRepayment: number,
+  annualPrincipalRepayment: number,
+  annualInterest: number,
   currentAssets: number = 0,
   currentLiabilities: number = 0,
 ): FinancialRatioResult {
   const equity       = promoterContribution;
   const annualProfit = annualRevenue - annualExpense;
+  const debtService  = annualPrincipalRepayment + annualInterest;
 
   return {
     debt_equity_ratio: equity > 0 ? loanAmount / equity : 0,
-    // CA DSCR: (Revenue − Operating Expense) / Annual Debt Service (EMI × 12)
-    dscr: annualDebtRepayment > 0 ? annualProfit / annualDebtRepayment : 0,
+    // CA-standard DSCR: (Cash Accruals + Interest) / (Principal + Interest).
+    // annualProfit here is a pre-tax/pre-depreciation proxy for cash accruals —
+    // callers without a full P&L should still add the interest back rather
+    // than omit it, since omitting it understates DSCR (see src/lib/loanSchedule.ts).
+    dscr: debtService > 0 ? (annualProfit + annualInterest) / debtService : 0,
     roe:  equity > 0 ? (annualProfit / equity) * 100 : 0,
     current_ratio: currentLiabilities > 0
       ? currentAssets / currentLiabilities

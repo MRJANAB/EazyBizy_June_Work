@@ -623,6 +623,51 @@ export type Database = {
           },
         ]
       }
+      loan_scheme_rules: {
+        Row: {
+          active: boolean
+          bank_name: string | null
+          created_at: string
+          created_by: string | null
+          effective_date: string
+          id: string
+          notes: string | null
+          rule_key: string
+          scheme_id: string
+          source_reference: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          active?: boolean
+          bank_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_date: string
+          id?: string
+          notes?: string | null
+          rule_key: string
+          scheme_id: string
+          source_reference: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          active?: boolean
+          bank_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          id?: string
+          notes?: string | null
+          rule_key?: string
+          scheme_id?: string
+          source_reference?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       loan_type_documents: {
         Row: {
           created_at: string

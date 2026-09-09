@@ -11,6 +11,7 @@ import {
   IndianRupee,
   ArrowLeft,
   Shield,
+  Landmark,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { supabase } from "@/integrations/supabase/client";
 import ApplicationsTable from "@/components/admin/ApplicationsTable";
 import UsersTable from "@/components/admin/UsersTable";
+import LoanSchemeRulesTable from "@/components/admin/LoanSchemeRulesTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Stats {
@@ -218,6 +220,10 @@ const AdminDashboard = () => {
                 <Users className="h-4 w-4 mr-2" />
                 Users
               </TabsTrigger>
+              <TabsTrigger value="rules">
+                <Landmark className="h-4 w-4 mr-2" />
+                Loan Scheme Rules
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="applications">
@@ -226,6 +232,10 @@ const AdminDashboard = () => {
 
             <TabsContent value="users">
               <UsersTable />
+            </TabsContent>
+
+            <TabsContent value="rules">
+              <LoanSchemeRulesTable />
             </TabsContent>
           </Tabs>
         </motion.div>

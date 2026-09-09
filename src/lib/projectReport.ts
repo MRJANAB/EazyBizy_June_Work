@@ -87,17 +87,20 @@ const SCHEME_TL_BAND: Record<string, [number, number]> = {
   other_scheme:    [60, 90],
 };
 
-// Allowed [min, max] band for Bank Finance on Fixed Capital %, per scheme.
-// The UI uses this so the input can't be set below the scheme minimum (e.g.
-// normal MSME can't go under 70%) — keeping the shown % and the calc in sync.
+// Typical [min, max] band for Bank Finance on Fixed Capital %, per scheme —
+// informational only (preset buttons / "typical range" hints). The actual
+// percentage a bank offers varies bank-to-bank and must NEVER be force-
+// clamped into this band; getBankFinancePct below only sanity-bounds to
+// 0-100%, it does not enforce the scheme-typical range.
 export const getBankFinancePctBand = (formData: GTABFormData): [number, number] =>
   SCHEME_TL_BAND[formData.loan_scheme] ?? [0, 100];
 
 export const getBankFinancePct = (formData: GTABFormData) => {
-  const merged  = mergeProjectReportInputs(formData.project_report_inputs);
-  const raw     = Number(merged.dpr.term_loan_pct || 75);
-  const band    = getBankFinancePctBand(formData);
-  return clamp(raw, band[0], band[1]);
+  const merged = mergeProjectReportInputs(formData.project_report_inputs);
+  const raw    = Number(merged.dpr.term_loan_pct || 75);
+  // Banks set this per their own credit policy — never force it into a
+  // scheme-typical band. Only guard basic numeric sanity (0-100%).
+  return clamp(raw, 0, 100);
 };
 
 // RBI/Nayak Committee simplified turnover method (mandatory for MSE borrowers

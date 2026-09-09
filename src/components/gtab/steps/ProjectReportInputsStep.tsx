@@ -190,14 +190,12 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
   };
 
   const handleBankFinancePctChange = (value: number) => {
-    // Floor to the scheme band minimum (e.g. normal MSME ≥ 70%) so the shown %
-    // and the term-loan calc always agree — 69% silently became 70% before.
-    const [bandMin, bandMax] = getBankFinancePctBand(formData);
-    const clampedValue = Math.min(Math.max(value, bandMin), bandMax);
+    // Bank Finance % varies bank-to-bank — never force-clamp to a scheme-
+    // typical band. Only guard basic numeric sanity (0-100%).
     updateReport({
       dpr: {
         ...report.dpr,
-        term_loan_pct: clampedValue,
+        term_loan_pct: Math.min(Math.max(value, 0), 100),
       },
     });
   };
@@ -432,10 +430,9 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                   <div className="space-y-2">
                     <Label>Bank Finance on Fixed Capital %</Label>
                     <Input type="number" className="h-11 rounded-xl" value={report.dpr.term_loan_pct || 75}
-                      min={getBankFinancePctBand(formData)[0]} max={getBankFinancePctBand(formData)[1]}
-                      onChange={(e) => updateReport({ dpr: { ...report.dpr, term_loan_pct: Math.min(Number(e.target.value), getBankFinancePctBand(formData)[1]) } })}
-                      onBlur={(e) => handleBankFinancePctChange(Number(e.target.value))} />
-                    <p className="text-xs text-muted-foreground">Min {getBankFinancePctBand(formData)[0]}% for this scheme (applied when you click away)</p>
+                      min={0} max={100}
+                      onChange={(e) => handleBankFinancePctChange(Number(e.target.value))} />
+                    <p className="text-xs text-muted-foreground">Enter what your bank actually offers — this varies bank-to-bank, so nothing here is forced to a preset range. Typical for {isPMEGP ? "PMEGP" : isMudra ? "Mudra" : "this scheme"}: {getBankFinancePctBand(formData)[0]}–{getBankFinancePctBand(formData)[1]}%.</p>
                     <div className="flex gap-1 flex-wrap">
                       {[isPMEGP ? [65, 75, 85, 90] : isMudra ? [80, 85, 90] : [70, 75, 80]][0].map(v => (
                         <button key={v} type="button"
@@ -1300,6 +1297,7 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             <p><strong>CA Standard Defaults (RBI/ICAI norms):</strong></p>
             <p>• Machinery Dep 10% SLM · Building Dep 5% SLM · Tax Rate 25% (mandatory under Income Tax Act)</p>
             <p>• Revenue Growth 7% p.a. · Fixed Expense Growth 5% p.a. · Salary Hike 10% p.a. · DSCR benchmark ≥ 1.25</p>
+            <p>• Contingency on P&amp;M 5–10% — a cost-overrun buffer banks expect on new machinery purchases</p>
             <p>• {isServiceOrTrading ? "Service/Trading Capacity: 60→70→80→85→90%" : isAgriculture ? "Agriculture Capacity: 80→85→90→95→100%" : "Manufacturing Capacity: 50→60→70→75→80%"}</p>
           </div>
 
@@ -1340,7 +1338,17 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
               onChange={(value) => updateSection("dpr", { salary_increase_pct: value } as any)}
               placeholder="10"
             />
+            <NumberField
+              label="Contingency on Plant & Machinery %"
+              value={report.dpr.contingency_pct || 0}
+              onChange={(value) => updateSection("dpr", { contingency_pct: value })}
+              placeholder="e.g. 5"
+              max={25}
+            />
           </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Cost-overrun buffer added on top of machinery cost before depreciation — CA standard is 5–10% for new equipment purchases. 0 = none.
+          </p>
 
           {/* Capacity Utilization — industry-aware defaults, no hardcodes */}
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 space-y-1">

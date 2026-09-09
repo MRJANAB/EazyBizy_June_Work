@@ -24,6 +24,7 @@ import {
   Plus,
   Search,
   Settings,
+  TrendingDown,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
@@ -51,7 +52,7 @@ const navItems = [
   { id: "documents", label: "Documents", icon: FolderPlus },
   { id: "loan-details", label: "Loan Details", icon: Percent },
   { id: "status-tracker", label: "Status Tracker", icon: Clock3 },
-  
+  { id: "depreciation", label: "Depreciation", icon: TrendingDown },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -686,6 +687,10 @@ const LoanManagementDashboard = () => {
   const handleSectionNavigation = (sectionId: string) => {
     if (sectionId === "settings") {
       navigate("/settings", { state: backOrigin ? { from: backOrigin } : undefined });
+      return;
+    }
+    if (sectionId === "depreciation") {
+      navigate("/depreciation", { state: backOrigin ? { from: backOrigin } : undefined });
       return;
     }
 

@@ -360,6 +360,11 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
             const isPMEGP   = scheme === "pmegp";
             const isMudra   = scheme.startsWith("mudra");
             const isCGTMSE  = scheme === "cgtmse";
+            // PMEGP/Mudra/CGTMSE compute the term-loan split by a fixed scheme
+            // formula in the backend (schemes/pmegp.py, mudra.py, router.py) —
+            // it never reads term_loan_pct for those, so showing it as an
+            // editable "bank offers X%" field would silently do nothing.
+            const canAdjustTermLoanPct = !isPMEGP && !isMudra && !isCGTMSE;
 
             // Interest rate preset options per scheme (CA norms)
             const ratePresets: number[] = isPMEGP
@@ -429,19 +434,30 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                   </div>
                   <div className="space-y-2">
                     <Label>Bank Finance on Fixed Capital %</Label>
-                    <Input type="number" className="h-11 rounded-xl" value={report.dpr.term_loan_pct || 75}
-                      min={0} max={100}
-                      onChange={(e) => handleBankFinancePctChange(Number(e.target.value))} />
-                    <p className="text-xs text-muted-foreground">Enter what your bank actually offers — this varies bank-to-bank, so nothing here is forced to a preset range. Typical for {isPMEGP ? "PMEGP" : isMudra ? "Mudra" : "this scheme"}: {getBankFinancePctBand(formData)[0]}–{getBankFinancePctBand(formData)[1]}%.</p>
-                    <div className="flex gap-1 flex-wrap">
-                      {[isPMEGP ? [65, 75, 85, 90] : isMudra ? [80, 85, 90] : [70, 75, 80]][0].map(v => (
-                        <button key={v} type="button"
-                          onClick={() => handleBankFinancePctChange(v)}
-                          className={`px-2 py-0.5 rounded text-xs font-medium border transition ${Number(report.dpr.term_loan_pct) === v ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
-                          {v}%
-                        </button>
-                      ))}
-                    </div>
+                    {canAdjustTermLoanPct ? (
+                      <>
+                        <Input type="number" className="h-11 rounded-xl" value={report.dpr.term_loan_pct || 75}
+                          min={0} max={100}
+                          onChange={(e) => handleBankFinancePctChange(Number(e.target.value))} />
+                        <p className="text-xs text-muted-foreground">Enter what your bank actually offers — this varies bank-to-bank, so nothing here is forced to a preset range. Typical for this scheme: {getBankFinancePctBand(formData)[0]}–{getBankFinancePctBand(formData)[1]}%.</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {[70, 75, 80].map(v => (
+                            <button key={v} type="button"
+                              onClick={() => handleBankFinancePctChange(v)}
+                              className={`px-2 py-0.5 rounded text-xs font-medium border transition ${Number(report.dpr.term_loan_pct) === v ? "bg-primary text-white border-primary" : "border-primary/30 text-primary hover:bg-primary/10"}`}>
+                              {v}%
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Input className="h-11 rounded-xl bg-muted/50 font-semibold text-primary" value={`${Math.round(financingPlan.termLoanBankFinancePct)}%`} disabled readOnly />
+                        <p className="text-xs text-muted-foreground">
+                          Fixed by {isPMEGP ? "PMEGP" : isMudra ? "Mudra" : "CGTMSE"} scheme rules ({isPMEGP ? "Margin Money + promoter split" : isMudra ? "10% promoter, residual capped at tier ceiling" : "85% standard"}) — not bank-adjustable. This is what the generated report will actually use.
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   {formData.loan_scheme === "normal_msme" && (

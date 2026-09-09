@@ -1349,7 +1349,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _display_reserve = lambda pb: max(float(pb.get("reserves", 0) or 0), 0)
     _display_loss = lambda pb: abs(min(float(pb.get("reserves", 0) or 0), 0))
     _display_net_worth = lambda pb: (
-        float(pb.get("equity", 0) or 0) + float(pb.get("reserves", 0) or 0)
+        float(pb.get("equity", 0) or 0) + float(pb.get("promoter_wc_margin", 0) or 0) + float(pb.get("reserves", 0) or 0)
     )
     bs_rows = [
         ["Particulars","Year 0","Year 1","Year 2","Year 3","Year 4","Year 5"],
@@ -1357,6 +1357,10 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["I. EQUITY & LIABILITIES","","","","","",""],
         ["  (a) Owners' Funds","","","","","",""],
         ["  Equity / Promoter Capital"]  + [r(pb["equity"])                for pb in pbs],
+        *(
+            [["  Promoter's WC Margin"] + [r(pb.get("promoter_wc_margin", 0)) for pb in pbs]]
+            if any(pb.get("promoter_wc_margin", 0) for pb in pbs) else []
+        ),
         *(
             [[("  Govt Subsidy (PMEGP TDR)" if _is_pmegp else "  Govt Subsidy (Capital)")] + [r(pb.get("margin_money",0)) for pb in pbs]]
             if any(pb.get("margin_money", 0) for pb in pbs) else []
@@ -1409,7 +1413,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _loss_yrs = []
     for _pb in pbs[1:]:   # skip Year 0
         _yr_num   = _pb.get("year", "?")
-        _eq_total = float(_pb.get("equity", 0) or 0) + float(_pb.get("reserves", 0) or 0)
+        _eq_total = _display_net_worth(_pb)
         _loss_amt = abs(min(float(_pb.get("reserves", 0) or 0), 0))
         if _loss_amt > 0:
             _loss_yrs.append(f"Year {_yr_num}: Accumulated Losses Rs.{_loss_amt:,.0f}")

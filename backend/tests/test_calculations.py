@@ -674,6 +674,36 @@ class TestBalanceSheet:
                 f"Net block should decrease Year {bs[i]['year']} → Year {bs[i+1]['year']}"
             )
 
+    def test_year0_needs_no_phantom_short_term_funding(self):
+        # BUG FIX: Year 0's "Short-Term Funding Gap" was showing a large phantom
+        # liability (Rs.879,145 in the real report this was found on) purely
+        # from a formula bug, not any real shortfall — the initial financing
+        # structure (promoter equity + term loan + promoter WC margin + WC bank
+        # loan) fully funds the initial assets (fixed + WC) by construction.
+        # Root causes: (1) other_assets used total "project_cost" (which nets in
+        # only the promoter's WC margin) instead of "fixed_project_cost", and
+        # then subtracted the FULL WC requirement again — double-counting WC and
+        # dropping preliminary/fixture costs from assets; (2) the promoter's WC
+        # margin was never added to the liabilities side even though it funds
+        # part of current_assets.
+        import types
+        from calculations.balance_sheet import calculate_balance_sheet
+        scheme_data = {
+            "term_loan": 283830, "wc_loan": 398205, "promoter_amount": 189220,
+            "margin_money": 0, "project_cost": 1402195, "fixed_project_cost": 473050,
+        }
+        dep = {"gross_block": 423050, "annual_dep": 27305}
+        loan_schedule = [{"closing_balance": 283830}] * 5
+        wc_schedule = [{"total": 1327350, "bank_loan": 398205, "margin": 929145}] * 5
+        income = [{"year": i + 1, "depreciation": 27305, "reserves_surplus": 0} for i in range(5)]
+        data = types.SimpleNamespace(project=types.SimpleNamespace(land_cost=0))
+
+        bs = calculate_balance_sheet(data, scheme_data, income, dep, loan_schedule, wc_schedule)
+        assert bs[0]["short_term_funding"] == 0
+        assert bs[0]["other_assets"] == 50000  # preliminary/fixture costs, no longer dropped
+        assert bs[0]["promoter_wc_margin"] == 929145
+        assert bs[0]["check"] == 0  # still balances
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 9. Sensitivity Analysis
@@ -846,6 +876,33 @@ class TestPdfProjectCostItems:
         assert equip_loaded == 123050
         total_with_loading = sum(i["amount"] for i in items_with_loading)
         assert total_with_loading == 300000 + 123050 + 50000 + 929145
+
+    def test_generator_wires_pm_with_contingency_not_pre_contingency_machinery_gross(self):
+        # BUG FIX (regression in the fix above): pdf/generator.py's real call
+        # site passed dep["machinery_gross"], but depreciation.py documents
+        # that field as explicitly PRE-contingency (used for Gross Block only
+        # via "pm_with_contingency"). Passing the wrong key silently
+        # reintroduced the exact bug this class exists to prevent — the items
+        # sum stopped matching scheme_data["fixed_project_cost"] again.
+        from models.input_schema import CMAReportInput, MachineryItem
+        from schemes.router import route_scheme
+        from calculations.depreciation import calculate_depreciation
+        from pdf.generator import _build_project_cost_items
+
+        inp = CMAReportInput()
+        inp.business.industry_type = "service"
+        inp.assumptions.contingency_pct = 15
+        inp.project.building_cost = 300000
+        inp.project.preliminary_expenses = 50000
+        inp.project.machinery_items = [MachineryItem(name="Equip", quantity=1, unit_price=107000)]
+
+        scheme_data = route_scheme(inp)
+        dep = calculate_depreciation(inp, scheme_data)
+        items = _build_project_cost_items(
+            inp.project.model_dump(), [{"margin": 0}], "service",
+            float(dep.get("pm_with_contingency", 0) or 0),
+        )
+        assert sum(i["amount"] for i in items) == scheme_data["fixed_project_cost"]
 
 
 if __name__ == "__main__":

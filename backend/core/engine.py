@@ -464,13 +464,14 @@ def _tally_projected_balance_sheet(rows):
     instead of being hidden by clamping cash to zero.
     """
     for row in rows:
-        equity   = row.get("equity",        0)
-        mm       = row.get("margin_money",   0)
-        tl       = row.get("term_loan",      0)
-        reserves = row.get("reserves",       0)
-        wc_bank  = row.get("wc_bank",        0)
+        equity     = row.get("equity",             0)
+        mm         = row.get("margin_money",       0)
+        tl         = row.get("term_loan",          0)
+        reserves   = row.get("reserves",           0)
+        wc_bank    = row.get("wc_bank",             0)
+        wc_margin  = row.get("promoter_wc_margin",  0)
 
-        base_equity_liabilities = R(equity + mm + reserves + tl + wc_bank, 2)
+        base_equity_liabilities = R(equity + mm + reserves + tl + wc_bank + wc_margin, 2)
 
         non_cash_assets = R(
             row.get("land",           0)

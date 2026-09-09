@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GTABFormData, NATURE_OF_BUSINESS_OPTIONS } from "@/types/gtab";
-import { Building2, FileText, Lightbulb, Target, Wand2 } from "lucide-react";
+import { Building2, Lightbulb, Target, Wand2 } from "lucide-react";
 import AIAssistBadge from "@/components/AIAssistPanel";
 import { getStep4Tips } from "@/lib/caGuidance";
 
@@ -82,11 +82,6 @@ function buildDefaults(formData: GTABFormData) {
     target_market:        targets[ind],
     competitive_advantage: advantages[ind],
     promoter_experience:  experience[ind],
-    introduction_text:    `This project report is prepared for ${biz}, a proposed ${nature} enterprise at ${city}, ${state}. The promoter, ${name}, is applying for financial assistance under the ${scheme} scheme to establish a commercially viable and self-sustaining business unit. The project is designed to meet CA-standard financial projections and bank appraisal requirements.`,
-    market_aspects_text:  targets[ind],
-    management_aspects_text: `The enterprise will be managed by ${name}, who brings relevant domain experience and entrepreneurial commitment. A lean management structure with clear roles will ensure efficient operations from Day 1.`,
-    technical_aspects_text: `The technical infrastructure includes appropriate machinery, equipment, and facilities for ${nature}. All assets are sourced from reputed suppliers with proper warranty and maintenance support. The production/operations plan is designed to achieve 50–80% capacity utilization over 5 years.`,
-    financial_aspects_text: `The project is financially viable with positive DSCR throughout the 5-year projection period. Revenue projections are conservative and based on 50% capacity in Year 1, growing to 80% by Year 5. The financing structure complies with the ${scheme} scheme norms and meets all CA-standard benchmarks.`,
   };
 }
 
@@ -114,15 +109,10 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
     if (missing) {
       const defaults = buildDefaults(formData);
       const patch: Partial<GTABFormData> = {};
-      if (!formData.business_description)    patch.business_description    = defaults.business_description;
-      if (!formData.target_market)           patch.target_market           = defaults.target_market;
-      if (!formData.competitive_advantage)   patch.competitive_advantage   = defaults.competitive_advantage;
-      if (!formData.promoter_experience)     patch.promoter_experience     = defaults.promoter_experience;
-      if (!formData.introduction_text)       patch.introduction_text       = defaults.introduction_text;
-      if (!formData.market_aspects_text)     patch.market_aspects_text     = defaults.market_aspects_text;
-      if (!formData.management_aspects_text) patch.management_aspects_text = defaults.management_aspects_text;
-      if (!formData.technical_aspects_text)  patch.technical_aspects_text  = defaults.technical_aspects_text;
-      if (!formData.financial_aspects_text)  patch.financial_aspects_text  = defaults.financial_aspects_text;
+      if (!formData.business_description)  patch.business_description  = defaults.business_description;
+      if (!formData.target_market)         patch.target_market         = defaults.target_market;
+      if (!formData.competitive_advantage) patch.competitive_advantage = defaults.competitive_advantage;
+      if (!formData.promoter_experience)   patch.promoter_experience   = defaults.promoter_experience;
       if (Object.keys(patch).length > 0) updateFormData(patch);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,41 +255,6 @@ const BusinessDescriptionStep = ({ formData, updateFormData }: BusinessDescripti
             scheme: formData.loan_scheme || "normal_msme",
             isNewBusiness: formData.business_type !== "existing_business",
           })} />
-
-          <div className="border-t" />
-
-          <SectionTitle
-            icon={FileText}
-            title="Project Report Narrative Inputs"
-            subtitle="These sections appear verbatim in the final PDF bank report"
-          />
-
-          <div className="space-y-6">
-            {[
-              { key: "introduction_text",       label: "INTRODUCTION" },
-              { key: "market_aspects_text",     label: "MARKET ASPECTS" },
-              { key: "management_aspects_text", label: "MANAGEMENT ASPECTS" },
-              { key: "technical_aspects_text",  label: "TECHNICAL ASPECTS" },
-              { key: "financial_aspects_text",  label: "FINANCIAL ASPECTS" },
-            ].map(({ key, label }) => (
-              <div key={key} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>{label}</Label>
-                  <AIAssistBadge
-                    fieldLabel={label}
-                    tooltip="AI can help draft this section"
-                    onApply={(text) => updateFormData({ [key]: text } as Partial<GTABFormData>)}
-                  />
-                </div>
-                <Textarea
-                  className="min-h-[110px] rounded-xl"
-                  value={(formData as any)[key] || ""}
-                  onChange={(e) => updateFormData({ [key]: e.target.value } as Partial<GTABFormData>)}
-                  placeholder={`Enter ${label} text for the project report...`}
-                />
-              </div>
-            ))}
-          </div>
 
         </CardContent>
       </Card>

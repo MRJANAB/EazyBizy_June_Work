@@ -24,6 +24,18 @@ const Rs2 = (n: number) => Math.round(n * 100) / 100;
 /**
  * Build the full term-loan schedule (one row per year until fully repaid).
  * Returns an empty-but-safe zero row when there's nothing to amortise.
+ *
+ * Mirrors backend/calculations/loan_schedule.py's two CA-reviewer-driven
+ * fixes — both of which must live here too, since this file exists
+ * specifically to avoid disagreeing with the backend:
+ *  1. Moratorium is tracked in HALF-YEAR units (round(months/6)), not
+ *     whole years via Math.ceil(months/12) — the old whole-year version
+ *     silently DOUBLED a 6-month moratorium to a full 12-month one.
+ *  2. The half-yearly instalment is rounded to the nearest WHOLE RUPEE
+ *     (not paisa) — the unit everything is actually displayed in — and
+ *     the final half-year absorbs whatever residual that rounding
+ *     leaves, so principal instalments always sum exactly to the loan
+ *     amount instead of landing a few rupees short.
  */
 export function buildLoanSchedule(
   loanAmount: number,
@@ -35,31 +47,32 @@ export function buildLoanSchedule(
     return [{ year: 1, openingBalance: 0, interestPaid: 0, principalPaid: 0, closingBalance: 0, halfYearlyInstalment: 0 }];
   }
 
-  const annualRate = interestRatePct / 100;
+  const halfRate = interestRatePct / 100 / 2;
   const tenureYears = Math.ceil(tenureMonths / 12);
-  const moratoriumYears = Math.ceil(moratoriumMonths / 12);
-  const repayYears = Math.max(tenureYears - moratoriumYears, 1);
-  const halfInst = Rs2(loanAmount / (repayYears * 2));
+  const totalHalfYears = tenureYears * 2;
+  const moratoriumHalfYears = Math.min(Math.round(moratoriumMonths / 6), totalHalfYears);
+  const repayHalfYears = Math.max(totalHalfYears - moratoriumHalfYears, 1);
+  const halfInst = Math.round(loanAmount / repayHalfYears);
 
   const rows: LoanScheduleYear[] = [];
   let balance = loanAmount;
 
   for (let yr = 1; yr <= tenureYears; yr++) {
     const opening = Rs2(balance);
-    let interestPaid: number, principalPaid: number, closing: number;
+    let bal = opening;
 
-    if (yr <= moratoriumYears) {
-      interestPaid = Rs2(Rs2(opening * annualRate / 2) * 2);
-      principalPaid = 0;
-      closing = opening;
-    } else {
-      const ih1 = Rs2(opening * annualRate / 2);
-      const mid = Rs2(Math.max(opening - halfInst, 0));
-      const ih2 = Rs2(mid * annualRate / 2);
-      interestPaid = Rs2(ih1 + ih2);
-      principalPaid = Rs2(halfInst * 2);
-      closing = Rs2(Math.max(opening - principalPaid, 0));
-    }
+    const hy1 = 2 * yr - 1;
+    const ih1 = Rs2(bal * halfRate);
+    const repaidH1 = hy1 <= moratoriumHalfYears ? 0 : (hy1 === totalHalfYears ? bal : Math.min(halfInst, bal));
+    bal = Rs2(Math.max(bal - repaidH1, 0));
+
+    const hy2 = 2 * yr;
+    const ih2 = Rs2(bal * halfRate);
+    const repaidH2 = hy2 <= moratoriumHalfYears ? 0 : (hy2 === totalHalfYears ? bal : Math.min(halfInst, bal));
+    const closing = Rs2(Math.max(bal - repaidH2, 0));
+
+    const principalPaid = Rs2(repaidH1 + repaidH2);
+    const interestPaid = Rs2(ih1 + ih2);
 
     rows.push({
       year: yr,

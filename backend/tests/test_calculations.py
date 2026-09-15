@@ -170,8 +170,12 @@ class TestLoanSchedule:
         rows = calculate_loan_schedule(data, {"term_loan": 283830})
         tenure_years, moratorium_years = 5, 1
         repay_years = tenure_years - moratorium_years
-        expected_wrong  = R(283830 / (tenure_years * 2), 2)   # the bug's formula
-        expected_correct = R(283830 / (repay_years * 2), 2)
+        # Instalment is rounded to the nearest whole RUPEE (not paisa) — every
+        # per-period principal figure displayed in the report is a whole
+        # rupee, so the value actually repaid each period must match what's
+        # shown, not a paisa-precise figure that displays differently.
+        expected_wrong  = float(round(283830 / (tenure_years * 2)))   # the bug's formula
+        expected_correct = float(round(283830 / (repay_years * 2)))
         assert rows[0]["half_yearly_instalment"] == expected_correct
         assert rows[0]["half_yearly_instalment"] != expected_wrong
         # And it must actually match the schedule's own principal repayments.
@@ -192,17 +196,42 @@ class TestLoanSchedule:
         # Repayment spans 5 years x 2 half-years, minus 1 half-year of
         # moratorium = 9 half-yearly instalments (NOT 8, which would be the
         # old bug's answer for a wrongly-doubled 12-month moratorium).
-        expected_half_inst = R(365438 / 9, 2)
+        # Rounded to the nearest whole rupee, not paisa — see comment on
+        # test_half_yearly_instalment_is_moratorium_aware above.
+        expected_half_inst = float(round(365438 / 9))
         assert rows[0]["half_yearly_instalment"] == expected_half_inst
         # Year 1 must show exactly ONE half-year of repayment (H2), not zero.
         assert rows[0]["principal_paid"] == R(expected_half_inst, 2)
         assert rows[0]["principal_paid"] > 0
         # Years 2-5 each get two full half-yearly instalments.
         assert rows[1]["principal_paid"] == R(expected_half_inst * 2, 2)
-        # The loan must still fully amortise to (near) zero by the end of
-        # tenure — a few paise of rounding residual from dividing 365438 by
-        # 9 unevenly is pre-existing/benign, not part of this bug.
-        assert abs(rows[4]["closing_balance"]) < 1
+        # The loan must fully amortise to EXACTLY zero — the final
+        # instalment absorbs whatever whole-rupee residual the other 8
+        # periods' rounding left, same as a bank's own amortisation
+        # schedule adjusts its last instalment, instead of leaving a
+        # (previously silent) residual balance.
+        assert rows[4]["closing_balance"] == 0
+
+    def test_displayed_principal_instalments_sum_exactly_to_the_loan_amount(self):
+        """BUG FIX: a CA reviewer caught this on a live report — loan
+        Rs.31,64,125 over 13 half-yearly instalments displayed as "Rs.
+        2,43,394" (the exact value, 2,43,394.23, truncated for display).
+        Manually cross-checking 2,43,394 + 6x4,86,788 (the displayed
+        per-year figures) gives Rs.31,64,122 — three rupees short of the
+        loan, because paisa-precision instalments don't sum to a round
+        number once every row is independently rounded for display.
+        The schedule must be computed in whole rupees from the start (the
+        unit everything is actually displayed in), with the final period
+        absorbing the residual, so the displayed figures always foot
+        exactly to the loan amount — no reader-visible gap."""
+        from calculations.loan_schedule import calculate_loan_schedule
+        data = _make_data(assumptions=_make_assumptions(
+            tenure_months=84, moratorium_months=6, interest_rate_pct=10.5,
+        ))
+        rows = calculate_loan_schedule(data, {"term_loan": 3164125})
+        assert rows[0]["half_yearly_instalment"] == 243394
+        assert sum(row["principal_paid"] for row in rows) == 3164125
+        assert rows[-1]["closing_balance"] == 0
 
     def test_mid_year_balance_correct_in_moratorium_transition_year(self):
         """BUG FIX: in a year that transitions out of moratorium mid-year

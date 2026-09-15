@@ -49,7 +49,15 @@ def calculate_loan_schedule(data, scheme_data: dict) -> list:
     moratorium_half_yrs = min(round(moratorium_mo / 6), total_half_years)
     repay_half_years    = max(total_half_years - moratorium_half_yrs, 1)
 
-    half_inst = R(term_loan / repay_half_years, 2)
+    # Rounded to the nearest whole rupee — not paisa — because every
+    # per-period principal figure in the report (including this flat
+    # instalment shown in Section 03) is DISPLAYED in whole rupees. A CA
+    # reviewer will naturally cross-check "instalment x count", so the
+    # figure actually repaid each period must equal the figure shown, not
+    # a paisa-precise value that displays differently. The final period
+    # below then absorbs whatever residual this rounding leaves, exactly
+    # as a bank's own amortisation schedule adjusts its last instalment.
+    half_inst = float(round(term_loan / repay_half_years))
 
     rows    = []
     balance = term_loan
@@ -61,13 +69,15 @@ def calculate_loan_schedule(data, scheme_data: dict) -> list:
         # Half-year 1 of this year
         hy1 = 2 * yr - 1
         ih1 = R(bal * half_rate, 2)
-        repaid_h1 = 0.0 if hy1 <= moratorium_half_yrs else min(half_inst, bal)
+        is_last_h1 = hy1 == total_half_years
+        repaid_h1 = 0.0 if hy1 <= moratorium_half_yrs else (bal if is_last_h1 else min(half_inst, bal))
         bal = R(max(bal - repaid_h1, 0), 2)
 
         # Half-year 2 of this year
         hy2 = 2 * yr
         ih2 = R(bal * half_rate, 2)
-        repaid_h2 = 0.0 if hy2 <= moratorium_half_yrs else min(half_inst, bal)
+        is_last_h2 = hy2 == total_half_years
+        repaid_h2 = 0.0 if hy2 <= moratorium_half_yrs else (bal if is_last_h2 else min(half_inst, bal))
         closing = R(max(bal - repaid_h2, 0), 2)
 
         repaid    = R(repaid_h1 + repaid_h2, 2)

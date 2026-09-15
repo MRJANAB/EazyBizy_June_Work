@@ -315,7 +315,7 @@ class StructuralReconciliationError(ValueError):
 
 def structural_reconciliation(cma: dict, dpr: dict) -> list:
     """
-    Ten pure arithmetic-identity checks over already-computed report data.
+    Eleven pure arithmetic-identity checks over already-computed report data.
 
     These are NOT business-outcome judgements — a loss-making year, a DSCR
     below 1, or negative cash are valid, correctly-computed OUTCOMES, not
@@ -345,13 +345,25 @@ def structural_reconciliation(cma: dict, dpr: dict) -> list:
     pbs = dpr.get("balance_sheet_years", [])
     pcf = dpr.get("cash_flow_years", [])
 
-    # 1. Project Cost = Means of Finance (itemised cost table sums to the
-    #    total shown everywhere else in the report)
+    # 1. Project Cost Items Sum = Total Project Cost (itemised cost table
+    #    sums to the total shown everywhere else in the report).
+    # CA AUDIT: this check was previously mislabelled "Project Cost = Means
+    # of Finance" even though it never compares the cost side to the
+    # funding side at all — it only verifies the itemised cost table's own
+    # arithmetic. That label reads, on Section 31, as if "Total Project
+    # Cost equals Total Means of Finance" had been checked and passed —
+    # but Total Project Cost (Rs.15,01,700 on a live report) and Total
+    # Funding Requirement including WC Bank Finance (Rs.16,95,500) are
+    # DELIBERATELY different figures (Section 08 explains the Rs.1,93,800
+    # WC Bank Finance gap between them), so a reader could easily read
+    # this PASS as contradicting Section 08's own numbers. Renamed to
+    # describe exactly what this check tests; the real cost-vs-funding
+    # reconciliation is check #11 below.
     items = cma.get("project_cost_items", [])
     total_pc = float(cma.get("total_project_cost", pc.get("total_project_cost", 0)) or 0)
     items_sum = sum(float(i.get("amount", 0) or 0) for i in items)
     checks.append({
-        "name":   "Project Cost = Means of Finance",
+        "name":   "Project Cost Items Sum = Total Project Cost",
         "passed": close(items_sum, total_pc, 5.0) if total_pc else True,
         "detail": f"Cost items sum Rs.{items_sum:,.0f} vs Total Project Cost Rs.{total_pc:,.0f}",
     })
@@ -447,6 +459,38 @@ def structural_reconciliation(cma: dict, dpr: dict) -> list:
         "name":   "Promoter Contribution (Fixed Equity + WC Margin = Total)",
         "passed": close(fixed_eq + wc_margin, total_contrib, 5.0) if total_contrib else True,
         "detail": f"Rs.{fixed_eq:,.0f} + Rs.{wc_margin:,.0f} vs Total Rs.{total_contrib:,.0f}",
+    })
+
+    # 11. Initial Project Investment + WC Bank Finance = Total Funding
+    #     Requirement (Section 08's "Overall Funding" table). This is the
+    #     genuine cost-vs-funding reconciliation check #1's old, misleading
+    #     name implied — Total Project Cost / Initial Investment alone
+    #     deliberately EXCLUDES WC Bank Finance (a revolving facility, not
+    #     part of fixed project cost), so on a live report Rs.15,01,700
+    #     (Initial Investment) plus Rs.1,93,800 (WC Bank Finance) must equal
+    #     Rs.16,95,500 (Total Funding Requirement across every source).
+    #     Deliberately cross-checks TWO INDEPENDENTLY-computed figures —
+    #     cma["total_project_cost"] (built from the itemised cost table /
+    #     api/report.py's WC-margin override) against dpr["project_cost"]'s
+    #     own term_loan/promoter/subsidy fields (built separately in
+    #     _build_dpr_from_report) — not a tautology restating the same
+    #     inputs on both sides, so a future drift between the two code
+    #     paths would actually be caught here.
+    _initial_investment = float(cma.get("total_project_cost", pc.get("total_project_cost", 0)) or 0)
+    _term_loan     = float(pc.get("term_loan", 0) or 0)
+    _wc_bank_loan  = float(pc.get("wc_loan", pc.get("wc_bank_share", 0)) or 0)
+    _subsidy       = float(pc.get("margin_money", 0) or 0)
+    _total_funding_reqd    = _initial_investment + _wc_bank_loan
+    _total_funding_sources = total_contrib + _term_loan + _subsidy + _wc_bank_loan
+    checks.append({
+        "name":   "Initial Project Investment + WC Bank Finance = Total Funding Requirement",
+        "passed": close(_total_funding_reqd, _total_funding_sources, 5.0) if _total_funding_reqd else True,
+        "detail": (
+            f"Rs.{_initial_investment:,.0f} (Initial Investment) + Rs.{_wc_bank_loan:,.0f} (WC Bank Finance) "
+            f"= Rs.{_total_funding_reqd:,.0f} vs Total Funding Sources "
+            f"(Promoter Rs.{total_contrib:,.0f} + Term Loan Rs.{_term_loan:,.0f} + Subsidy Rs.{_subsidy:,.0f} "
+            f"+ WC Bank Rs.{_wc_bank_loan:,.0f}) = Rs.{_total_funding_sources:,.0f}"
+        ),
     })
 
     return checks

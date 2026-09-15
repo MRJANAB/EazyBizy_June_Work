@@ -2568,7 +2568,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _fdef_row(
             "ROI — EBITDA / PAT",
             "= Annual EBITDA (or PAT) / Initial Project Investment × 100. "
-            "Denominator = Fixed Assets + Promoter WC Margin. "
+            # CA AUDIT: previously described the denominator as "Fixed
+            # Assets + Promoter WC Margin" — Fixed Assets (the depreciable
+            # block) is narrower than what Section 07/15 actually use as
+            # Initial Project Investment, which also includes preliminary/
+            # pre-operative expenditure (not a depreciable fixed asset, but
+            # still part of fixed project cost). That gap (e.g. Rs.20,000
+            # of preliminary expenses on a live report) made the stated
+            # denominator not add up to the Initial Project Investment
+            # figure Section 15 actually divides by.
+            "Initial Project Investment comprises eligible fixed project cost, preliminary/pre-operative "
+            "expenditure where applicable, and promoter-funded working-capital margin. "
             "Measures operational / net return on the initial investment.",
             "> 15% / > 10%"),
         _fdef_row(
@@ -2708,9 +2718,21 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     NL(story, 4)
 
     H2("Structural Reconciliation Checks", story)
+    # Check names are Paragraph-wrapped, not plain strings — a plain
+    # string that's too wide for this column would otherwise overflow
+    # straight into the neighbouring Status cell instead of wrapping
+    # (ReportLab does not auto-wrap plain strings in a Table), and the
+    # longest check name here now runs longer than any of this table's
+    # original rows.
+    _recon_lbl_style = _s("recon_lbl", fontSize=8.5, fontName="Helvetica", textColor=BLK, leading=10.5)
     _recon_rows = [["Check", "Status"]]
     for c in _structural_checks:
-        _recon_rows.append([c["name"], "PASS" if c["passed"] else "FAIL"])
+        # Paragraph parses its text as markup — an unescaped "&" (e.g. in
+        # "P&L Roll-Forward") is read as the start of an XML entity, which
+        # ReportLab renders back out mangled (literally "P&L;"). Escape
+        # before wrapping, not just for this row's own known names.
+        _recon_name_esc = c["name"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        _recon_rows.append([Paragraph(_recon_name_esc, _recon_lbl_style), "PASS" if c["passed"] else "FAIL"])
     _recon_t = Table(_recon_rows, colWidths=[130*mm, 40*mm])
     _recon_t.setStyle(BTS())
     story.append(_recon_t)

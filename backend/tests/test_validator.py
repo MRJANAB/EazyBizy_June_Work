@@ -223,10 +223,14 @@ def _consistent_cma_dpr():
     }
     cma = {
         "project_cost_items": [
-            {"code": 1, "particulars": "Building", "amount": 700.0},
+            {"code": 1, "particulars": "Building", "amount": 500.0},
             {"code": 2, "particulars": "Machinery", "amount": 300.0},
         ],
-        "total_project_cost": 1000.0,
+        # Initial Investment = Fixed Project Cost (TL 500 + Promoter Fixed
+        # Equity 200 + Subsidy 0 = 700) + WC Margin (100) = 800 — must tie
+        # to check #11 (Initial Investment + WC Bank Finance = Total
+        # Funding Requirement) as well as check #1 (items sum = total).
+        "total_project_cost": 800.0,
         "promoter_fixed_equity": 200.0,
         "promoter_wc_margin": 100.0,
         "total_promoter_contribution": 300.0,
@@ -235,7 +239,7 @@ def _consistent_cma_dpr():
 
 
 class TestStructuralReconciliation:
-    """The 10 pure arithmetic-identity checks shown in the PDF's Section 31
+    """The 11 pure arithmetic-identity checks shown in the PDF's Section 31
     ('Financial Model Reconciliation') — deliberately distinct from
     business-outcome warnings (a loss-making year is a valid OUTCOME, not a
     structural failure, and must never be flagged here)."""
@@ -243,7 +247,7 @@ class TestStructuralReconciliation:
     def test_consistent_data_passes_every_check(self):
         cma, dpr = _consistent_cma_dpr()
         checks = structural_reconciliation(cma, dpr)
-        assert len(checks) == 10
+        assert len(checks) == 11
         failed = [c["name"] for c in checks if not c["passed"]]
         assert failed == [], f"Unexpected FAILs against a self-consistent fixture: {failed}"
 
@@ -258,8 +262,37 @@ class TestStructuralReconciliation:
         cma, dpr = _consistent_cma_dpr()
         cma["project_cost_items"][0]["amount"] = 1.0  # no longer sums to total
         checks = structural_reconciliation(cma, dpr)
-        pc_check = next(c for c in checks if c["name"] == "Project Cost = Means of Finance")
+        pc_check = next(c for c in checks if c["name"] == "Project Cost Items Sum = Total Project Cost")
         assert pc_check["passed"] is False
+
+    def test_funding_reconciliation_check_name_does_not_overclaim_means_of_finance(self):
+        """CA AUDIT: this check used to be named "Project Cost = Means of
+        Finance" even though it only ever compared the itemised cost
+        table's own sum to Total Project Cost — never the funding side at
+        all. On a live report, Total Project Cost (Rs.15,01,700) and Total
+        Funding Requirement including WC Bank Finance (Rs.16,95,500) are
+        DELIBERATELY different figures, so the old name read as if that
+        distinction had been checked and passed when it hadn't been."""
+        cma, dpr = _consistent_cma_dpr()
+        checks = structural_reconciliation(cma, dpr)
+        names = [c["name"] for c in checks]
+        assert "Project Cost = Means of Finance" not in names
+        assert "Initial Project Investment + WC Bank Finance = Total Funding Requirement" in names
+
+    def test_broken_funding_reconciliation_is_caught(self):
+        """dpr["project_cost"]["term_loan"] is read independently of
+        cma["total_project_cost"] — corrupting only the former must break
+        this check without needing cma to also be corrupted, proving the
+        two sides are genuinely cross-checked, not the same number
+        restated on both sides."""
+        cma, dpr = _consistent_cma_dpr()
+        dpr["project_cost"]["term_loan"] = 999.0
+        checks = structural_reconciliation(cma, dpr)
+        funding_check = next(
+            c for c in checks
+            if c["name"] == "Initial Project Investment + WC Bank Finance = Total Funding Requirement"
+        )
+        assert funding_check["passed"] is False
 
     def test_business_outcome_is_never_flagged_as_structural(self):
         """A loss-making, negative-cash year is a valid, correctly-computed

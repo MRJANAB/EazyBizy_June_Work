@@ -90,7 +90,10 @@ LG  = colors.HexColor("#DCEAF7")
 ALT = colors.HexColor("#F6FAFE")
 RED = colors.HexColor("#F8D7DA")
 AMB = colors.HexColor("#FFF3CD")
-GRN = colors.HexColor("#D6EAF8")
+# BUG FIX: this was "#D6EAF8" — a pale BLUE, not green — so every "PASS" /
+# "Low Risk" banner that used GRN rendered indistinguishably from LG/ALT's
+# blue tones instead of actually reading as green.
+GRN = colors.HexColor("#D4EDDA")
 GRY = colors.HexColor("#CBD5E1")
 W   = colors.white
 BLK = colors.black
@@ -112,6 +115,11 @@ ST = {
                         leftIndent=10, bulletIndent=0, spaceAfter=1),
     "rec_approve":  _s("ra", fontSize=14, textColor=W,   alignment=TA_CENTER, leading=20, fontName="Helvetica-Bold"),
     "rec_box":      _s("rb", fontSize=9,  textColor=DGR, alignment=TA_CENTER, leading=13, fontName="Helvetica"),
+    # For free-text table VALUES that need Paragraph-wrapping (ReportLab
+    # does not auto-wrap plain strings) — black, matching every other
+    # plain-string table cell's default text colour, instead of "normal"'s
+    # dark-grey body-text tone which would look inconsistent inside a table.
+    "table_cell":   _s("tc", fontSize=8.5,textColor=BLK, leading=11, fontName="Helvetica"),
 }
 
 # ── Format helpers ────────────────────────────────────────────────────────────
@@ -259,7 +267,12 @@ def TOT(row):
     ])
 
 def RISK_COLOR(row, level):
-    bg = RED if level=="HIGH" else AMB if level=="MEDIUM" else GRN
+    # BUG FIX: _display_risk_matrix() returns "High"/"Medium"/"Low" (title
+    # case), but this compared against "HIGH"/"MEDIUM" (upper case) — every
+    # row silently fell through to the else branch, so no risk row was ever
+    # actually colour-coded by severity.
+    lvl = str(level).upper()
+    bg = RED if lvl == "HIGH" else AMB if lvl == "MEDIUM" else GRN
     return TableStyle([("BACKGROUND",(0,row),(-1,row),bg)])
 
 def SEC(title, story):
@@ -430,10 +443,18 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(scheme_banner)
     NL(story, int(6*mm))
 
+    # BUG FIX: this value used to be truncated at 40 chars with no ellipsis
+    # and no wrapping — for anything longer than that, the tail (often the
+    # whole second word, e.g. "...and IT" instead of "...and IT Services")
+    # was silently cut off. Wrapped in a Paragraph so the full text always
+    # shows, across as many lines as it needs.
+    _loan_purpose_cell = Paragraph(
+        f"{_industry_str}" + (f" | {_nature_biz}" if _nature_biz else ""), ST["table_cell"]
+    )
     info = Table([
         ["Field", "Details"],
         ["Applicant / Business Name", f"{_promoter_name}  —  {inp.get('business_name','')}"],
-        ["Business Type / Loan Purpose", f"{_industry_str}" + (f" | {_nature_biz[:40]}" if _nature_biz else "")],
+        ["Business Type / Loan Purpose", _loan_purpose_cell],
         ["Total Project Cost",   rs(display_total_project_cost)],
         ["Term Loan Requested",  rs(pc["term_loan"])],
         ["Working Capital Facility Requested", rs(R(cma.get("working_capital_loan", pc.get("wc_loan", 0)) or 0, 2))],
@@ -665,12 +686,20 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         f"{_biz_status} ({_biz_duration // 12} yr {_biz_duration % 12} mo)"
         if _biz_duration > 0 else _biz_status
     )
+    # BUG FIX: "Business Name" and "Nature of Business" are free-text fields
+    # that can easily exceed this table's fixed 50mm Details columns —
+    # ReportLab does not auto-wrap plain strings, so a longer value
+    # overflowed past the table's own border. Both are Paragraph-wrapped.
+    _commencement_display = inp.get("commencement_date", "") or (
+        "Not yet commenced" if str(inp.get("business_status", "")).lower() == "new business" else "—"
+    )
     biz = Table([
         ["Field","Details","Field","Details"],
-        ["Business Name",     inp.get("business_name",""),         "Nature of Business",  inp.get("nature_of_business","")],
+        ["Business Name",     Paragraph(inp.get("business_name","") or "—", ST["table_cell"]),
+         "Nature of Business", Paragraph(inp.get("nature_of_business","") or "—", ST["table_cell"])],
         ["Registration Type", inp.get("business_type",""),         "Industry",            str(inp.get("industry", inp.get("industry_type",""))).title()],
         ["Business Status",   _biz_status_str,                    "Location / District", f"{inp.get('primary_location','')}  {inp.get('district','')}".strip()],
-        ["Commencement Date", inp.get("commencement_date",""),     "Expected Employment", str(inp.get("expected_employment",0))+" persons"],
+        ["Commencement Date", _commencement_display,               "Expected Employment", str(inp.get("expected_employment",0))+" persons"],
         ["Area Type",         inp.get("area_type","Rural"),        "Implementing Agency", _impl_agency or "—"],
         ["GST Number",        inp.get("gst_number","") or "—",    "MSME/Udyam No.",      inp.get("msme_number","") or "—"],
     ], colWidths=[35*mm,50*mm,35*mm,50*mm])
@@ -800,12 +829,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     if _b2_wc_total > 0:
         _box("B. Working Capital Funding", story)
         wc_fin_rows = [
-            ["Source","Amount (Rs.)","% of WC Requirement"],
+            ["Source","Amount (Rs.)","% of WC Reqd."],
             ["Promoter WC Margin",   rs(_b2_wc_margin), pof(_b2_wc_margin, _b2_wc_total) if _b2_wc_total else "0.0%"],
             ["WC Bank Finance",      rs(_b2_wc_loan),   pof(_b2_wc_loan,   _b2_wc_total) if _b2_wc_total else "0.0%"],
             ["TOTAL WC",             rs(_b2_wc_total),  "100.0%"],
         ]
-        wc_fin = Table(wc_fin_rows, colWidths=[95*mm,45*mm,30*mm])
+        wc_fin = Table(wc_fin_rows, colWidths=[70*mm,55*mm,45*mm])
         wc_fin.setStyle(BTS()); wc_fin.setStyle(TOT(3))
         story.append(wc_fin)
         NL(story, 2)
@@ -822,7 +851,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ["Total Promoter Funding",              rs(display_promoter_contribution)],
             ["Total Bank Funding",                  rs(_total_bank_exp)],
             ["Other Funding (Subsidy/TDR)",         rs(_b2_margin_money)],
-            ["TOTAL FUNDING",                        rs(_total_funding)],
+            ["TOTAL FUNDING (Fixed Cost + Total WC Requirement)", rs(_total_funding)],
             ["Funding Gap (Arranged Sources)",       rs(0)],
         ]
         exp_t = Table(exp_rows, colWidths=[100*mm,70*mm])
@@ -830,11 +859,19 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(exp_t)
         NL(story, 3)
         story.append(Paragraph(
-            "\"Funding Gap (Arranged Sources)\" is Rs.0 by construction — every rupee of Fixed Cost and "
+            f"\"Funding Gap (Arranged Sources)\" is Rs.0 by construction — every rupee of Fixed Cost and "
             "WC Requirement above is funded by the sources listed. If the business subsequently runs a "
             "cash deficit from operating losses, that shows up as \"Additional Funding Required\" in the "
             "Balance Sheet (Section 24) and as a negative Closing Cash Balance in the Cash Flow Statement "
             "(Section 23) — it is a separate, operational shortfall, not a gap in the initial funding plan.",
+            ST["small"]))
+        NL(story, 2)
+        story.append(Paragraph(
+            f"<b>Note:</b> TOTAL FUNDING here (Rs.{_total_funding:,.0f}) is larger than \"Total Project Cost\" "
+            f"shown on the cover page and in Section 07 (Rs.{display_total_project_cost:,.0f}) by exactly the "
+            f"WC Bank Finance amount (Rs.{_b2_wc_loan:,.0f}) — \"Total Project Cost\" deliberately excludes the "
+            "WC bank loan (a revolving facility, not part of fixed project cost), while this total includes it "
+            "since it covers the full WC Requirement, bank-funded portion included.",
             ST["small"]))
     NL(story, 5)
     _tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
@@ -935,7 +972,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     ]
     if _is_service:
         _assump_rows += [
-            ["Client Billing Cycle", str(inp["debtor_days"]), "Cash Reserve", "30 days"],
+            ["Client Billing Cycle", f"{inp['debtor_days']} days", "Cash Reserve", "30 days"],
             ["Expense Float", "30 days", "Tax Rate", rp2(inp["tax_rate_pct"])],
         ]
     else:
@@ -1284,8 +1321,19 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # "Capital Employed" (CA/ROCE convention) = Promoter Equity + Term Loan —
     # the long-term funds actually deployed — defined ONCE here and reused
     # for every return metric below and in Section 30's methodology table.
+    # NOTE: the "Term Loan" column below is deliberately NOT total business
+    # debt — Capital Employed (ROCE convention) = Promoter Equity + TERM
+    # LOAN only, excluding the WC bank facility (a short-term revolving
+    # facility, not part of long-term capital employed). See Section 22 for
+    # actual Total Debt (Term Loan + WC Bank Loan).
+    # Header cells are Paragraph-wrapped, not plain strings — ReportLab does
+    # NOT auto-wrap plain strings, so this longer header text would
+    # otherwise overflow into the neighbouring column.
+    _ref_hdr_style = _s("ref_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
     ref_t = Table([
-        ["Reference Sales (Rs.)","Total Project Investment (Rs.)","Promoter Equity (Rs.)","Total Debt (Rs.)","Capital Employed (Rs.)"],
+        [Paragraph(h, _ref_hdr_style) for h in
+         ["Reference Sales (Rs.)", "Total Project Investment (Rs.)", "Promoter Equity (Rs.)",
+          "Term Loan — Long-Term Debt (Rs.)", "Capital Employed (Rs.)"]],
         [r(prof["sales"]), r(prof["total_investment"]), r(prof.get("promoter_equity", 0)),
          r(prof.get("total_debt", 0)), r(prof["capital_employed"])],
     ], colWidths=[34*mm,38*mm,34*mm,30*mm,34*mm])
@@ -1307,8 +1355,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             _avg_equity = _avg_equity_calc
     _roe_denom = _avg_equity if _avg_equity else max(prof.get("promoter_equity", 0), 1)
     _roe_basis = "Average Equity (Year 2→3)" if _avg_equity else "Promoter Equity (Average Equity not meaningful)"
+    _pi_hdr_style = _s("pi_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
     pi_t = Table([
-        ["Metric","Amount (Rs.)","% of Sales","ROCE = EBIT ÷ Capital Employed × 100","ROE = PAT ÷ Average Equity × 100","ROI = PAT ÷ Initial Investment × 100"],
+        [Paragraph(h, _pi_hdr_style) for h in
+         ["Metric", "Amount (Rs.)", "% of Sales", "ROCE = EBIT ÷ Capital Employed × 100",
+          "ROE = PAT ÷ Average Equity × 100", "ROI = PAT ÷ Initial Investment × 100"]],
         ["EBIT", rs(prof.get("ebit", 0)), rp2(R(prof.get("ebit", 0) / max(prof["sales"], 1) * 100, 2)),
          pof(prof.get("ebit", 0), _t_capital_employed), "—", "—"],
         ["PAT (Net Profit)", rs(prof["pat"]), rp2(prof["pat_pct_sales"]),
@@ -1358,7 +1409,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _wc_rows += [
             [f"Receivables ({_debtor_days} day client billing cycle)"] + [r(_wc(w, "debtors")) for w in wc],
             ["Salary Float (30 days payroll)"]                         + [r(_wc(w, "salary_float")) for w in wc],
-            ["Expense Float (30 days delivery cost + overhead)"]       + [r(_wc(w, "expense_float")) for w in wc],
+            ["Expense Float (30 days operating cost)"]                 + [r(_wc(w, "expense_float")) for w in wc],
             ["Cash Reserve (15 days operating buffer)"]                + [r(_wc(w, "cash_reserve")) for w in wc],
         ]
     else:
@@ -1602,7 +1653,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Total Uses"]             + [r(p["total_uses"])           for p in pcf],
         ["Opening Cash Balance"]    + [r(p["opening_cash"])       for p in pcf],
         ["Surplus / Deficit"]       + [r(p["surplus"])            for p in pcf],
-        ["Closing Cash Balance (negative = unfunded shortfall)"] + [r(p["closing_cash"]) for p in pcf],
+        ["Closing Cash Balance"]    + [r(p["closing_cash"])      for p in pcf],
     ], colWidths=[60*mm]+[22*mm]*5)
     cf_t.setStyle(BTS())
     cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
@@ -1824,7 +1875,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # row without changing the reading; Optimistic/Base/Conservative/
     # Pessimistic/Worst already span the meaningful range.
     _sens_scenarios = [s for s in cma["sensitivity"] if s.get("scenario") != "Best Case"]
-    sens_rows = [["Scenario","Chg %","Revenue (Rs.)","COGS (Rs.)","EBITDA (Rs.)","PAT (Rs.)","Term Loan DSCR","Status"]]
+    sens_rows = [["Scenario","Chg %","Revenue (Rs.)","COGS (Rs.)","EBITDA (Rs.)","PAT (Rs.)","TL DSCR","Status"]]
     for s in _sens_scenarios:
         sens_rows.append([
             s["scenario"], f"{s.get('change_pct',0)}%",
@@ -1835,7 +1886,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             str(s["dscr"]),
             s["status"],
         ])
-    sens_t = Table(sens_rows, colWidths=[26*mm,14*mm,26*mm,24*mm,26*mm,24*mm,16*mm,20*mm])
+    sens_t = Table(sens_rows, colWidths=[24*mm,12*mm,25*mm,22*mm,25*mm,22*mm,20*mm,20*mm])
     sens_t.setStyle(BTS())
     story.append(sens_t)
     PB(story)
@@ -1964,7 +2015,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     ratios = Table([
         ["Ratio","Value","Benchmark","Assessment"],
         ["Current Ratio (Balance Sheet Basis)", r2(_true_current_ratio), "> 1.33 (illustrative)", "Good" if _true_current_ratio>1.33 else "Monitor"],
-        ["WC Bank Finance Coverage (WC Requirement ÷ WC Bank Finance)", r2(_wc_bank_coverage) + "x", "—", "—"],
+        ["WC Bank Finance Coverage", r2(_wc_bank_coverage) + "x", "—", "—"],
         ["D:E (TL ÷ Promoter Fixed Equity)",          str(_r_tl_de) + " : 1",  "< 2", "Good" if _r_tl_de < 2 else "High"],
         ["Total Leverage ((TL+WC) ÷ Total Promoter)", str(_r_tot_de) + " : 1", "< 3", "Good" if _r_tot_de < 3 else "High"],
         ["EBITDA Margin (EBITDA / Sales)",     rp2(cma["ebitda_margin_pct"]), "> 20%", "Good" if cma["ebitda_margin_pct"]>20 else "Monitor"],
@@ -1994,7 +2045,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     H2("Overall Interpretation", story)
     _fa_cell_style = _s("fa_cell", fontSize=9, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=BLK, leading=12)
     fa_t = Table([
-        ["Internal Viability Grade","Feasibility Assessment","Risk Level","Weighted Score"],
+        ["Viability Grade","Feasibility Assessment","Risk Level","Weighted Score"],
         [Paragraph(str(cma["credit_rating"]), _fa_cell_style), Paragraph(str(_rec_display), _fa_cell_style),
          Paragraph(str(cma["risk_level"]), _fa_cell_style), Paragraph(str(cma["total_score"]), _fa_cell_style)],
     ], colWidths=[32*mm,68*mm,32*mm,38*mm])
@@ -2027,68 +2078,95 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "independently verified by the sanctioning bank.",
         ST["normal"]))
     NL(story, 3)
+    # BUG FIX: these cells used to be plain strings with manually-inserted
+    # "\n" breaks, on the assumption that ReportLab only needed help at
+    # chosen points — but several individual line-fragments were still
+    # longer than the 100mm middle column could hold, and a plain string
+    # never wraps on its own, so those fragments overflowed straight into
+    # the "Benchmark" column, garbling both. Every cell is now a
+    # Paragraph, which word-wraps to the real column width regardless of
+    # exactly how long any given line is.
+    _fdef_label_style = _s("fdef_label", fontSize=7.5, fontName="Helvetica-Bold", textColor=BLK, leading=10)
+    _fdef_body_style  = _s("fdef_body",  fontSize=7.5, fontName="Helvetica",      textColor=BLK, leading=10)
+    _fdef_bench_style = _s("fdef_bench", fontSize=7.5, fontName="Helvetica",      textColor=BLK, leading=10)
+
+    def _fdef_row(label, body, bench):
+        return [Paragraph(label, _fdef_label_style), Paragraph(body, _fdef_body_style), Paragraph(bench, _fdef_bench_style)]
+
     _fdef_rows = [
         ["Ratio / Formula", "Definition & Method", "Benchmark"],
-        ["DSCR\n(Term Loan Debt\nService Coverage Ratio)",
-         "= (PAT + Depreciation + Term Loan Interest) / (Term Loan Principal + Term Loan Interest)\n"
-         "Measures ability to repay the TERM LOAN from operating cash flow. Deliberately excludes\n"
-         "Working Capital interest — WC is a separate revolving facility, not amortised like a term loan.",
-         ">= 1.25x\n(illustrative,\nterm-loan only)"],
-        ["ROI — EBITDA / PAT",
-         "= Annual EBITDA (or PAT) / Initial Project Investment × 100\n"
-         "Denominator = Fixed Assets + Promoter WC Margin\n"
-         "Measures operational / net return on the initial investment",
-         "> 15% / > 10%"],
-        ["ROCE",
-         "= EBIT ÷ Capital Employed (Promoter Equity + Term Loan) × 100\n"
-         "One exact formula, used consistently everywhere in this report (Section 15). EBIT = EBITDA − Depreciation.\n"
-         "Return on all long-term funds deployed, before financing structure is considered.",
-         "Illustrative"],
-        ["ROE",
-         "= PAT ÷ Average Equity × 100\n"
-         "Average Equity = average of Net Worth (Equity + WC Margin + Reserves) at the start and end of the\n"
-         "reference year (from the projected Balance Sheet). Falls back to Promoter Equity if Average Equity\n"
-         "is not meaningful (zero or negative). Can legitimately be extreme for a thinly-capitalised,\n"
-         "highly-leveraged project; a large magnitude is a leverage signal, not an error.",
-         "Illustrative"],
-        ["Current Ratio\n(Balance Sheet basis)",
-         "= Total Current Assets / Total Current Liabilities, taken directly from the Year 1 projected\n"
-         "Balance Sheet (Section 24) — not a bank's own WC assessment methodology (e.g. Tandon\n"
-         "Committee MPBF), which each bank/scheme should apply separately.",
-         "> 1.33x\n(illustrative)"],
-        ["WC Bank Finance\nCoverage",
-         "= WC Requirement / WC Bank Finance — how many times the assessed WC requirement is the\n"
-         "arranged WC bank facility. This is NOT a Current Ratio.",
-         "—"],
-        ["D:E Ratio\n(Term Loan D:E)",
-         "= Term Loan Amount / Promoter Fixed Equity",
-         "< 2 : 1"],
-        ["Total Leverage\n(D:E — All Debt)",
-         "= (Term Loan + WC Bank Finance) / Total Promoter Contribution",
-         "< 3 : 1"],
-        ["EBITDA Margin / Net Profit Margin",
-         "= EBITDA (or PAT) / Sales Revenue × 100",
-         "> 20% / > 10%"],
-        ["Break-Even Point",
-         "= Fixed Costs / (1 − Variable Cost Ratio)\n"
-         "Not computable when Contribution Margin ≤ 0 (shown as N/A, not forced to a number)",
-         "< Monthly\nRevenue"],
-        ["Cash Accruals",
-         "= PAT + Annual Depreciation — the operating cash flow available for debt service",
-         "> Annual TL\nDebt Service"],
-        ["Interest Coverage",
-         "= EBITDA / Total Interest (TL + WC)",
-         "> 2x"],
-        ["Asset Turnover",
-         "= Annual Revenue / Initial Project Investment",
-         "> 1x"],
+        _fdef_row(
+            "DSCR (Term Loan Debt Service Coverage Ratio)",
+            "= (PAT + Depreciation + Term Loan Interest) / (Term Loan Principal + Term Loan Interest). "
+            "Measures ability to repay the TERM LOAN from operating cash flow. Deliberately excludes "
+            "Working Capital interest — WC is a separate revolving facility, not amortised like a term loan.",
+            ">= 1.25x (illustrative, term-loan only)"),
+        _fdef_row(
+            "ROI — EBITDA / PAT",
+            "= Annual EBITDA (or PAT) / Initial Project Investment × 100. "
+            "Denominator = Fixed Assets + Promoter WC Margin. "
+            "Measures operational / net return on the initial investment.",
+            "> 15% / > 10%"),
+        _fdef_row(
+            "ROCE",
+            "= EBIT ÷ Capital Employed (Promoter Equity + Term Loan) × 100. "
+            "One exact formula, used consistently everywhere in this report (Section 15). EBIT = EBITDA − Depreciation. "
+            "Return on all long-term funds deployed, before financing structure is considered.",
+            "Illustrative"),
+        _fdef_row(
+            "ROE",
+            "= PAT ÷ Average Equity × 100. "
+            "Average Equity = average of Net Worth (Equity + WC Margin + Reserves) at the start and end of the "
+            "reference year (from the projected Balance Sheet). Falls back to Promoter Equity if Average Equity "
+            "is not meaningful (zero or negative). Can legitimately be extreme for a thinly-capitalised, "
+            "highly-leveraged project; a large magnitude is a leverage signal, not an error.",
+            "Illustrative"),
+        _fdef_row(
+            "Current Ratio (Balance Sheet basis)",
+            "= Total Current Assets / Total Current Liabilities, taken directly from the Year 1 projected "
+            "Balance Sheet (Section 24) — not a bank's own WC assessment methodology (e.g. Tandon "
+            "Committee MPBF), which each bank/scheme should apply separately.",
+            "> 1.33x (illustrative)"),
+        _fdef_row(
+            "WC Bank Finance Coverage",
+            "= WC Requirement / WC Bank Finance — how many times the assessed WC requirement is the "
+            "arranged WC bank facility. This is NOT a Current Ratio.",
+            "—"),
+        _fdef_row(
+            "D:E Ratio (Term Loan D:E)",
+            "= Term Loan Amount / Promoter Fixed Equity",
+            "< 2 : 1"),
+        _fdef_row(
+            "Total Leverage (D:E — All Debt)",
+            "= (Term Loan + WC Bank Finance) / Total Promoter Contribution",
+            "< 3 : 1"),
+        _fdef_row(
+            "EBITDA Margin / Net Profit Margin",
+            "= EBITDA (or PAT) / Sales Revenue × 100",
+            "> 20% / > 10%"),
+        _fdef_row(
+            "Break-Even Point",
+            "= Fixed Costs / (1 − Variable Cost Ratio). "
+            "Not computable when Contribution Margin ≤ 0 (shown as N/A, not forced to a number).",
+            "< Monthly Revenue"),
+        _fdef_row(
+            "Cash Accruals",
+            "= PAT + Annual Depreciation — the operating cash flow available for debt service",
+            "> Annual TL Debt Service"),
+        _fdef_row(
+            "Interest Coverage",
+            "= EBITDA / Total Interest (TL + WC)",
+            "> 2x"),
+        _fdef_row(
+            "Asset Turnover",
+            "= Annual Revenue / Initial Project Investment",
+            "> 1x"),
     ]
     _fdef_t = Table(_fdef_rows, colWidths=[38*mm, 100*mm, 32*mm])
     _fdef_t.setStyle(TableStyle([
         ("BACKGROUND",    (0,0),(-1, 0), MG),
         ("TEXTCOLOR",     (0,0),(-1, 0), W),
         ("FONTNAME",      (0,0),(-1, 0), "Helvetica-Bold"),
-        ("FONTNAME",      (0,1),( 0,-1), "Helvetica-Bold"),
         ("FONTSIZE",      (0,0),(-1,-1), 7.5),
         ("GRID",          (0,0),(-1,-1), 0.4, GRY),
         ("TOPPADDING",    (0,0),(-1,-1), 3),

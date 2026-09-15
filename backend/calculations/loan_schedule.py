@@ -2,13 +2,19 @@
 calculations/loan_schedule.py — Term Loan amortisation (CA standard)
 
 BUG 7 FIX: Use half-yearly reducing balance schedule:
-  HalfYearlyInstalment = TermLoan / (tenure_years × 2)
-  Interest_H1_YearN    = OpeningBalance_YearN × (interestRate / 2)
-  MidYearBalance_YearN = OpeningBalance_YearN − HalfYearlyInstalment
-  Interest_H2_YearN    = MidYearBalance_YearN × (interestRate / 2)
-  TotalInterest_YearN  = H1 + H2
-  PrincipalRepaid_YearN = HalfYearlyInstalment × 2
-  ClosingBalance_YearN = OpeningBalance_YearN − PrincipalRepaid_YearN
+  HalfYearlyInstalment = TermLoan / RepaymentHalfYears
+  Interest_HalfYearN   = BalanceAtStartOfHalfYear × (interestRate / 2)
+  PrincipalRepaid_HalfYearN = HalfYearlyInstalment (0 during moratorium)
+  ClosingBalance_HalfYearN  = BalanceAtStartOfHalfYear − PrincipalRepaid_HalfYearN
+
+BUG FIX (moratorium granularity): moratorium used to be converted to whole
+years via math.ceil(moratorium_months / 12) — a 6-month moratorium was
+silently ROUNDED UP to a full 12-month moratorium (doubling it), while every
+display in the report kept showing the original "6 Month(s)" the applicant
+actually entered. Moratorium is now tracked in HALF-YEAR units (rounded to
+the nearest half-year, since repayment already happens on a half-yearly
+cycle), so a 6-month moratorium correctly skips principal for exactly one
+half-year, not a full year.
 """
 import math
 from core.engine import R
@@ -17,6 +23,7 @@ _ZERO_YEAR = lambda y: {
     "year": y, "opening_balance": 0.0, "emi_paid": 0.0,
     "interest_paid": 0.0, "principal_paid": 0.0, "closing_balance": 0.0,
     "half_yearly_instalment": 0.0,
+    "mid_year_balance": 0.0, "interest_h1": 0.0, "interest_h2": 0.0,
 }
 
 
@@ -33,33 +40,37 @@ def calculate_loan_schedule(data, scheme_data: dict) -> list:
     if term_loan <= 0 or tenure_mo <= 0:
         return [_ZERO_YEAR(y) for y in range(1, 6)]
 
-    annual_rate      = rate_pct / 100
-    tenure_years     = math.ceil(tenure_mo / 12)
-    moratorium_years = math.ceil(moratorium_mo / 12)
-    repay_years      = max(tenure_years - moratorium_years, 1)
+    annual_rate         = rate_pct / 100
+    half_rate           = annual_rate / 2
+    tenure_years        = math.ceil(tenure_mo / 12)
+    total_half_years    = tenure_years * 2
+    # Nearest half-year unit — repayment already runs on a half-yearly cycle,
+    # so this is the finest granularity a moratorium can be honoured at.
+    moratorium_half_yrs = min(round(moratorium_mo / 6), total_half_years)
+    repay_half_years    = max(total_half_years - moratorium_half_yrs, 1)
 
-    # BUG 7 FIX: Half-yearly instalment on principal
-    half_inst = R(term_loan / (repay_years * 2), 2)
+    half_inst = R(term_loan / repay_half_years, 2)
 
     rows    = []
     balance = term_loan
 
     for yr in range(1, tenure_years + 1):
         opening = R(balance, 2)
+        bal = opening
 
-        if yr <= moratorium_years:
-            # Moratorium: interest only, no principal repayment
-            ih1     = R(opening * annual_rate / 2, 2)
-            ih2     = R(opening * annual_rate / 2, 2)
-            repaid  = 0.0
-            closing = opening
-        else:
-            ih1     = R(opening * annual_rate / 2, 2)
-            mid     = R(max(opening - half_inst, 0), 2)
-            ih2     = R(mid * annual_rate / 2, 2)
-            repaid  = R(half_inst * 2, 2)
-            closing = R(max(opening - repaid, 0), 2)
+        # Half-year 1 of this year
+        hy1 = 2 * yr - 1
+        ih1 = R(bal * half_rate, 2)
+        repaid_h1 = 0.0 if hy1 <= moratorium_half_yrs else min(half_inst, bal)
+        bal = R(max(bal - repaid_h1, 0), 2)
 
+        # Half-year 2 of this year
+        hy2 = 2 * yr
+        ih2 = R(bal * half_rate, 2)
+        repaid_h2 = 0.0 if hy2 <= moratorium_half_yrs else min(half_inst, bal)
+        closing = R(max(bal - repaid_h2, 0), 2)
+
+        repaid    = R(repaid_h1 + repaid_h2, 2)
         total_int = R(ih1 + ih2, 2)
         emi_paid  = R(repaid + total_int, 2)
 
@@ -71,6 +82,14 @@ def calculate_loan_schedule(data, scheme_data: dict) -> list:
             "principal_paid":         repaid,
             "closing_balance":        closing,
             "half_yearly_instalment": half_inst,
+            # The TRUE balance after H1 / before H2 — NOT the arithmetic
+            # mean of opening and closing. In a year that transitions out
+            # of moratorium mid-year (H1 still in moratorium, H2 repaying),
+            # the balance is unchanged after H1, so averaging opening and
+            # closing would understate it.
+            "mid_year_balance":       bal,
+            "interest_h1":            ih1,
+            "interest_h2":            ih2,
         })
         balance = closing
 

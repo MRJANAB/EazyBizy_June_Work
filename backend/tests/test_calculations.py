@@ -177,6 +177,54 @@ class TestLoanSchedule:
         # And it must actually match the schedule's own principal repayments.
         assert rows[1]["principal_paid"] == R(expected_correct * 2, 2)
 
+    def test_six_month_moratorium_is_not_rounded_up_to_a_full_year(self):
+        """BUG FIX: moratorium used to be converted via math.ceil(months/12),
+        so a 6-month moratorium was silently DOUBLED to a full 12-month
+        moratorium — while the report kept displaying "Moratorium: 6
+        Month(s)" everywhere, contradicting the schedule actually computed.
+        A 6-month moratorium must skip principal for exactly the first
+        half-year, not the first full year."""
+        from calculations.loan_schedule import calculate_loan_schedule
+        data = _make_data(assumptions=_make_assumptions(
+            tenure_months=60, moratorium_months=6, interest_rate_pct=11.0,
+        ))
+        rows = calculate_loan_schedule(data, {"term_loan": 365438})
+        # Repayment spans 5 years x 2 half-years, minus 1 half-year of
+        # moratorium = 9 half-yearly instalments (NOT 8, which would be the
+        # old bug's answer for a wrongly-doubled 12-month moratorium).
+        expected_half_inst = R(365438 / 9, 2)
+        assert rows[0]["half_yearly_instalment"] == expected_half_inst
+        # Year 1 must show exactly ONE half-year of repayment (H2), not zero.
+        assert rows[0]["principal_paid"] == R(expected_half_inst, 2)
+        assert rows[0]["principal_paid"] > 0
+        # Years 2-5 each get two full half-yearly instalments.
+        assert rows[1]["principal_paid"] == R(expected_half_inst * 2, 2)
+        # The loan must still fully amortise to (near) zero by the end of
+        # tenure — a few paise of rounding residual from dividing 365438 by
+        # 9 unevenly is pre-existing/benign, not part of this bug.
+        assert abs(rows[4]["closing_balance"]) < 1
+
+    def test_mid_year_balance_correct_in_moratorium_transition_year(self):
+        """BUG FIX: in a year that transitions out of moratorium mid-year
+        (H1 still moratorium, H2 repaying — the case a 6-month moratorium
+        always produces in Year 1), the balance does NOT move during H1, so
+        the true mid-year balance equals the opening balance, NOT the
+        arithmetic mean of opening and closing (which pdf/generator.py used
+        to compute and would have understated it)."""
+        from calculations.loan_schedule import calculate_loan_schedule
+        data = _make_data(assumptions=_make_assumptions(
+            tenure_months=60, moratorium_months=6, interest_rate_pct=11.0,
+        ))
+        rows = calculate_loan_schedule(data, {"term_loan": 365438})
+        y1 = rows[0]
+        assert y1["mid_year_balance"] == y1["opening_balance"]
+        naive_average = R((y1["opening_balance"] + y1["closing_balance"]) / 2, 2)
+        assert y1["mid_year_balance"] != naive_average
+        # H1 accrues interest on the untouched opening balance; H2 accrues
+        # on that same balance too (still unmoved going into H2).
+        assert y1["interest_h1"] == R(y1["opening_balance"] * 0.11 / 2, 2)
+        assert y1["interest_h2"] == R(y1["mid_year_balance"] * 0.11 / 2, 2)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Depreciation

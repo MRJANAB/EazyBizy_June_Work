@@ -531,12 +531,27 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
     yr1_sched   = loan_sched[0] if loan_sched else {}
     wc_y1       = wc_sched[0]   if wc_sched   else {}
     tenure_yrs  = max(int(float(assum.get("tenure_months", 60) or 60) // 12), 1)
+    # BUG FIX: when the applicant describes volume/pricing via the
+    # production section's per-unit fields (selling_price_per_unit) rather
+    # than an explicit products list — the normal way to describe a
+    # per-job/per-unit service business — this fallback used to show a
+    # meaningless "Qty: 1 @ Rs.<entire month's revenue>" row instead of the
+    # applicant's own per-unit price. Derive units_per_month from the real
+    # selling price when one was actually entered.
+    _fallback_revenue   = float(monthly.get("net_monthly_revenue", 0) or 0)
+    _fallback_unit_price = float(prod.get("selling_price_per_unit", 0) or 0)
+    if _fallback_unit_price > 0:
+        _fallback_avg_price = _fallback_unit_price
+        _fallback_units_per_month = R(_fallback_revenue / _fallback_unit_price, 2)
+    else:
+        _fallback_avg_price = _fallback_revenue
+        _fallback_units_per_month = 1
     products    = [
         {
             "category":       f"{business.get('nature_of_business','Product/Service')}",
-            "units_per_month": 1,
-            "avg_price":       float(monthly.get("net_monthly_revenue", 0) or 0),
-            "monthly_revenue": float(monthly.get("net_monthly_revenue", 0) or 0),
+            "units_per_month": _fallback_units_per_month,
+            "avg_price":       _fallback_avg_price,
+            "monthly_revenue": _fallback_revenue,
             "mix_pct":         100,
         }
     ]
@@ -804,14 +819,21 @@ def _build_dpr_from_report(
     # recomputing tl/(tenure_yrs*2) — that formula ignores moratorium and disagrees
     # with the schedule's own principal_repaid figures whenever moratorium > 0.
     hi = R(loan_sched[0]["half_yearly_instalment"]) if loan_sched else 0.0
+    # BUG FIX: "mid" used to be the arithmetic mean of opening/closing, and
+    # int_h1/int_h2 a naive half-split of the year's total interest. Both
+    # are wrong in a year that transitions out of moratorium mid-year (H1
+    # still in moratorium, H2 repaying) — the balance doesn't move until
+    # H2, so it's not the average of opening and closing, and the two
+    # halves' interest isn't necessarily equal either. Read the real,
+    # separately-tracked H1/H2 figures straight off the schedule instead.
     tl_schedule = [
         {
             "year":             r["year"],
             "opening":          R(r["opening_balance"]),
-            "mid":              R((r["opening_balance"] + r["closing_balance"]) / 2),
+            "mid":              R(r.get("mid_year_balance", (r["opening_balance"] + r["closing_balance"]) / 2)),
             "closing":          R(r["closing_balance"]),
-            "int_h1":           R(r["interest_paid"] / 2),
-            "int_h2":           R(r["interest_paid"] / 2),
+            "int_h1":           R(r.get("interest_h1", r["interest_paid"] / 2)),
+            "int_h2":           R(r.get("interest_h2", r["interest_paid"] / 2)),
             "total_interest":   R(r["interest_paid"]),
             "principal_repaid": R(r["principal_paid"]),
         }

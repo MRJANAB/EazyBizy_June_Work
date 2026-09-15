@@ -24,19 +24,46 @@ hardcode one (assumptions.wc_finance_method):
 from core.engine import R, annual_revenue_from_prod, get_industry_defaults
 
 
+def _product_monthly_cogs(data) -> float:
+    """Sum purchase_price × units_per_month from products list (trading COGS source)."""
+    products = getattr(data, "products", None)
+    if not products:
+        return 0.0
+    return sum(
+        float(getattr(p, "units_per_month", 0) or 0) * float(getattr(p, "purchase_price", 0) or 0)
+        for p in products
+    )
+
+
 def _compute_rm_at_100pct(data, annual_rev_100: float, cogs_ratio: float, cap_y1: float = 0.50) -> float:
-    """RM at 100% capacity — three-priority CA logic (same as income_statement)."""
+    """RM at 100% capacity — four-priority CA logic (same as income_statement).
+
+    BUG FIX: this was missing the "product table COGS" priority that
+    calculations/income_statement.py has — so whenever an applicant
+    described COGS via an itemized products list (purchase_price ×
+    units_per_month, the normal way to enter a trading business's stock)
+    rather than expenses.raw_materials or production unit-cost fields, WC
+    silently fell through to the industry-default COGS ratio (70% for
+    trading) instead of the applicant's own actual purchase costs — giving
+    Stock/Creditors a different, disagreeing COGS basis than the P&L
+    (Section 12/14) computed from the same products list.
+    """
     prod        = data.production
     rm_per_unit = float(getattr(prod, "raw_material_cost_per_unit", 0) or 0)
     input_qty   = float(getattr(prod, "input_qty_per_day", 0) or 0)
     work_days   = float(getattr(prod, "working_days_per_year", 300) or 300)
     if rm_per_unit > 0 and input_qty > 0:
         return input_qty * work_days * rm_per_unit
-    # Priority 2: monthly RM entered in expenses step
+    # Priority 2: product table COGS — purchase_price × units_per_month (trading)
+    prod_cogs = _product_monthly_cogs(data)
+    if prod_cogs > 0 and cap_y1 > 0:
+        return (prod_cogs * 12) / cap_y1
+    # Priority 3: monthly RM entered in expenses step
     expenses   = getattr(data, "expenses", None)
     monthly_rm = float(getattr(expenses, "raw_materials", 0) or 0) if expenses else 0.0
     if monthly_rm > 0 and cap_y1 > 0:
         return (monthly_rm * 12) / cap_y1
+    # Priority 4: industry default ratio (last resort)
     return annual_rev_100 * cogs_ratio
 
 

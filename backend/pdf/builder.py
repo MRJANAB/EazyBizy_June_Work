@@ -147,6 +147,19 @@ def pof(num, den):
     try:    return f"{float(num)/float(den)*100:.1f}%"
     except: return "N/A"
 
+def location_district(inp: dict) -> str:
+    """"Location" / "District" combined for display. When they're the same
+    value (common for a single-location small business), showing both
+    concatenated ("Nashik  Nashik" / "Nashik, Nashik") reads as a
+    typo/duplication to a reviewer — show it once instead."""
+    loc  = str(inp.get("primary_location", "") or "").strip()
+    dist = str(inp.get("district", "") or "").strip()
+    if not dist or dist.lower() == loc.lower():
+        return loc
+    if not loc:
+        return dist
+    return f"{loc}, {dist}"
+
 def _o1_expense_breakdown(cma: dict, inp: dict) -> dict:
     """Section O1's itemized monthly expense rows — reconciled to foot exactly
     to their own displayed Sub-Total Fixed / Sub-Total Variable / TOTAL MONTHLY
@@ -351,6 +364,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         or pc.get("equity_capital")
         or 0
     )
+    # BUG FIX: this used to be computed as just term_loan + promoter_fixed_equity,
+    # silently dropping the scheme's margin-money/capital subsidy (e.g. PMEGP) —
+    # money that IS part of the fixed capital outlay, just not funded by the
+    # promoter's own cash or the bank. Section 08's own Means-of-Finance total
+    # ("TOTAL (Fixed Project Cost)") already includes it; this must match.
+    _display_margin_money = pc.get("margin_money", 0) or cma.get("margin_money", 0) or 0
+    display_fixed_project_cost = R(pc["term_loan"] + display_promoter_fixed_equity + _display_margin_money, 2)
     display_promoter_wc_margin = cma.get("promoter_wc_margin") or (wc[0].get("margin", 0) if wc else 0)
     display_promoter_contribution = (
         cma.get("total_promoter_contribution")
@@ -541,7 +561,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _exec_wc_total  = R(_exec_wc_margin + _exec_wc_loan, 2)
     snap = Table([
         ["Particular", "Amount / Value", "Particular", "Amount / Value"],
-        ["Total Project Cost",          rs(display_total_project_cost), "Fixed Project Cost", rs(R(pc["term_loan"] + display_promoter_fixed_equity, 2))],
+        ["Total Project Cost",          rs(display_total_project_cost), "Fixed Project Cost", rs(display_fixed_project_cost)],
         ["Working Capital Requirement", rs(_exec_wc_total),             "Promoter Contribution", rs(display_promoter_contribution)],
         ["Term Loan",                   rs(pc["term_loan"]),            "Working Capital Finance", rs(_exec_wc_loan)],
         ["Total Bank Exposure",         rs(display_loan_amount),        "Proposed Tenure", f"{inp.get('loan_tenure_years',5)} years"],
@@ -698,7 +718,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Business Name",     Paragraph(inp.get("business_name","") or "—", ST["table_cell"]),
          "Nature of Business", Paragraph(inp.get("nature_of_business","") or "—", ST["table_cell"])],
         ["Registration Type", inp.get("business_type",""),         "Industry",            str(inp.get("industry", inp.get("industry_type",""))).title()],
-        ["Business Status",   _biz_status_str,                    "Location / District", f"{inp.get('primary_location','')}  {inp.get('district','')}".strip()],
+        ["Business Status",   _biz_status_str,                    "Location / District", location_district(inp)],
         ["Commencement Date", _commencement_display,               "Expected Employment", str(inp.get("expected_employment",0))+" persons"],
         ["Area Type",         inp.get("area_type","Rural"),        "Implementing Agency", _impl_agency or "—"],
         ["GST Number",        inp.get("gst_number","") or "—",    "MSME/Udyam No.",      inp.get("msme_number","") or "—"],
@@ -734,7 +754,15 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             _str   = str(_c.get("strengths", "") or "")
             _weak  = str(_c.get("weaknesses", "") or "")
             if _name:
-                _comp_rows.append([_name, _type, _dist, _str, _weak])
+                # BUG FIX: free-text strengths/weaknesses are user-entered and
+                # can run to a full sentence — plain strings don't wrap in a
+                # ReportLab Table cell, so a long entry overflowed straight
+                # into the next column with no visible separation.
+                _comp_rows.append([
+                    Paragraph(_name, ST["table_cell"]), Paragraph(_type, ST["table_cell"]),
+                    Paragraph(_dist, ST["table_cell"]), Paragraph(_str, ST["table_cell"]),
+                    Paragraph(_weak, ST["table_cell"]),
+                ])
         if len(_comp_rows) > 1:
             _comp_t = Table(_comp_rows, colWidths=[35*mm, 22*mm, 20*mm, 45*mm, 48*mm])
             _comp_t.setStyle(BTS())
@@ -766,7 +794,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Field", "Details"],
         ["Nature of Project",   inp.get("nature_of_business","") or "—"],
         ["Business Model",      _industry_str + (f" | {_nature_biz[:60]}" if _nature_biz else "")],
-        ["Location",             f"{inp.get('primary_location','')}, {inp.get('district','')}".strip(", ")],
+        ["Location",             location_district(inp)],
         ["Area Type",            inp.get("area_type", "Rural")],
         ["Capacity Schedule (Y1-Y5)", f"{rp(inp.get('capacity_y1',0.5))} / {rp(inp.get('capacity_y2',0.6))} / {rp(inp.get('capacity_y3',0.7))} / {rp(inp.get('capacity_y4',0.75))} / {rp(inp.get('capacity_y5',0.8))}"],
         ["Expected Employment",  f"{inp.get('expected_employment',0)} persons"],
@@ -1028,21 +1056,38 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         H2("Annual Sales Realization (Year 1, at 100% Capacity)", story)
         products = inp.get("products_list") or cma.get("products") or []
         if _industry == "trading" and products and len(products) > 0 and products[0].get("category") != "Products/Services":
-            sales_rows = [["Product Name", "Purchase Price", "Selling Price", "Quantity", "Revenue (M)", "COGS (M)", "Gross Profit (M)"]]
+            # Header cells are Paragraph-wrapped, not plain strings — ReportLab
+            # does not auto-wrap plain strings, so headers this long would
+            # otherwise overflow past the page edge (as would a long product
+            # name in the first column).
+            _tr_hdr_style = _s("tr_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
+            sales_rows = [[Paragraph(h, _tr_hdr_style) for h in
+                           ["Product Name", "Purchase Price", "Selling Price", "Qty/Month",
+                            "Annual Revenue (Rs.)", "Annual COGS (Rs.)", "Annual Gross Profit (Rs.)"]]]
+            # Entered units_per_month is the Year-1 (current-capacity) MONTHLY
+            # quantity — scale it up to the true 100%-capacity annual total
+            # (ps["revenue_at_100pct"], the same figure shown above and in the
+            # per-year table below) so this table's total matches the header
+            # it sits under, instead of silently showing an un-annualised,
+            # un-scaled "Total per Month" figure labelled "Annual ... at 100%
+            # Capacity".
+            total_rev_y1 = sum(p.get("units_per_month", 0) * p.get("avg_price", 0) * 12 for p in products)
+            total_rev_100pct = float(ps.get("revenue_at_100pct", 0) or 0) or total_rev_y1
+            scale = (total_rev_100pct / total_rev_y1) if total_rev_y1 else 1
             tot_rev = 0
             tot_cogs = 0
             for p in products:
-                qty = p.get("units_per_month", 0)
+                qty_100 = p.get("units_per_month", 0) * scale
                 sp = p.get("avg_price", 0)
                 pp = p.get("purchase_price", 0)
-                rev = qty * sp
-                cogs = qty * pp
+                rev = qty_100 * sp * 12
+                cogs = qty_100 * pp * 12
                 gp = rev - cogs
                 tot_rev += rev
                 tot_cogs += cogs
-                sales_rows.append([p.get("category", "Product"), r(pp), r(sp), r(qty), r(rev), r(cogs), r(gp)])
-            sales_rows.append(["Total per Month", "", "", "", r(tot_rev), r(tot_cogs), r(tot_rev - tot_cogs)])
-            sales_t = Table(sales_rows, colWidths=[40*mm, 20*mm, 20*mm, 15*mm, 25*mm, 25*mm, 25*mm])
+                sales_rows.append([Paragraph(p.get("category", "Product"), ST["table_cell"]), r(pp), r(sp), r(qty_100), r(rev), r(cogs), r(gp)])
+            sales_rows.append(["Total at 100% Capacity", "", "", "", r(tot_rev), r(tot_cogs), r(tot_rev - tot_cogs)])
+            sales_t = Table(sales_rows, colWidths=[32*mm, 20*mm, 20*mm, 18*mm, 28*mm, 26*mm, 26*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(len(sales_rows)-1))
         else:
             sales_rows = [["Product / Service Category","Annual Revenue (Rs.)","% Mix"]]
@@ -1588,10 +1633,21 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "Agricultural Equipment & Implements"                   if _is_agri   else
         "Plant, Machinery & Equipment (incl. contingency)"
     )
+    # BUG FIX: this row's "Year 1 Dep" is computed off pm_with_contingency +
+    # fixtures_gross combined (calculations/depreciation.py pools P&M and
+    # fixtures — computers/furniture/electrification/racks/transportation —
+    # into one depreciation base at the same rate) — but the "Gross Value"
+    # shown here used to be pm_with_contingency ALONE, silently omitting
+    # fixtures_gross. That made the row self-contradictory (e.g. Rs.52,500
+    # x 15% was displayed as Rs.127,875) even though "Total Gross Block"
+    # below it already included fixtures_gross correctly.
+    _dep_machinery_gross_display = R(
+        dep.get("pm_with_contingency", dep["machinery_gross"]) + dep.get("fixtures_gross", 0), 2
+    )
     gb_t = Table([
         ["Asset", "Gross Value (Rs.)", "Dep Rate", "Year 1 Dep (Rs.)"],
         [_dep_building_label, rs(dep["building_gross"]), rp(inp["building_dep_rate_wdv"]), rs(dep["dep_building_wdv"])],
-        [_dep_machinery_label, rs(dep.get("pm_with_contingency", dep["machinery_gross"])), rp(inp["machinery_dep_rate_wdv"]), rs(dep["dep_machinery_wdv"])],
+        [_dep_machinery_label, rs(_dep_machinery_gross_display), rp(inp["machinery_dep_rate_wdv"]), rs(dep["dep_machinery_wdv"])],
         ["Total Gross Block", rs(dep["gross_block"]), "", rs(dep["total_per_year"])],
     ], colWidths=[70*mm, 40*mm, 28*mm, 32*mm])
     gb_t.setStyle(BTS()); gb_t.setStyle(TOT(3))

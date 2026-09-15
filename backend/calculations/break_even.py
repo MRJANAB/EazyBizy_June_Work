@@ -23,7 +23,9 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
 
     Returns list of 5 dicts, each containing payback_months for Year 1 usage.
     """
-    annual_rev_100 = annual_revenue_from_prod(data.production, getattr(getattr(data, "business", None), "industry_type", "manufacturing"))
+    # Fallback only — see the per-year derivation below, which is what's
+    # actually used whenever a year has both revenue and capacity.
+    _annual_rev_100_fallback = annual_revenue_from_prod(data.production, getattr(getattr(data, "business", None), "industry_type", "manufacturing"))
     project_cost   = float((scheme_data or {}).get("project_cost", 0) or 0)
     result = []
 
@@ -44,6 +46,20 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
 
         contrib   = R(rev - var_costs)
         cm_ratio  = R(contrib / rev, 4) if rev else 0
+
+        # BUG FIX: annual_rev_100 used to come only from annual_revenue_from_prod(),
+        # which derives 100%-capacity revenue from production.input_qty_per_day /
+        # selling_price_per_unit — manufacturing-only fields. For a trading (or
+        # any) business whose revenue instead comes from the top-level products
+        # list, that call returns 0, so "BEP as % of Capacity" silently showed
+        # 0.0% every year regardless of the actual BEP. income_statement.py
+        # already derived each year's true 100%-capacity revenue correctly
+        # (from the products list when present); this year's own revenue ÷
+        # capacity reconstructs that exact figure — the same technique
+        # pdf/builder.py's own "Revenue at 100%" row uses — without needing to
+        # re-derive it from raw production fields at all.
+        cap = float(yr.get("capacity", 0) or 0)
+        annual_rev_100 = R(rev / cap, 2) if cap else _annual_rev_100_fallback
 
         # CA Rule: BEP not achievable if contribution ≤ 0 OR BEP sales > 100% installed capacity
         bep_sales = R(fix_costs / cm_ratio) if cm_ratio > 0 else None

@@ -454,6 +454,46 @@ class TestWorkingCapital:
             for s, d in zip(wc_simple, wc_dp)
         ), "Simple Margin and Drawing Power should generally produce different bank finance"
 
+    def test_trading_wc_uses_products_list_cogs_not_industry_default(self):
+        """BUG FIX: _compute_rm_at_100pct in working_capital.py was missing
+        the "product table COGS" priority that calculations/income_statement.py
+        has, so a trading business describing COGS via an itemized products
+        list (purchase_price x units_per_month — the normal way to enter it)
+        fell through to the industry-default COGS ratio (70% for trading)
+        instead of the applicant's own purchase costs. That gave Stock/
+        Creditors a different, disagreeing COGS basis than the P&L, which
+        computes COGS from the same products list correctly.
+
+        Fixture: 1 product, 800 units/month @ purchase_price 180, monthly
+        revenue Rs.240,000, capacity_y1 50% (fixture default), stock 30 days.
+        Correct: rm_at_100pct = (800*180*12)/0.5 = Rs.3,456,000; Year-1 RM =
+        3,456,000*0.5 = Rs.1,728,000; Stock (30/360) = Rs.144,000.
+        The old bug's answer (rev-based, 70% ratio) would have been Rs.168,000.
+        """
+        from calculations.working_capital import calculate_wc_by_year
+        products = [types.SimpleNamespace(
+            units_per_month=800, purchase_price=180, avg_price=300,
+            monthly_revenue=240000, category="Hardware Tools",
+        )]
+        data = _make_data(
+            industry="trading",
+            production=_make_production(input_qty_per_day=0, raw_material_cost_per_unit=0),
+            expenses=types.SimpleNamespace(
+                raw_materials=0, electricity_water=0, repair_maintenance=0,
+                transport_conveyance=0, telephone_internet=0, stationery=0,
+                miscellaneous=0, marketing=0, rent=0, monthly_rent=0,
+            ),
+            products=products,
+        )
+        wc = calculate_wc_by_year(data, SCHEME_PMEGP)
+        assert abs(wc[0]["rm_stock"] - 144000) < 1, (
+            f"Year 1 stock must be based on the products list's own purchase "
+            f"cost (Rs.144,000), got {wc[0]['rm_stock']}"
+        )
+        assert abs(wc[0]["rm_stock"] - 168000) > 1, (
+            "Year 1 stock must NOT match the old industry-default-ratio bug's answer (Rs.168,000)"
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Income Statement
@@ -743,6 +783,47 @@ class TestBreakEven:
         for yr in bep:
             expected = yr["revenue"] - yr["variable_expenses"]
             assert abs(yr["contribution"] - expected) < 1
+
+    def test_bep_pct_of_capacity_nonzero_for_products_list_based_business(self):
+        """BUG FIX: "BEP as % of Capacity" used annual_revenue_from_prod(),
+        which derives 100%-capacity revenue from production.input_qty_per_day
+        / selling_price_per_unit — manufacturing-only fields. A trading (or
+        any) business whose revenue instead comes from the top-level products
+        list has both fields at 0, so that call returned 0 and bep_pct was
+        always None -> displayed as a flat 0.0% every year, regardless of the
+        actual break-even point. Each year's own revenue / capacity already
+        reconstructs the correct 100%-capacity figure (same technique
+        pdf/builder.py's "Revenue at 100%" row uses) without needing those
+        production fields at all."""
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        from calculations.break_even import calculate_break_even
+        products = [types.SimpleNamespace(
+            units_per_month=800, purchase_price=180, avg_price=300,
+            monthly_revenue=240000, category="Hardware Tools",
+        )]
+        data = _make_data(
+            industry="trading",
+            production=_make_production(input_qty_per_day=0, raw_material_cost_per_unit=0, selling_price_per_unit=0),
+            expenses=types.SimpleNamespace(
+                raw_materials=0, electricity_water=0, repair_maintenance=0,
+                transport_conveyance=0, telephone_internet=0, stationery=0,
+                miscellaneous=0, marketing=0, rent=0, monthly_rent=0,
+            ),
+            products=products,
+        )
+        dep    = calculate_depreciation(data, SCHEME_PMEGP)
+        loan   = calculate_loan_schedule(data, SCHEME_PMEGP)
+        wc     = calculate_wc_by_year(data, SCHEME_PMEGP)
+        income = calculate_income_statement(data, SCHEME_PMEGP, dep, loan, wc)
+        bep    = calculate_break_even(income, data, SCHEME_PMEGP)
+        assert bep[0]["contribution_pct"] > 0, "fixture must have a positive contribution margin"
+        assert bep[0]["bep_pct"] > 0, (
+            "BEP as % of Capacity must not be 0 when the business has a real "
+            "products-list-based 100%-capacity revenue and a positive contribution margin"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

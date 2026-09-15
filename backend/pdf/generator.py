@@ -934,8 +934,20 @@ def _build_dpr_from_report(
         }]
                             
     tools_installation = float(project_dict.get("tools_installation", 0))
-    
-    machinery_total = float(sum(float(item.get("total", 0)) for item in formatted_items)) + tools_installation
+
+    # BUG FIX: when no machinery_items were entered, formatted_items falls
+    # back to a single synthetic row valued at dep["machinery_gross"] —
+    # which ALREADY includes tools_installation (calculations/depreciation.py's
+    # machinery_base = sum(machinery_items) + tools_installation). Adding
+    # tools_installation again here double-counted it (e.g. Rs.50,000
+    # tools_installation, no machinery_items, displayed a "TOTAL" of
+    # Rs.100,000 instead of Rs.50,000). dep["machinery_gross"] is already
+    # the single source of truth in both branches — sum(formatted_items) +
+    # tools_installation reconstructs it exactly when machinery_items ARE
+    # present, so just use it directly instead of re-deriving it.
+    machinery_total = float(dep.get("machinery_gross", 0)) or (
+        float(sum(float(item.get("total", 0)) for item in formatted_items)) + tools_installation
+    )
 
     machinery = {
         "items": formatted_items,

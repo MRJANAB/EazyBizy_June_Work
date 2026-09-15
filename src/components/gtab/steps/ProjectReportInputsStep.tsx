@@ -682,7 +682,19 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
 
           {(() => {
             // ── Live WC computation (CA Tandon Method) ──────────────────────
-            const monthlyCOGS    = Number(formData.raw_material_cost   || 0);
+            // BUG FIX: this only read the flat raw_material_cost field, so a
+            // trading business describing COGS via the itemized products list
+            // (purchase_price x quantity — the normal way to enter it, per
+            // Step 9) saw Stock/Creditors previewed as ₹0 here even though
+            // its own Revenue preview line below already reads that same
+            // products list. Falls back to the products list the same way
+            // monthlyRev already does, matching the backend's own COGS
+            // priority order (calculations/income_statement.py /
+            // working_capital.py: unit costs -> product table -> flat
+            // monthly figure -> industry default).
+            const monthlyCOGS    = Number(formData.raw_material_cost || 0) || report.revenue.product_categories.reduce(
+              (s, p) => s + Number(p.quantity_sold || p.units_monthly || 0) * Number(p.purchase_price || 0), 0
+            );
             const monthlyRev     = (() => {
               const fromProds = report.revenue.product_categories.reduce((s, p) => {
                 const rev = Number(p.fixed_revenue) || (Number(p.quantity_sold || p.units_monthly || 0) * Number(p.selling_price || p.avg_price || 0));

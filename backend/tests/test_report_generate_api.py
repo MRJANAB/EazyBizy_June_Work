@@ -11,7 +11,7 @@ directly, so the scheme's own mandated moratorium was silently ignored
 whenever it differed from whatever the applicant's raw input happened to
 contain (including the schema's own default of 0).
 """
-import sys, os
+import sys, os, re
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi.testclient import TestClient
@@ -116,6 +116,57 @@ class TestRawMaterialSectionTotalMatchesItsOwnRows:
         text = _download_pdf_text(report_id)
         # input_qty_per_day(200) x working_days(300) x rm_cost_per_unit(60) = 3,600,000
         assert "3,600,000" in text, "Raw Material row and TOTAL must both show the 100%-capacity figure"
+
+
+class TestInterestCoverageMatchesEbitdaOverTotalInterest:
+    def test_interest_coverage_uses_the_synced_ebitda_and_interest_not_a_stale_pre_sync_figure(self):
+        """BUG FIX: a CA reviewer caught this on a live report — Section 29
+        showed "Interest Coverage (EBITDA / Int) = 5.56x", but Section 14's
+        own EBITDA (Rs.21,55,959), WC Interest (Rs.89,381) and Term Loan
+        Interest (Rs.3,32,233) on the SAME report give EBITDA / (TL + WC
+        interest) = 21,55,959 / 4,21,614 = 5.11x.
+
+        Root cause: pdf/generator.py computed interest_coverage_y1 once,
+        early, from calculate_monthly_pnl()'s own (pre-sync) EBITDA/interest
+        figures — then never recomputed it after cma["ebitda_monthly"] and
+        cma["monthly_int_y1"] were subsequently overwritten with the
+        authoritative income_statement Year-1 figures (the same figures
+        Section 14 displays). roi_ebitda_pct/roi_pat_pct/asset_turnover_y1
+        were already re-synced at that point; interest_coverage_y1 was the
+        one ratio left stale.
+        """
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        report_id = resp.json()["report_id"]
+        text = _download_pdf_text(report_id)
+
+        idx14 = text.find("SECTION 14")
+        idx29 = text.find("SECTION 29")
+        assert idx14 != -1 and idx29 != -1
+
+        def _year1_value(label: str, section_text: str) -> float:
+            i = section_text.find(label)
+            assert i != -1, f"{label!r} row not found"
+            after = section_text[i + len(label):]
+            m = re.search(r"[\d,]+", after)
+            return float(m.group(0).replace(",", ""))
+
+        sec14 = text[idx14:idx29]
+        ebitda_y1  = _year1_value("EBITDA", sec14)
+        wc_int_y1  = _year1_value("Less: Interest on WC", sec14)
+        tl_int_y1  = _year1_value("Less: Interest on Term Loan", sec14)
+        expected_coverage = round(ebitda_y1 / (wc_int_y1 + tl_int_y1), 2)
+
+        sec29 = text[idx29:]
+        i = sec29.find("Interest Coverage")
+        assert i != -1, "Interest Coverage row not found in Section 29"
+        m = re.search(r"[\d.]+", sec29[i + len("Interest Coverage"):])
+        displayed_coverage = float(m.group(0))
+
+        assert displayed_coverage == expected_coverage, (
+            f"Displayed Interest Coverage ({displayed_coverage}x) must equal "
+            f"Section 14's own EBITDA / (TL + WC interest) = {expected_coverage}x"
+        )
 
 
 class TestSalesRealizationShowsTrue100PctCapacity:

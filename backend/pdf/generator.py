@@ -709,6 +709,16 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
             cma["roi_ebitda_pct"]    = R(cma["annual_ebitda"] / _total_pc * 100, 2)
             cma["roi_pat_pct"]       = R(cma["annual_pat"]    / _total_pc * 100, 2)
             cma["asset_turnover_y1"] = R(cma["annual_revenue"] / _total_pc, 2)
+        # BUG FIX: interest_coverage_y1 was computed once, earlier, from
+        # monthly_pnl's own (pre-sync) EBITDA/interest figures — then never
+        # recomputed after cma["ebitda_monthly"]/cma["monthly_int_y1"] were
+        # just overwritten above with the authoritative income_statement
+        # Year-1 figures. A CA reviewer caught the resulting mismatch on a
+        # live report: Section 29 showed "5.56x" using the stale monthly_pnl
+        # basis, while EBITDA / (TL + WC interest) from every OTHER figure
+        # on the same report (Section 21's Total Interest, Section 29's own
+        # EBITDA margin) gives 5.11x.
+        cma["interest_coverage_y1"] = R(cma["ebitda_monthly"] / max(cma.get("monthly_int_y1", 1), 1), 2)
         # Also surface scheme DSCR benchmark into cma for dynamic narrative
         cma["dscr_benchmark"] = float(scheme.get("dscr_benchmark", 1.25) or 1.25)
 

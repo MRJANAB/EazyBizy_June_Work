@@ -380,6 +380,16 @@ def dscr_label(d):
     if d>=1: return "Acceptable"
     return "Poor"
 
+def interest_coverage_ratio(ebitda: float, tl_interest: float, wc_interest: float) -> float:
+    """CA-standard Interest Coverage Ratio, single source of truth:
+        Interest Coverage = EBITDA / (Term Loan Interest + Working Capital Interest)
+    Every report section (Section 29's ratio table, pdf/generator.py's cma
+    sync) must call this — not re-derive the ratio independently — so the
+    displayed figure can never diverge from this exact formula.
+    """
+    total_interest = float(tl_interest or 0) + float(wc_interest or 0)
+    return R(ebitda / total_interest, 2) if total_interest else 0.0
+
 def credit_rating(s):
     """Internal viability grade — NOT an external credit agency rating."""
     if s >= 9:  return "Excellent"

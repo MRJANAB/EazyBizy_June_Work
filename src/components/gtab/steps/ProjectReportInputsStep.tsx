@@ -40,7 +40,12 @@ const CAReadiness = ({ formData, report, isTrading, isService, isAgriculture }: 
           ),
       required: true },
     { label: "Interest Rate & Tenure Set",  ok: !!(report.loan.interest_rate_pct > 0 && report.loan.tenure_months > 0), required: true },
-    { label: "Tax Rate (CA mandatory 25%)", ok: report.revenue.tax_rate_pct >= 25, required: true },
+    // BUG FIX: this required tax_rate_pct >= 25 as if 25% were a statutory
+    // minimum — it isn't. A Proprietorship is taxed at the proprietor's own
+    // individual income-tax slab rates, not a flat rate; 25% is this
+    // platform's illustrative effective-tax assumption only. Advisory
+    // (not required), and only checks the rate isn't left at zero.
+    { label: "Tax Rate Set (illustrative effective rate)", ok: report.revenue.tax_rate_pct > 0, required: false },
     { label: "Market Size / Growth Filled", ok: !!(report.business.market_size_crores > 0 || report.business.market_growth_pct > 0), required: false },
     { label: "Salary Hike Assumption Set",  ok: !!(report.dpr as any).salary_increase_pct || true, required: false },
   ];
@@ -1391,8 +1396,16 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
           />
 
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 space-y-1">
-            <p><strong>CA Standard Defaults (RBI/ICAI norms):</strong></p>
-            <p>• Machinery Dep 10% WDV · Building Dep 5% WDV · Tax Rate 25% (mandatory under Income Tax Act)</p>
+            <p><strong>Illustrative Platform Defaults (not statutory rates):</strong></p>
+            {/* BUG FIX: both figures below were presented as "mandatory"/statutory.
+                Neither is: the 10%/5% WDV rates are this platform's generic CMA-
+                projection assumption, distinct from Companies Act Schedule II and
+                Income Tax Act depreciation (which have their own, different block-
+                of-assets rates); the 25% tax rate is an illustrative effective-tax
+                assumption — a Proprietorship is taxed at the proprietor's own
+                individual income-tax slab rates, not a flat rate. */}
+            <p>• Machinery Dep 10% WDV · Building Dep 5% WDV — generic CMA-projection rates only, distinct from Companies Act / Income Tax Act depreciation</p>
+            <p>• Tax Rate 25% — illustrative effective-tax assumption; actual tax depends on the applicant's business constitution (a Proprietorship is taxed at the proprietor's individual slab rates) and must be confirmed by a CA</p>
             <p>• Revenue Growth 7% p.a. · Fixed Expense Growth 5% p.a. · Salary Hike 10% p.a. · DSCR benchmark ≥ 1.25</p>
             <p>• Contingency on P&amp;M 5–10% — a cost-overrun buffer banks expect on new machinery purchases</p>
             <p>• {isServiceOrTrading ? "Service/Trading Capacity: 60→70→80→85→90%" : isAgriculture ? "Agriculture Capacity: 80→85→90→95→100%" : "Manufacturing Capacity: 50→60→70→75→80%"}</p>

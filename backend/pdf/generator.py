@@ -11,7 +11,7 @@ Usage
 """
 
 from __future__ import annotations
-from core.engine import R
+from core.engine import R, interest_coverage_ratio
 from datetime import datetime as _datetime
 
 
@@ -636,6 +636,7 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "breakeven_months":   (None if (bep and bep[0].get("payback_not_achievable")) else
                                float(bep[0].get("payback_months") or 0) if bep else 0.0),
         "payback_not_achievable": bool(bep[0].get("payback_not_achievable", False) if bep else True),
+        "payback_calculation": bep[0].get("payback_calculation") if bep else None,
         "breakeven_revenue":  float(bep[0].get("bep_sales", 0) / 12 if bep else 0),
         "margin_of_safety":   R(((float(monthly.get("net_monthly_revenue", 0)) - float(bep[0].get("bep_sales", 0) / 12 if bep and bep[0].get("bep_sales", 0) > 0 else 0)) / float(monthly.get("net_monthly_revenue", 1)) * 100), 2) if float(monthly.get("net_monthly_revenue", 0)) > 0 and bep and bep[0].get("bep_sales", 0) > 0 else 0.0,
         "scorecard":          scorecard.get("items", []),
@@ -644,11 +645,23 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "recommendation":     scorecard.get("recommendation", "REFER FOR REVIEW"),
         "risk_level":         scorecard.get("risk_level", "MODERATE"),
         "risk_matrix":        scorecard.get("risk_matrix", []),
+        "is_high_leverage":   scorecard.get("is_high_leverage", False),
+        "leverage_caveat":    scorecard.get("leverage_caveat"),
+        "scorecard_de_ratio":       scorecard.get("de_ratio"),
+        "scorecard_total_leverage": scorecard.get("total_leverage"),
         "sensitivity":        sensitivity,
         "processing_fee":     R(float(scheme.get("term_loan", 0)) * float(business.get("processing_fee_pct", 0) or 0) / 100, 2),
-        "total_interest_outgo": R(sum(r.get("interest_paid", 0) for r in loan_sched), 2),
+        # CA AUDIT: sum the SAME per-year whole-rupee-rounded figures Section
+        # 21's table (and dpr["term_loan"]["total_interest"], below) use —
+        # one rounding convention, so this never lands a rupee away from
+        # what a reader gets by adding up the displayed per-year rows.
+        "total_interest_outgo": R(sum(R(r.get("interest_paid", 0)) for r in loan_sched[:tenure_yrs])),
         "total_wc_interest_outgo": R(sum(w.get("wc_interest", 0) for w in wc_sched), 2),
-        "interest_coverage_y1": R(float(monthly.get("ebitda_monthly", 0)) / max(float(monthly.get("monthly_int_y1", 1)), 1), 2),
+        "interest_coverage_y1": interest_coverage_ratio(
+            float(monthly.get("ebitda_monthly", 0)),
+            float(monthly.get("monthly_tl_int", 0)),
+            float(monthly.get("monthly_wc_int", 0)),
+        ),
         # ROI and turnover use _total_pc as the single denominator across all sections
         "roi_ebitda_pct":     R(float(monthly.get("annual_ebitda", 0)) / _total_pc * 100, 2) if _total_pc > 0 else float(monthly.get("roi_ebitda_pct", 0)),
         "roi_pat_pct":        R(float(monthly.get("annual_pat", 0)) / _total_pc * 100, 2) if _total_pc > 0 else float(monthly.get("roi_pat_pct", 0)),
@@ -711,14 +724,18 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
             cma["asset_turnover_y1"] = R(cma["annual_revenue"] / _total_pc, 2)
         # BUG FIX: interest_coverage_y1 was computed once, earlier, from
         # monthly_pnl's own (pre-sync) EBITDA/interest figures — then never
-        # recomputed after cma["ebitda_monthly"]/cma["monthly_int_y1"] were
-        # just overwritten above with the authoritative income_statement
-        # Year-1 figures. A CA reviewer caught the resulting mismatch on a
-        # live report: Section 29 showed "5.56x" using the stale monthly_pnl
-        # basis, while EBITDA / (TL + WC interest) from every OTHER figure
-        # on the same report (Section 21's Total Interest, Section 29's own
-        # EBITDA margin) gives 5.11x.
-        cma["interest_coverage_y1"] = R(cma["ebitda_monthly"] / max(cma.get("monthly_int_y1", 1), 1), 2)
+        # recomputed after cma["ebitda_monthly"]/cma["monthly_tl_int"]/
+        # cma["monthly_wc_int"] were just overwritten above with the
+        # authoritative income_statement Year-1 figures. A CA reviewer
+        # caught the resulting mismatch on a live report: Section 29 showed
+        # "5.56x" using the stale monthly_pnl basis, while EBITDA / (TL + WC
+        # interest) from every OTHER figure on the same report (Section
+        # 21's Total Interest, Section 29's own EBITDA margin) gives 5.11x.
+        # Calls the single shared formula (core.engine.interest_coverage_ratio)
+        # so this can never re-diverge into a locally re-derived ratio.
+        cma["interest_coverage_y1"] = interest_coverage_ratio(
+            cma["ebitda_monthly"], cma.get("monthly_tl_int", 0), cma.get("monthly_wc_int", 0),
+        )
         # Also surface scheme DSCR benchmark into cma for dynamic narrative
         cma["dscr_benchmark"] = float(scheme.get("dscr_benchmark", 1.25) or 1.25)
 
@@ -733,7 +750,15 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
             _s_rev = float(_sens_base.get("monthly_revenue", 0) or 0)
             if _s_rev > 0 and abs(_master_monthly_rev - _s_rev) / _s_rev > 0.005:
                 _scale = _master_monthly_rev / _s_rev
+                # Structural scenarios (raw material / salary / receivable
+                # days / interest rate / combined) are deliberately excluded
+                # — they were computed by re-running the actual engine on a
+                # mutated input, not derived from the revenue-only base
+                # case, so rescaling them by a revenue-reconciliation factor
+                # would corrupt their own correctly-computed figures.
                 for _s in sensitivity:
+                    if _s.get("type") == "structural":
+                        continue
                     for _k in ("monthly_revenue", "monthly_cogs", "monthly_variable",
                                "monthly_ebitda", "monthly_profit"):
                         if _k in _s:
@@ -856,7 +881,13 @@ def _build_dpr_from_report(
         "amount":                tl,
         "interest_rate":         rate,
         "half_yearly_instalment": hi,
-        "total_interest":        R(sum(r["interest_paid"] for r in loan_sched)),
+        # CA AUDIT: one rounding convention only — sum the SAME per-year
+        # whole-rupee-rounded figures Section 21's table displays
+        # (tl_schedule[i]["total_interest"]), not the raw unrounded
+        # interest_paid values. Rounding the raw sum once, separately from
+        # rounding each displayed row, could land a rupee away from what a
+        # reader gets by manually adding up the rows shown on the page.
+        "total_interest":        R(sum(row["total_interest"] for row in tl_schedule)),
         "schedule":              tl_schedule,
     }
 

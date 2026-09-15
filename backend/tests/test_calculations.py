@@ -1125,6 +1125,102 @@ class TestSensitivity:
         )
 
 
+class TestSensitivityStructuralScenarios:
+    """CA AUDIT: the original sensitivity suite only ever varied revenue. A
+    bank-grade sensitivity analysis must also stress raw-material cost,
+    salary, receivable days, and interest rate — each re-running the full
+    engine on a mutated input — plus one combined downside scenario."""
+
+    def _get_full_sensitivity(self):
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        from calculations.monthly_pnl import calculate_monthly_pnl
+        from calculations.sensitivity import calculate_sensitivity
+        data = _make_data(assumptions=_make_assumptions(wc_loan_pct=60.0))
+        dep    = calculate_depreciation(data, SCHEME_PMEGP)
+        loan   = calculate_loan_schedule(data, SCHEME_PMEGP)
+        wc     = calculate_wc_by_year(data, SCHEME_PMEGP)
+        income = calculate_income_statement(data, SCHEME_PMEGP, dep, loan, wc)
+        monthly = calculate_monthly_pnl(data, SCHEME_PMEGP, dep, loan, wc)
+        return calculate_sensitivity(data, SCHEME_PMEGP, monthly, income, dep)
+
+    def test_all_five_structural_scenarios_present(self):
+        sens = self._get_full_sensitivity()
+        names = {s["scenario"] for s in sens if s.get("type") == "structural"}
+        assert names == {
+            "Raw Material Cost +10%", "Salary Increase +10%",
+            "Receivable Days +15", "Interest Rate +2.0pp", "Combined Downside",
+        }
+
+    def test_raw_material_increase_reduces_ebitda_only(self):
+        sens = self._get_full_sensitivity()
+        base = next(s for s in sens if s["scenario"] == "Base Case")
+        rm   = next(s for s in sens if s["scenario"] == "Raw Material Cost +10%")
+        assert rm["monthly_revenue"] == base["monthly_revenue"], "RM shock must not change revenue"
+        assert rm["monthly_cogs"] > base["monthly_cogs"], "RM +10% must raise COGS"
+        assert rm["monthly_ebitda"] < base["monthly_ebitda"], "RM +10% must reduce EBITDA"
+        assert rm["monthly_profit"] < base["monthly_profit"], "RM +10% must reduce PAT"
+
+    def test_salary_increase_reduces_ebitda_only(self):
+        sens = self._get_full_sensitivity()
+        base   = next(s for s in sens if s["scenario"] == "Base Case")
+        salary = next(s for s in sens if s["scenario"] == "Salary Increase +10%")
+        assert salary["monthly_revenue"] == base["monthly_revenue"], "Salary shock must not change revenue"
+        assert salary["monthly_cogs"] == base["monthly_cogs"], "Salary shock must not change COGS"
+        assert salary["monthly_ebitda"] < base["monthly_ebitda"], "Salary +10% must reduce EBITDA"
+
+    def test_receivable_days_leaves_ebitda_unchanged_but_can_affect_pat(self):
+        sens = self._get_full_sensitivity()
+        base = next(s for s in sens if s["scenario"] == "Base Case")
+        recv = next(s for s in sens if s["scenario"] == "Receivable Days +15")
+        # Receivable days affect Working Capital / WC interest, not the P&L
+        # revenue/COGS/EBITDA line itself.
+        assert recv["monthly_revenue"] == base["monthly_revenue"]
+        assert recv["monthly_ebitda"]  == base["monthly_ebitda"]
+        assert recv["monthly_profit"] <= base["monthly_profit"] + 1, (
+            "Higher receivable days must not IMPROVE profit (more WC interest, never less)"
+        )
+
+    def test_interest_rate_increase_reduces_pat_and_dscr_only(self):
+        sens = self._get_full_sensitivity()
+        base = next(s for s in sens if s["scenario"] == "Base Case")
+        rate = next(s for s in sens if s["scenario"] == "Interest Rate +2.0pp")
+        assert rate["monthly_revenue"] == base["monthly_revenue"]
+        assert rate["monthly_ebitda"]  == base["monthly_ebitda"], "Interest rate must not affect EBITDA"
+        assert rate["monthly_profit"] < base["monthly_profit"], "Higher rate must reduce PAT"
+        assert rate["dscr"] <= base["dscr"] + 0.01, "Higher rate must not improve DSCR"
+
+    def test_combined_downside_is_worse_than_any_single_lever(self):
+        sens = self._get_full_sensitivity()
+        combined = next(s for s in sens if s["scenario"] == "Combined Downside")
+        singles  = [s for s in sens if s.get("type") == "structural" and s["scenario"] != "Combined Downside"]
+        for single in singles:
+            assert combined["monthly_profit"] <= single["monthly_profit"] + 1, (
+                f"Combined Downside PAT ({combined['monthly_profit']}) must be worse than "
+                f"{single['scenario']} alone ({single['monthly_profit']})"
+            )
+
+    def test_every_structural_row_is_internally_consistent(self):
+        """BUG FIX: a structural scenario combined with a revenue shock
+        (only "Combined Downside" today) used to leave monthly_cogs at its
+        pre-revenue-shock value while EBITDA was computed from the
+        correctly revenue-scaled COGS — so the displayed COGS cell
+        contradicted the displayed EBITDA cell in the same row. Every row's
+        own displayed figures must foot: Revenue - COGS - Other Variable -
+        Marketing - Fixed = EBITDA."""
+        sens = self._get_full_sensitivity()
+        for s in sens:
+            if s.get("type") != "structural":
+                continue
+            implied_ebitda = s["monthly_revenue"] - s["monthly_variable"] - s["monthly_fixed"]
+            assert abs(implied_ebitda - s["monthly_ebitda"]) < 1, (
+                f"{s['scenario']}: Revenue - Variable - Fixed ({implied_ebitda}) must equal "
+                f"the displayed EBITDA ({s['monthly_ebitda']})"
+            )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 10. Business Type Engine
 # ─────────────────────────────────────────────────────────────────────────────

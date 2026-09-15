@@ -6,9 +6,67 @@ CA Rules:
   Fixed     = Labour/Admin + Depreciation + ALL Interest (constant regardless of output)
   BEP Sales = Fixed Costs / Contribution Margin Ratio
   BEP %     = BEP Sales / Annual Revenue at 100% capacity
-  Payback   = Total Project Cost / Annual Cash Accruals (Year 1)
+
+CA AUDIT — Payback Period: the old formula was
+  Payback = Total Project Cost / Annual Cash Accruals (Year 1 only, annualised)
+which repeated the SAME Year-1-only estimate on every one of the 5 rows and
+never showed its own working — a reviewer had no way to see WHY a report
+said "35.1 months" or verify it. Payback is now computed as a transparent
+CUMULATIVE cash-flow recovery: walk Year 1 -> Year 5's actual (declining-
+or-growing) annual cash accruals, accumulate them, and find the exact
+month the running total first equals the initial investment (interpolating
+within the year it happens using that year's own monthly cash-accrual
+rate) — the standard CA "payback period" method, and the full year-by-year
+working is returned in `payback_calculation` so the report can show it,
+not just assert the final number.
 """
 from core.engine import R, annual_revenue_from_prod
+
+
+def _calculate_cumulative_payback(income: list, initial_investment: float) -> dict:
+    """Cumulative cash-flow payback: the month the running total of annual
+    cash accruals first reaches `initial_investment`, interpolated within
+    that year using its own monthly cash-accrual rate.
+
+    Formula (explicit, for display):
+      CumulativeCashAccrual(Year N) = sum(CashAccrual(Year 1..N))
+      Payback = FullYears x 12 + (RemainingInvestment / MonthlyCashAccrualOfRecoveryYear)
+      where FullYears = last year fully recovered before the investment is
+      cleared, and RemainingInvestment = InitialInvestment - CumulativeCashAccrual(FullYears).
+    """
+    by_year = []
+    cumulative = 0.0
+    payback_months = None
+    recovered_in_year = None
+    for i, yr in enumerate(income):
+        annual_ca = float(yr.get("cash_accruals", 0) or 0)
+        opening_cumulative = cumulative
+        cumulative = R(cumulative + annual_ca, 2)
+        by_year.append({
+            "year":                    yr.get("year", i + 1),
+            "annual_cash_accrual":     annual_ca,
+            "cumulative_cash_accrual": cumulative,
+            "monthly_cash_accrual":    R(annual_ca / 12, 2),
+        })
+        if payback_months is None and annual_ca > 0 and cumulative >= initial_investment:
+            remaining = R(initial_investment - opening_cumulative, 2)
+            months_into_year = R(remaining / (annual_ca / 12), 1)
+            payback_months = R(i * 12 + months_into_year, 1)
+            recovered_in_year = yr.get("year", i + 1)
+
+    return {
+        "initial_investment": R(initial_investment, 2),
+        "formula": (
+            "Payback = FullYears x 12 + (Remaining Investment / Monthly Cash "
+            "Accrual of Recovery Year), where Remaining Investment = Initial "
+            "Investment - Cumulative Cash Accrual through the last fully-"
+            "recovered year. Cash Accrual = PAT + Depreciation."
+        ),
+        "by_year":            by_year,
+        "payback_months":     payback_months,
+        "recovered_in_year":  recovered_in_year,
+        "not_achievable":     payback_months is None,
+    }
 
 
 def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
@@ -21,12 +79,19 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
     data         : CMAReportInput
     scheme_data  : scheme routing dict (contains project_cost)
 
-    Returns list of 5 dicts, each containing payback_months for Year 1 usage.
+    Returns list of 5 dicts. Every row carries the SAME project-level
+    `payback_months` (and full `payback_calculation` breakdown) — it is a
+    single cumulative-cash-flow metric for the whole project, not a
+    per-year figure, but is repeated on each row so existing callers that
+    read bep[0] keep working.
     """
     # Fallback only — see the per-year derivation below, which is what's
     # actually used whenever a year has both revenue and capacity.
     _annual_rev_100_fallback = annual_revenue_from_prod(data.production, getattr(getattr(data, "business", None), "industry_type", "manufacturing"))
     project_cost   = float((scheme_data or {}).get("project_cost", 0) or 0)
+
+    _payback_calc = _calculate_cumulative_payback(income, project_cost) if project_cost > 0 else None
+
     result = []
 
     for i, yr in enumerate(income):
@@ -67,14 +132,9 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
         # Mark N/A when BEP > 100% capacity — technically math works but operationally impossible
         bep_not_achievable = (cm_ratio <= 0) or (bep_pct is not None and bep_pct > 1.0)
 
-        # Payback Period = Total Project Cost / Annual Cash Accruals
-        cash_ac = float(yr.get("cash_accruals", 0) or 0)
-        if not project_cost:
-            project_cost_est = dep * 10 if dep else float(yr.get("revenue", 0) or 0) * 0.5
-        else:
-            project_cost_est = project_cost
-
-        payback_months = R(project_cost_est / (cash_ac / 12), 1) if cash_ac > 0 and project_cost_est > 0 else None
+        # Payback Period — single project-level cumulative cash-flow metric
+        # (see _calculate_cumulative_payback above), repeated on every row.
+        payback_months = _payback_calc["payback_months"] if _payback_calc else None
 
         result.append({
             "year":               yr["year"],
@@ -88,7 +148,8 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
             "bep_not_achievable": bep_not_achievable,
             # payback_months is None (→ "N/A") when not achievable, never 0
             "payback_months":     payback_months,
-            "payback_not_achievable": cash_ac <= 0 or payback_months is None,
+            "payback_not_achievable": _payback_calc is None or payback_months is None,
+            "payback_calculation": _payback_calc,
         })
 
     return result

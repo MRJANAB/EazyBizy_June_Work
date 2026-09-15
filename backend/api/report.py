@@ -93,8 +93,8 @@ async def generate_report(data: CMAReportInput):
         monthly        = calculate_monthly_pnl(data, scheme_data, dep, loan_schedule, wc_schedule)
         bep            = calculate_break_even(income, data, scheme_data)
         bs             = calculate_balance_sheet(data, scheme_data, income, dep, loan_schedule, wc_schedule)
-        scorecard      = calculate_scorecard(data, income, dscr, bep, scheme_data)
-        sensitivity    = calculate_sensitivity(data, scheme_data, monthly, income)
+        scorecard      = calculate_scorecard(data, income, dscr, bep, scheme_data, wc_schedule)
+        sensitivity    = calculate_sensitivity(data, scheme_data, monthly, income, dep)
 
         # 3. Bundle all computed data
         report_data = {

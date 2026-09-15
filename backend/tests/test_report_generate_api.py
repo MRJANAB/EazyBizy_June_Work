@@ -197,7 +197,7 @@ class TestSalesRealizationShowsTrue100PctCapacity:
         assert resp.status_code == 200, resp.text
         report_id = resp.json()["report_id"]
         text = _download_pdf_text(report_id)
-        idx = text.find("Annual Sales Realization")
+        idx = text.find("Annual Revenue at 100% Installed Capacity")
         end = text.find("Revenue Build-Up", idx)
         assert idx != -1 and end != -1, "Section 11 sales realization table not found"
         section = text[idx:end]
@@ -206,11 +206,11 @@ class TestSalesRealizationShowsTrue100PctCapacity:
             "not the Year-1-actual (60%-capacity) quantity (2,850)"
         )
         assert "8,550,000" in section, (
-            "Annual Sales Realization table must show the true 100%-capacity "
+            "Annual Revenue at 100% Installed Capacity table must show the true 100%-capacity "
             "annual revenue (Rs.85,50,000), not the Year-1-actual (60%-capacity) figure"
         )
         assert "5,130,000" not in section, (
-            "Annual Sales Realization table must not show the Year-1-actual "
+            "Annual Revenue at 100% Installed Capacity table must not show the Year-1-actual "
             "(60%-capacity) revenue under a heading that claims 100% capacity"
         )
 

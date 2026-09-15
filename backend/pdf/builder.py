@@ -545,6 +545,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "REJECT":                  "DOES NOT MEET VIABILITY BENCHMARKS",
     }
     _rec_display = str(_rec_display_map.get(_rec_raw, _rec_raw or ""))
+    # CA AUDIT: a "Good"/"Strong" viability grade driven purely by DSCR/ROI
+    # must not read as an unqualified pass when leverage is high (Section
+    # 29's own D:E/Total Leverage benchmarks) — scorecard.py already caps
+    # the Viability Grade and recommendation one notch in this case; make
+    # the headline banner say so explicitly too, in the exact wording.
+    if cma.get("leverage_caveat"):
+        _rec_display = "FINANCIALLY VIABLE BUT HIGHLY LEVERAGED"
     rec_color = DG if "VIABLE" in _rec_display or "MEETS" in _rec_display else colors.HexColor("#B71C1C")
     rec_box = Table([[Paragraph(_rec_display, ST["rec_approve"])]], colWidths=[170*mm])
     rec_box.setStyle(TableStyle([
@@ -591,7 +598,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         f"<b>WC Bank Finance Coverage:</b> {r2(_wc_bank_coverage)}x  |  "
         f"<b>Term Loan D:E:</b> {round(pc['term_loan'] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0} : 1  |  "
         f"<b>Promoter % of Initial Investment:</b> {pof(display_promoter_contribution, display_total_project_cost)}  |  "
-        f"<b>Break-even:</b> " + ("Not achievable under current projections" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else f"within {round(float(cma.get('breakeven_months',0)),1)} months"),
+        f"<b>Payback Period (cumulative cash-flow, Section 28):</b> " + ("Not achievable under current projections" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else f"within {round(float(cma.get('breakeven_months',0)),1)} months"),
         ST["small"]))
     NL(story, 5)
 
@@ -636,6 +643,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         + ("This is currently a high-risk proposal that should not be submitted without revising assumptions." if _is_not_bankable
            else "This proposal meets the platform's illustrative viability benchmarks."),
         ST["bullet"]))
+    if cma.get("leverage_caveat"):
+        story.append(Paragraph(
+            f"• <b>Leverage Caveat:</b> {cma['leverage_caveat']}. Term Loan D:E "
+            f"({cma.get('scorecard_de_ratio', 'N/A')} : 1) and/or Total Leverage "
+            f"({cma.get('scorecard_total_leverage', 'N/A')} : 1) exceed this platform's own "
+            f"&lt;2:1 / &lt;3:1 benchmarks (Section 29) — the Viability Grade above has already been "
+            f"capped one notch to reflect this; it is not a bare pass on DSCR/ROI alone.",
+            ST["bullet"]))
     story.append(Paragraph(_scheme_advisory(inp, cma), ST["bullet"]))
     NL(story, 3)
     story.append(Paragraph(
@@ -1019,6 +1034,27 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     assump = Table(_assump_rows, colWidths=[55*mm,30*mm,55*mm,30*mm])
     assump.setStyle(BTS())
     story.append(assump)
+    NL(story, 3)
+    # CA AUDIT: neither the WDV rates nor the tax rate above are statutory —
+    # both are this platform's illustrative CMA-projection assumptions, and
+    # presenting either as a mandatory/statutory figure is inaccurate.
+    _biz_type_str = str(inp.get("business_type", "") or "").strip()
+    _prop_note = (
+        f" The applicant's constitution is <b>{_biz_type_str}</b> — a Proprietorship is taxed at the "
+        "proprietor's own individual income-tax slab rates (not a flat rate), so the effective rate "
+        "actually applicable may differ materially from the illustrative rate above."
+        if _biz_type_str.lower() == "proprietorship" else
+        f" The applicant's constitution is <b>{_biz_type_str}</b>; the applicable tax treatment for this "
+        "constitution should be independently confirmed."
+        if _biz_type_str else ""
+    )
+    story.append(Paragraph(
+        f"<b>Note:</b> Tax Rate ({rp2(inp['tax_rate_pct'])}) is an <b>illustrative effective-tax assumption</b> "
+        f"for this CMA projection, not a statutory rate.{_prop_note} Depreciation rates above (WDV) are this "
+        "platform's generic projection assumption, kept deliberately separate from Companies Act Schedule II "
+        "depreciation and Income Tax Act depreciation (each has its own, different rates and block-of-assets "
+        "rules) — actual tax depreciation must be computed separately per the applicable Income Tax provisions.",
+        ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1053,7 +1089,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(prod_params)
         NL(story, 5)
 
-        H2("Annual Sales Realization (Year 1, at 100% Capacity)", story)
+        # CA AUDIT: renamed from "Annual Sales Realization (Year 1, at 100%
+        # Capacity)" — a reviewer read that as implying the Year-1 actual
+        # projected figure itself was the 100%-capacity figure. This table
+        # is, and only ever was, the TRUE 100%-installed-capacity revenue;
+        # the distinct Year-1-at-actual-capacity figure is called out
+        # explicitly, separately, right after the per-year table below.
+        H2("Annual Revenue at 100% Installed Capacity", story)
         products = inp.get("products_list") or cma.get("products") or []
         if _industry == "trading" and products and len(products) > 0 and products[0].get("category") != "Products/Services":
             # Header cells are Paragraph-wrapped, not plain strings — ReportLab
@@ -1131,6 +1173,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _cap_t = Table(_cap_rows, colWidths=[20*mm, 55*mm, 30*mm, 55*mm])
         _cap_t.setStyle(BTS())
         story.append(_cap_t)
+        NL(story, 3)
+        # CA AUDIT: state both Year-1 figures explicitly, side by side — see
+        # the identical note in the manufacturing/agriculture branch below.
+        if cop:
+            _y1_cap_pct = float(cop[0].get("capacity", 0) or 0)
+            _y1_proj_rev = float(cop[0].get("revenue", 0) or 0)
+            story.append(Paragraph(
+                f"<b>True Year 1, 100% Capacity Revenue = {rs(_rev100_by_year[0])}</b>  |  "
+                f"<b>Year 1 Projected Revenue at {rp(_y1_cap_pct)} Capacity = {rs(_y1_proj_rev)}</b> "
+                "— these are two different figures; the second is NOT the 100%-capacity figure.",
+                ST["small"]))
     else:
         # Manufacturing / Agriculture: full production parameters
         H2("Production Parameters", story)
@@ -1147,7 +1200,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(prod_params)
         NL(story, 5)
 
-        H2("Annual Sales Realization (Year 1, at 100% Capacity)", story)
+        # CA AUDIT: renamed from "Annual Sales Realization (Year 1, at 100%
+        # Capacity)" — a reviewer read that as implying the Year-1 actual
+        # projected figure itself was the 100%-capacity figure. This table
+        # is, and only ever was, the TRUE 100%-installed-capacity revenue;
+        # the distinct Year-1-at-actual-capacity figure is called out
+        # explicitly, separately, right after the per-year table below.
+        H2("Annual Revenue at 100% Installed Capacity", story)
         products = inp.get("products_list") or cma.get("products") or []
         if products and len(products) > 0 and products[0].get("category") and products[0].get("category") != "Products/Services":
             sales_rows = [["Product","Price (Rs./Unit)","Quantity/Month","Annual Revenue (Rs.)"]]
@@ -1191,6 +1250,20 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _cap_t = Table(_cap_rows, colWidths=[20*mm, 55*mm, 30*mm, 55*mm])
         _cap_t.setStyle(BTS())
         story.append(_cap_t)
+        NL(story, 3)
+        # CA AUDIT: a reviewer read "Annual Sales Realization (Year 1, at
+        # 100% Capacity)" as claiming the Year-1 ACTUAL projected figure
+        # (at whatever capacity % Year 1 runs at) was itself the 100%-
+        # capacity figure. State both explicitly, side by side, so there is
+        # no reading in which they could be conflated.
+        if cop:
+            _y1_cap_pct = float(cop[0].get("capacity", 0) or 0)
+            _y1_proj_rev = float(cop[0].get("revenue", 0) or 0)
+            story.append(Paragraph(
+                f"<b>True Year 1, 100% Capacity Revenue = {rs(_rev100_by_year[0])}</b>  |  "
+                f"<b>Year 1 Projected Revenue at {rp(_y1_cap_pct)} Capacity = {rs(_y1_proj_rev)}</b> "
+                "— these are two different figures; the second is NOT the 100%-capacity figure.",
+                ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1312,8 +1385,10 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         NL(story, 3)
         story.append(Paragraph(
             f"<b>CGTMSE Guarantee Fee:</b> {cma.get('cgtmse_agf_pct', 0)}% p.a. on the outstanding term loan "
-            "balance (declines as the loan amortises) — a mandatory recurring cost of CGTMSE coverage, "
-            "included as a fixed operating expense above.",
+            "balance (declines as the loan amortises) — an assumed CGTMSE-related guarantee fee provision, "
+            "included as a fixed operating expense above, subject to applicable scheme terms and bank "
+            "confirmation. The percentage is configurable and should be verified against the AGF slab "
+            "actually applicable to this loan at sanction.",
             ST["small"]))
     PB(story)
 
@@ -1876,6 +1951,23 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         if nw_row is not None:
             bs_t.setStyle(TOT(nw_row))
     story.append(bs_t)
+    NL(story, 3)
+    # CA AUDIT: "Other Long-Term Assets" is a residual (Fixed Project Cost -
+    # Gross Block - Land) that mechanically includes preliminary/pre-
+    # operative expenditure, held CONSTANT across all 5 years as a
+    # simplifying projection assumption — it must not be read as asserting
+    # that preliminary expenses are always capitalised as a permanent
+    # long-term asset. Actual classification (expensed immediately per
+    # AS-26/Ind AS 38, amortised over 5 years under Income Tax Act Sec 35D,
+    # or otherwise) depends on the nature of the expenditure and the
+    # accounting framework the applicant/CA actually applies.
+    story.append(Paragraph(
+        "<b>Note:</b> \"Other Long-Term Assets\" includes preliminary/pre-operative expenditure, held constant "
+        "here as a projection simplification — this is not a classification opinion. Whether such expenditure "
+        "is expensed immediately, amortised (e.g. over 5 years under Income Tax Act Section 35D), or otherwise "
+        "treated depends on its nature and the accounting framework actually applied, and should be confirmed "
+        "by a CA.",
+        ST["small"]))
 
     if _has_funding_shortfall:
         NL(story, 4)
@@ -1994,8 +2086,10 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _sens_scenarios = [s for s in cma["sensitivity"] if s.get("scenario") != "Best Case"]
     sens_rows = [["Scenario","Chg %","Revenue (Rs.)","COGS (Rs.)","EBITDA (Rs.)","PAT (Rs.)","TL DSCR","Status"]]
     for s in _sens_scenarios:
+        _is_structural = s.get("type") == "structural"
+        _chg_display = "—" if (_is_structural and not s.get("change_pct")) else f"{s.get('change_pct',0)}%"
         sens_rows.append([
-            s["scenario"], f"{s.get('change_pct',0)}%",
+            Paragraph(s["scenario"], ST["table_cell"]), _chg_display,
             r(s["monthly_revenue"]),
             r(s.get("monthly_cogs", 0)),
             r(s.get("monthly_ebitda", s.get("monthly_revenue",0) - s.get("monthly_variable",0) - s.get("monthly_fixed",0))),
@@ -2003,9 +2097,18 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             str(s["dscr"]),
             s["status"],
         ])
-    sens_t = Table(sens_rows, colWidths=[24*mm,12*mm,25*mm,22*mm,25*mm,22*mm,20*mm,20*mm])
+    sens_t = Table(sens_rows, colWidths=[30*mm,12*mm,23*mm,20*mm,23*mm,20*mm,17*mm,20*mm])
     sens_t.setStyle(BTS())
     story.append(sens_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Structural scenarios</b> (Raw Material Cost, Salary, Receivable Days, Interest Rate, Combined Downside) "
+        "re-run the full loan schedule / working capital / income statement engine with the stated single input "
+        "changed — e.g. \"Raw Material Cost +10%\" recomputes COGS, EBITDA, tax, PAT, and the resulting Term Loan "
+        "DSCR from an input where purchase/raw-material cost is 10% higher, holding revenue constant. "
+        "\"Combined Downside\" applies raw material +10%, salary +10%, receivable days +15, and interest rate +2pp "
+        "together with a 10% revenue decline — a single scenario stressing multiple levers at once, not just revenue.",
+        ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -2059,6 +2162,52 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     rep_t.setStyle(BTS())
     story.append(rep_t)
     NL(story, 4)
+    # CA AUDIT: Payback Period must show its own working, not just assert a
+    # number — a cumulative cash-flow recovery walk against the Initial
+    # Investment, using each year's own (declining or growing) Cash Accrual.
+    _pbc = cma.get("payback_calculation")
+    if _pbc:
+        H2("Payback Period — Cumulative Cash-Flow Calculation", story)
+        story.append(Paragraph(f"<b>Formula:</b> {_pbc['formula']}", ST["small"]))
+        NL(story, 2)
+        story.append(Paragraph(
+            f"<b>Initial Investment</b> (Total Project Cost) = {rs(_pbc['initial_investment'])}",
+            ST["small"]))
+        NL(story, 2)
+        # Header cells are Paragraph-wrapped, not plain strings — ReportLab
+        # does not auto-wrap plain strings, and each of these headers is
+        # wider than its column at 8pt bold.
+        _pb_hdr_style = _s("pb_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
+        _pb_rows = [[Paragraph(h, _pb_hdr_style) for h in
+                     ["Year", "Annual Cash Accrual (Rs.)", "Monthly Cash Accrual (Rs.)",
+                      "Cumulative Cash Accrual (Rs.)", "Investment Recovered?"]]]
+        for _yr_calc in _pbc["by_year"]:
+            _recovered = (
+                "Yes — this year" if _yr_calc["year"] == _pbc.get("recovered_in_year")
+                else ("Yes" if (_pbc.get("recovered_in_year") and _yr_calc["year"] > _pbc["recovered_in_year"]) else "No")
+            )
+            _pb_rows.append([
+                str(_yr_calc["year"]), r(_yr_calc["annual_cash_accrual"]),
+                r(_yr_calc["monthly_cash_accrual"]), r(_yr_calc["cumulative_cash_accrual"]),
+                _recovered,
+            ])
+        _pb_t = Table(_pb_rows, colWidths=[15*mm, 42*mm, 40*mm, 42*mm, 31*mm])
+        _pb_t.setStyle(BTS())
+        story.append(_pb_t)
+        NL(story, 3)
+        if _pbc.get("not_achievable"):
+            story.append(Paragraph(
+                "<b>Result:</b> Initial Investment is NOT fully recovered from cumulative cash accruals "
+                "within the 5-year projection window — Payback Period is shown as Not Achievable, not forced "
+                "to a number.",
+                ST["small"]))
+        else:
+            story.append(Paragraph(
+                f"<b>Result:</b> Cumulative Cash Accrual first reaches the Initial Investment during Year "
+                f"{_pbc['recovered_in_year']} → Payback Period = <b>{cma.get('breakeven_months')} months</b> "
+                f"(interpolated within Year {_pbc['recovered_in_year']} using that year's own monthly cash-accrual rate).",
+                ST["small"]))
+        NL(story, 4)
     story.append(Paragraph(
         f"<b>Note:</b> This is the <b>Term Loan DSCR</b> — it covers only the term loan's own principal and "
         f"interest, and deliberately excludes Working Capital interest (a separate revolving facility, "

@@ -154,13 +154,17 @@ function buildImprovementActions(formData: GTABFormData | undefined, validation:
     });
   }
 
-  // ── 8. Tax rate = 0 (CA mandatory 25%) ──────────────────────────────────
+  // ── 8. Tax rate = 0 (would materially overstate profitability) ──────────
+  // BUG FIX: this used to assert 25% is "mandatory under Income Tax Act" —
+  // it isn't a statutory rate for every constitution (a Proprietorship is
+  // taxed at the proprietor's own individual slab rates, not a flat rate).
+  // The genuine concern is leaving tax at 0%, not falling short of 25%.
   const taxRate = pri?.revenue?.tax_rate_pct ?? 0;
   if (taxRate === 0) {
     actions.push({
       points: 3, priority: "important",
-      issue: "Tax Rate = 0%. CA standard is 25% (mandatory under Income Tax Act for business income).",
-      fix: "Step 9 → Financial Assumptions → Set Tax Rate to 25%.",
+      issue: "Tax Rate = 0%. This materially overstates profitability — set an illustrative effective tax rate (25% is this platform's default assumption; actual tax depends on the applicant's business constitution and must be confirmed by a CA).",
+      fix: "Step 9 → Financial Assumptions → Set an effective Tax Rate.",
       step: 9, stepLabel: "Step 9 → Financial Assumptions", section: "Tax Rate %",
     });
   }

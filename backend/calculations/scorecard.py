@@ -10,9 +10,19 @@ from core.engine import (
 
 def calculate_scorecard(
     data, income: list, dscr_data: dict, bep: list, scheme_data: dict,
+    wc_schedule: list | None = None,
 ) -> dict:
     """
     Weighted credit scorecard with scheme-specific DSCR benchmarks.
+
+    CA AUDIT: a report with Term Loan D:E of 5.67:1 (nearly 3x this
+    platform's own <2:1 benchmark, shown in Section 29) was still labelled
+    a bare "Good" — the weighted score (DSCR/ROI/break-even/qualitative)
+    never looked at leverage at all. High leverage is a real credit risk a
+    bank reviewer must see, so it now caps how favourable the rating can
+    read and appends an explicit caveat, using the SAME D:E (<2) and Total
+    Leverage (<3) benchmarks already displayed in Section 29 — not a new,
+    separately-invented threshold.
     """
     scheme        = str(scheme_data.get("scheme", "default")).lower()
     benchmarks    = get_scheme_benchmarks(scheme)
@@ -80,6 +90,34 @@ def calculate_scorecard(
         _rating = "Weak"
         _risk  = "Very High Risk"
 
+    # ── Leverage-aware rating cap ────────────────────────────────────────────
+    # D:E and Total Leverage, computed the same way Section 29 displays them
+    # (TL / promoter fixed equity; (TL + WC bank finance) / total promoter
+    # contribution), using the SAME <2:1 / <3:1 benchmarks already shown
+    # there — not a separately-invented threshold.
+    _term_loan  = float(scheme_data.get("term_loan", 0) or 0)
+    _promoter_fixed_equity = float(scheme_data.get("promoter_amount", 0) or 0)
+    _wc_y1 = (wc_schedule or [{}])[0] if wc_schedule else {}
+    _wc_bank_loan = float(_wc_y1.get("bank_loan", 0) or 0)
+    _wc_margin    = float(_wc_y1.get("margin",    0) or 0)
+    _total_promoter = _promoter_fixed_equity + _wc_margin
+    _de_ratio       = R(_term_loan / _promoter_fixed_equity, 2) if _promoter_fixed_equity > 0 else None
+    _total_leverage = R((_term_loan + _wc_bank_loan) / _total_promoter, 2) if _total_promoter > 0 else None
+    _DE_BENCHMARK, _LEVERAGE_BENCHMARK = 2.0, 3.0
+    is_high_leverage = (
+        (_de_ratio is not None and _de_ratio > _DE_BENCHMARK) or
+        (_total_leverage is not None and _total_leverage > _LEVERAGE_BENCHMARK)
+    )
+    leverage_caveat = None
+    _RATING_DOWNGRADE = {"Excellent": "Strong", "Strong": "Good", "Good": "Moderate"}
+    _RISK_UPGRADE     = {"Low Risk": "High Risk", "Moderate Risk": "High Risk"}
+    if is_high_leverage and _rec != "REJECT" and _rating in _RATING_DOWNGRADE:
+        leverage_caveat = "Financially viable but highly leveraged"
+        _rating = _RATING_DOWNGRADE[_rating]
+        _risk   = _RISK_UPGRADE.get(_risk, _risk)
+        if _rec in ("APPROVED", "APPROVE"):
+            _rec = "APPROVE WITH CONDITIONS"
+
     return {
         "items":           items,
         "total_score":     total_score,
@@ -90,6 +128,10 @@ def calculate_scorecard(
         "dscr_y1":         dscr_y1,
         "avg_dscr":        avg_dscr,
         "roi_ebitda_pct":  roi_ebitda,
+        "de_ratio":        _de_ratio,
+        "total_leverage":  _total_leverage,
+        "is_high_leverage": is_high_leverage,
+        "leverage_caveat": leverage_caveat,
         "breakeven_months": be_months,
         "payback_not_achievable": is_be_not_achievable,
         "promoter_pct":    promoter_pct,

@@ -219,7 +219,9 @@ def validate_report(report_data: dict) -> None:
         if pbt > 0 and tax <= 0:
             errors.append(
                 f"CHECK 3 FAIL — Tax is zero when PBT = ₹{pbt:,.0f}. "
-                "Tax = max(0, PBT × 25%) is mandatory per CA standard."
+                "Tax = max(0, PBT × effective tax rate) must be deducted whenever PBT > 0 — "
+                "the effective rate itself (25% platform default) is an illustrative CMA-projection "
+                "assumption, not a statutory rate for every business constitution."
             )
 
     # CHECK 4: Cash Accruals = PAT + Depreciation

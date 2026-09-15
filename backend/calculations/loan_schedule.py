@@ -24,6 +24,7 @@ _ZERO_YEAR = lambda y: {
     "interest_paid": 0.0, "principal_paid": 0.0, "closing_balance": 0.0,
     "half_yearly_instalment": 0.0,
     "mid_year_balance": 0.0, "interest_h1": 0.0, "interest_h2": 0.0,
+    "moratorium_months_effective": 0,
 }
 
 
@@ -100,6 +101,16 @@ def calculate_loan_schedule(data, scheme_data: dict) -> list:
             "mid_year_balance":       bal,
             "interest_h1":            ih1,
             "interest_h2":            ih2,
+            # CA AUDIT: a 9-month moratorium (not a clean multiple of 6)
+            # rounds to the NEAREST half-year — here, 2 half-years = 12
+            # months, not 9 — since this schedule can only skip whole
+            # half-yearly instalments. Exposed so the report can display
+            # what was ACTUALLY applied (Year 1 shows 0 principal repaid
+            # either way), instead of silently repeating the raw, now-
+            # inaccurate applicant input next to a schedule that disagrees
+            # with it — the same class of bug fixed earlier for scheme-
+            # mandated moratorium overrides.
+            "moratorium_months_effective": moratorium_half_yrs * 6,
         })
         balance = closing
 

@@ -212,6 +212,28 @@ class TestLoanSchedule:
         # (previously silent) residual balance.
         assert rows[4]["closing_balance"] == 0
 
+    def test_effective_moratorium_exposed_when_input_is_not_a_multiple_of_six(self):
+        """BUG FIX: a moratorium not entered as a multiple of 6 months (e.g.
+        9 months) rounds to the nearest half-year (here, 2 half-years = 12
+        months) since the schedule can only skip whole half-yearly
+        instalments — but the report kept displaying the raw, now-
+        inaccurate 9-month request next to a schedule whose Year 1 shows a
+        full 12 months of zero principal repaid. calculate_loan_schedule
+        must expose what was ACTUALLY applied so the report can display
+        that instead — the same class of bug as the earlier scheme-
+        mandated-moratorium-override fix, just for a non-multiple-of-6
+        input this time."""
+        from calculations.loan_schedule import calculate_loan_schedule
+        data = _make_data(assumptions=_make_assumptions(
+            tenure_months=72, moratorium_months=9, interest_rate_pct=11.0,
+        ))
+        rows = calculate_loan_schedule(data, {"term_loan": 900000})
+        # round(9/6) = round(1.5) = 2 half-years = 12 months (not 9).
+        assert rows[0]["moratorium_months_effective"] == 12
+        # Year 1 (both half-years) must show zero principal repaid, matching
+        # the 12-month effective moratorium, not a partial 9-month one.
+        assert rows[0]["principal_paid"] == 0
+
     def test_displayed_principal_instalments_sum_exactly_to_the_loan_amount(self):
         """BUG FIX: a CA reviewer caught this on a live report — loan
         Rs.31,64,125 over 13 half-yearly instalments displayed as "Rs.

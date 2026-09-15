@@ -341,6 +341,45 @@ class TestTradingSectionsWithItemizedProductsList:
         assert "Nashik, Nashik" not in text
 
 
+class TestMoratoriumDisplayMatchesEffectiveSchedule:
+    def test_non_multiple_of_six_moratorium_shows_effective_value_with_explanatory_note(self):
+        """BUG FIX: a 9-month moratorium request rounds to a 12-month
+        effective moratorium (nearest half-year) since the half-yearly
+        schedule can only skip whole instalments — the report used to
+        display the raw "9 Month(s)" request next to a Section 21 schedule
+        whose Year 1 shows a full 12 months of zero principal, silently
+        disagreeing with what it claimed."""
+        payload = _pmegp_trading_payload()
+        payload["assumptions"]["moratorium_months"] = 9
+        payload["assumptions"]["tenure_months"] = 60
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "12 Month(s)" in text, "Displayed moratorium must be the effective (rounded) value, not the raw 9-month request"
+        assert "9 month(s) moratorium was requested" in text, "Must disclose the original request and the rounding applied"
+
+
+class TestExistingLoanEmiDisclosure:
+    def test_existing_emi_caveat_appears_when_reported(self):
+        """BUG FIX: existing_monthly_emi is captured (Section 05) but never
+        deducted from projected cash accruals anywhere — Term Loan DSCR and
+        the credit score both implicitly assume it doesn't exist. Must be
+        disclosed as a caveat, matching the existing "promoter remuneration
+        not considered" pattern."""
+        payload = _cgtmse_payload()
+        payload["business"]["business_status"] = "Existing Business"
+        payload["business"]["business_duration_months"] = 24
+        payload["business"]["commencement_date"] = "2024-06-01"
+        payload["business"]["existing_annual_turnover"] = 2000000
+        payload["business"]["existing_annual_profit"] = 150000
+        payload["business"]["existing_monthly_emi"] = 9000
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Existing loan EMI of Rs.9,000/month" in text
+        assert "NOT deducted from projected" in text and "cash accruals" in text
+
+
 class TestApplicantProfileFreeTextFields:
     def test_previous_employer_renders_as_a_paragraph_not_a_raw_string(self):
         """BUG FIX: "Previous Employer" is free text — a realistic value

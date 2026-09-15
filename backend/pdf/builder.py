@@ -625,6 +625,19 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         weaknesses.append(f"Annual PAT is negative (Rs.{_obs_annual_pat:,.0f}) — the project is loss-making under stated assumptions.")
     if display_promoter_contribution > 0 and display_loan_amount / max(display_promoter_contribution, 1) > 3:
         weaknesses.append("Leverage is high relative to promoter contribution.")
+    # CA AUDIT: existing_monthly_emi is captured (Section 05) but was never
+    # used anywhere downstream — Term Loan DSCR, cash flow and the credit
+    # score all implicitly assume this pre-existing obligation doesn't
+    # exist. Disclosed here rather than silently ignored, matching the
+    # existing "promoter remuneration not considered" caveat pattern.
+    _existing_emi = float(inp.get("existing_monthly_emi", 0) or 0)
+    if _existing_emi > 0:
+        weaknesses.append(
+            f"Existing loan EMI of Rs.{_existing_emi:,.0f}/month (Section 05) is a pre-existing "
+            "obligation NOT deducted from projected cash accruals anywhere in this report — Term "
+            "Loan DSCR and the credit score both assume it doesn't exist. Actual debt-service "
+            "capacity is lower than shown."
+        )
     _funding_gap_total = sum(float(pb.get("short_term_funding", 0) or 0) for pb in pbs[1:] if float(pb.get("short_term_funding", 0) or 0) > 0)
     if not strengths:
         strengths.append("No specific strengths identified under current assumptions — revenue and cost assumptions should be revisited.")
@@ -673,7 +686,21 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     ], colWidths=[42*mm,43*mm,42*mm,43*mm])
     tl_prop.setStyle(BTS())
     story.append(tl_prop)
-    NL(story, 5)
+    NL(story, 3)
+    # CA AUDIT: the half-yearly repayment schedule can only skip WHOLE
+    # half-yearly instalments, so a moratorium not entered as a multiple of
+    # 6 months (e.g. 9 months) is rounded to the nearest half-year — here
+    # that is transparently disclosed, rather than the requested figure
+    # being shown next to a schedule that actually applied a different one.
+    _morat_requested = int(inp.get("moratorium_months_requested", _morat_mo) or 0)
+    if _morat_requested != _morat_mo:
+        story.append(Paragraph(
+            f"<i>Note: {_morat_requested} month(s) moratorium was requested. The half-yearly repayment "
+            f"schedule can only skip whole half-yearly instalments, so this has been rounded to the "
+            f"nearest half-year — {_morat_mo} month(s) — which is the figure applied in the schedule "
+            f"below and used throughout this report.</i>",
+            ST["small"]))
+        NL(story, 2)
 
     H2("B. Working Capital Facility", story)
     wc_prop = Table([

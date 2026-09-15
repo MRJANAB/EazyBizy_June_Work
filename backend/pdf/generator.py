@@ -492,8 +492,16 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "wc_finished_goods_days": int(assum.get("fg_days", 30) or 30),
         "wc_working_expenses_days": 30,
         "loan_tenure_years":   max(int(float(assum.get("tenure_months", 60) or 60) / 12), 1),
-        "moratorium_months":   int(float(assum.get("moratorium_months", 0) or 0)),
-        "moratorium_years":    max(int(float(assum.get("moratorium_months", 0) or 0) / 12), 0),
+        # CA AUDIT: display the moratorium the loan schedule ACTUALLY
+        # applied (rounded to the nearest half-year, since repayment runs
+        # on a half-yearly cycle), not the raw applicant input — a 9-month
+        # request rounds to a 12-month effective moratorium (2 half-years),
+        # and showing "9 Month(s)" next to a schedule with a full Year 1 of
+        # zero principal repaid would silently disagree with the schedule
+        # a reader can see right below it.
+        "moratorium_months":   int(loan_sched[0].get("moratorium_months_effective", 0)) if loan_sched else int(float(assum.get("moratorium_months", 0) or 0)),
+        "moratorium_months_requested": int(float(assum.get("moratorium_months", 0) or 0)),
+        "moratorium_years":    max((int(loan_sched[0].get("moratorium_months_effective", 0)) if loan_sched else int(float(assum.get("moratorium_months", 0) or 0))) / 12, 0),
         # products: now in CMAReportInput schema — no longer silently dropped by FastAPI
         "products_list": (
             raw_input.get("products") or

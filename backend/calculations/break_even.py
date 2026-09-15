@@ -108,6 +108,15 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
         dep       = float(yr.get("depreciation",   0) or 0)
         interest  = float(yr.get("interest",        0) or 0)   # tl + wc combined
         fix_costs = R(fixed_exp + dep + interest)
+        # CA AUDIT: this is a FINANCIAL break-even (fixed costs include
+        # Depreciation AND Term Loan + WC Interest) — presenting it as a
+        # bare "BEP" without saying so reads as a pure operating break-even
+        # to a CA/banker. Also compute the OPERATING break-even — fixed
+        # costs excluding FINANCING costs only (Interest); Depreciation
+        # stays in, since it's a non-cash operating charge, not a
+        # financing cost — so both figures are available and correctly
+        # labelled.
+        op_fix_costs = R(fixed_exp + dep)
 
         contrib   = R(rev - var_costs)
         cm_ratio  = R(contrib / rev, 4) if rev else 0
@@ -132,6 +141,11 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
         # Mark N/A when BEP > 100% capacity — technically math works but operationally impossible
         bep_not_achievable = (cm_ratio <= 0) or (bep_pct is not None and bep_pct > 1.0)
 
+        # Operating BEP — same mechanics, financing costs (interest) excluded.
+        op_bep_sales = R(op_fix_costs / cm_ratio) if cm_ratio > 0 else None
+        op_bep_pct   = R(op_bep_sales / annual_rev_100, 4) if (op_bep_sales and annual_rev_100) else None
+        op_bep_not_achievable = (cm_ratio <= 0) or (op_bep_pct is not None and op_bep_pct > 1.0)
+
         # Payback Period — single project-level cumulative cash-flow metric
         # (see _calculate_cumulative_payback above), repeated on every row.
         payback_months = _payback_calc["payback_months"] if _payback_calc else None
@@ -146,6 +160,10 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
             "bep_sales":          bep_sales if bep_sales is not None else 0.0,
             "bep_pct":            bep_pct   if bep_pct   is not None else 0.0,
             "bep_not_achievable": bep_not_achievable,
+            "operating_fixed_expenses":  op_fix_costs,
+            "operating_bep_sales":       op_bep_sales if op_bep_sales is not None else 0.0,
+            "operating_bep_pct":         op_bep_pct   if op_bep_pct   is not None else 0.0,
+            "operating_bep_not_achievable": op_bep_not_achievable,
             # payback_months is None (→ "N/A") when not achievable, never 0
             "payback_months":     payback_months,
             "payback_not_achievable": _payback_calc is None or payback_months is None,

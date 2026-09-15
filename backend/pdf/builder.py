@@ -619,6 +619,22 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         )
     if float(man.get("promoter_annual", 0) or 0) <= 0:
         weaknesses.append("Promoter remuneration not considered — profitability may be overstated.")
+    # CA AUDIT: promoter_drawings_pct (Section 23's Cash Flow "Less:
+    # Promoter Drawings" row) defaults to 0% — PAT is fully retained with
+    # no assumed personal withdrawal. That's a real, silent assumption:
+    # for an owner-operated business the promoter/partners almost always
+    # draw SOME funds for personal living expenses, so Reserves and
+    # Closing Cash in this report will run higher than a scenario with a
+    # realistic drawings assumption. Surfaced explicitly rather than left
+    # as an unstated default.
+    _drawings_pct = float(inp.get("promoter_drawings_pct", 0) or 0)
+    if _drawings_pct <= 0:
+        weaknesses.append(
+            "Promoter Drawings assumption is 0% (Section 23) — PAT is projected as fully retained with "
+            "no personal withdrawal assumed. If the promoter/partners actually draw funds for personal "
+            "use, Reserves and Closing Cash will be lower than shown; confirm the intended drawings "
+            "level before relying on the projected cash position."
+        )
     if _obs_avg_dscr < _obs_dscr_bench:
         weaknesses.append(f"Average Term Loan DSCR of {round(_obs_avg_dscr,2)}x is below the {_obs_dscr_bench}x illustrative benchmark.")
     if _obs_annual_pat < 0:
@@ -976,10 +992,34 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ST["small"]))
     elif _b2_margin_money:
         NL(story, 3)
+        # CA AUDIT: the exact accounting treatment of a government/state
+        # capital subsidy (credited to Capital Reserve? Deferred Income?
+        # netted against the asset's cost?) depends on the specific
+        # scheme's own conditions and the applicable accounting framework
+        # (e.g. Ind AS 20 / AS 12) — this platform cannot determine that
+        # universally, so it must not assert one treatment as settled fact.
         story.append(Paragraph(
             f"<b>Subsidy Note:</b> State capital subsidy of Rs.{_b2_margin_money:,.0f} on fixed assets "
-            "is treated as a source of finance, reducing the amount split between promoter and bank.",
+            "is treated here as a source of finance for project-cost purposes, reducing the amount split "
+            "between promoter and bank. This treatment is <b>indicative</b> and subject to the specific "
+            "subsidy scheme's own guidelines and the applicable accounting framework — whether it should "
+            "be credited to Capital Reserve, Deferred Income, or adjusted against the relevant asset's "
+            "cost is a determination for the sanction documentation and the applicant's CA, not this "
+            "platform.",
             ST["small"]))
+        _subsidy_scheme_details = str(inp.get("capital_subsidy_scheme_details", "") or "").strip()
+        if _subsidy_scheme_details:
+            NL(story, 2)
+            story.append(Paragraph(
+                f"<b>Subsidy Scheme Details:</b> {_subsidy_scheme_details}",
+                ST["small"]))
+        else:
+            NL(story, 2)
+            story.append(Paragraph(
+                "<b>Subsidy Scheme Details:</b> not provided — for an actual bank submission, the "
+                "scheme name, sanction order no., sanction date, eligible amount, and any conditions "
+                "attached to the grant should be documented here.",
+                ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1560,6 +1600,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # rows, so ROE is never computed against a static, unchanging equity
     # figure. Falls back to Promoter Equity only when Average Equity isn't
     # meaningful (zero or negative, e.g. accumulated losses have eroded it).
+    # CA AUDIT: pb["equity"] is already Promoter Fixed Equity only — the
+    # Government/state capital subsidy is tracked SEPARATELY in
+    # pb["margin_money"] and is NEVER added in here, so this denominator
+    # already excludes it. The report previously didn't say so explicitly,
+    # leaving a reader to guess why ROE looked high relative to a Balance
+    # Sheet that also shows the subsidy inside Owners' Funds.
     _net_worth = lambda pb: float(pb.get("equity", 0) or 0) + float(pb.get("promoter_wc_margin", 0) or 0) + float(pb.get("reserves", 0) or 0)
     _avg_equity = None
     if len(pbs) > 3:
@@ -1567,12 +1613,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         if _avg_equity_calc > 0:
             _avg_equity = _avg_equity_calc
     _roe_denom = _avg_equity if _avg_equity else max(prof.get("promoter_equity", 0), 1)
-    _roe_basis = "Average Equity (Year 2→3)" if _avg_equity else "Promoter Equity (Average Equity not meaningful)"
+    _roe_basis = "Average Promoter Equity (Year 2→3, excl. Govt. Subsidy)" if _avg_equity else "Promoter Equity (Average Equity not meaningful; excl. Govt. Subsidy)"
     _pi_hdr_style = _s("pi_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
     pi_t = Table([
         [Paragraph(h, _pi_hdr_style) for h in
          ["Metric", "Amount (Rs.)", "% of Sales", "ROCE = EBIT ÷ Capital Employed × 100",
-          "ROE = PAT ÷ Average Equity × 100", "ROI = PAT ÷ Initial Investment × 100"]],
+          "ROE = PAT ÷ Avg. Promoter Equity × 100 (excl. Subsidy)", "ROI = PAT ÷ Initial Investment × 100"]],
         ["EBIT", rs(prof.get("ebit", 0)), rp2(R(prof.get("ebit", 0) / max(prof["sales"], 1) * 100, 2)),
          pof(prof.get("ebit", 0), _t_capital_employed), "—", "—"],
         ["PAT (Net Profit)", rs(prof["pat"]), rp2(prof["pat_pct_sales"]),
@@ -1691,16 +1737,34 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _cycle_rows.append(["Work-in-Progress Days", str(_wip_days)])
         _cycle_rows.append(["Finished Goods Holding Days", str(_fg_days)])
     _cycle_rows.append(["Receivable / Debtor Days", str(_debtor_days)])
-    _cycle_rows.append(["Less: Creditor / Payable Days", f"-{_creditor_days}"])
+    # CA AUDIT: Section 16's own WC model for a SERVICE business never
+    # includes a Creditors/Payables line (there is no inventory purchased
+    # on supplier credit) — but this section used to always show
+    # "Less: Creditor/Payable Days" and net it against Receivable Days
+    # regardless, producing a Net Operating Cycle netted against a
+    # creditor figure that has no corresponding Rs. amount anywhere in
+    # Section 16. Only show/net creditor days for non-service (mfg/trading)
+    # businesses, where Section 16 actually models a "Less: Creditors" Rs.
+    # line — keeping both sections on the same WC model.
+    if not _is_service_wc:
+        _cycle_rows.append(["Less: Creditor / Payable Days", f"-{_creditor_days}"])
     _net_cycle = (
         (0 if _is_service_wc else int(_stock_days))
         + (int(_wip_days) + int(_fg_days) if _is_mfg_wc else 0)
-        + int(_debtor_days) - int(_creditor_days)
+        + int(_debtor_days) - (0 if _is_service_wc else int(_creditor_days))
     )
-    _cycle_rows.append(["NET OPERATING CYCLE (Days)", str(_net_cycle)])
+    _cycle_rows.append(["NET OPERATING CYCLE (Days)" if not _is_service_wc else "Operating (Receivable) Cycle (Days)", str(_net_cycle)])
     cycle_t = Table(_cycle_rows, colWidths=[130*mm, 40*mm])
     cycle_t.setStyle(BTS()); cycle_t.setStyle(TOT(len(_cycle_rows)-1))
     story.append(cycle_t)
+    if _is_service_wc:
+        NL(story, 3)
+        story.append(Paragraph(
+            "<b>Note:</b> This is a service business — the operating cycle above reflects only the "
+            f"{_debtor_days}-day receivable/client-billing cycle used in Section 16. Inventory and "
+            "trade-creditor cycles are not separately modelled for this business type (there is no "
+            "stock purchased on supplier credit to net against).",
+            ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1860,7 +1924,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             _wc_bank_yr = float(wc[i]["bank_loan"])
             debt_rows.append([str(y["year"]), r(y["closing_balance"]), r(_wc_bank_yr), r(y["closing_balance"] + _wc_bank_yr)])
         else:
-            debt_rows.append([str(y["year"]), r(y["closing_balance"]), "— (not projected)", r(y["closing_balance"]) + "*"])
+            # CA AUDIT: showing "Rs.0*" here (Term Loan closing balance
+            # happens to be 0 once fully amortised) reads as "Total Debt
+            # is zero" — it isn't; the WC Bank Loan component is simply
+            # unknown, not zero. A total can't be asserted when one of its
+            # own components is unprojected, regardless of what the other
+            # component's value happens to be.
+            debt_rows.append([str(y["year"]), r(y["closing_balance"]), "— (not projected)", "Not Projected*"])
     debt_t = Table(debt_rows, colWidths=[20*mm, 45*mm, 45*mm, 35*mm])
     debt_t.setStyle(BTS())
     story.append(debt_t)
@@ -1873,7 +1943,8 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _debt_note += (
             " This platform's detailed CMA projection (P&amp;L, Balance Sheet, Cash Flow) covers 5 years; "
             "the Term Loan's own amortisation is shown beyond Year 5 for reference, but WC Bank Loan is "
-            "not separately projected that far — marked with * (Term Loan only, not a true Total Debt figure)."
+            "not separately projected that far — marked with * (Total Debt cannot be stated when one of "
+            "its two components, WC Bank Loan, is unprojected for that year)."
         )
     story.append(Paragraph(_debt_note, ST["small"]))
     PB(story)
@@ -1928,10 +1999,19 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # "Illustrative Before Additional Funding" whenever it applies.
     _additional_funding_required = [max(-float(pb.get("cash", 0) or 0), 0) + 0 for pb in pbs]
     _has_funding_shortfall = any(v > 0 for v in _additional_funding_required)
+    # CA AUDIT: "Schedule III" is a Companies Act, 2013 presentation
+    # framework — it applies to companies (Private Limited / OPC), not to
+    # a Proprietorship, Partnership, LLP or HUF. Labelling every report
+    # "Schedule III Format" regardless of constitution was inaccurate for
+    # the majority of applicants on this platform.
+    _is_company_constitution = any(
+        t in _biz_type_str.lower() for t in ("private limited", "opc", "one person company")
+    )
+    _bs_format_label = "Schedule III Format" if _is_company_constitution else "Indicative CMA Format"
     _bs_title = (
-        "SECTION 24 — PROJECTED BALANCE SHEET (Illustrative Before Additional Funding — Schedule III Format, Amounts in Rs.)"
+        f"SECTION 24 — PROJECTED BALANCE SHEET (Illustrative Before Additional Funding — {_bs_format_label}, Amounts in Rs.)"
         if _has_funding_shortfall else
-        "SECTION 24 — PROJECTED BALANCE SHEET (Schedule III Format, Amounts in Rs.)"
+        f"SECTION 24 — PROJECTED BALANCE SHEET ({_bs_format_label}, Amounts in Rs.)"
     )
     SEC(_bs_title, story)
     _display_reserve = lambda pb: max(float(pb.get("reserves", 0) or 0), 0)
@@ -2092,27 +2172,53 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # SECTION 25 — BREAK-EVEN ANALYSIS
     # ════════════════════════════════════════════════════════════════
     SEC("SECTION 25 — BREAK-EVEN ANALYSIS", story)
-    def _bep_val(b, key):
-        if b.get("bep_not_achievable"):
+    def _bep_val(b, key, na_key="bep_not_achievable"):
+        if b.get(na_key):
             return "N/A"
         return r(b.get(key, 0))
-    def _bep_pct_val(b):
-        if b.get("bep_not_achievable"):
+    def _bep_pct_val(b, key="bep_pct", na_key="bep_not_achievable"):
+        if b.get(na_key):
             return "N/A"
-        return rp(b.get("bep_pct", 0))
+        return rp(b.get(key, 0))
+    # CA AUDIT: "Fixed Expenses" here includes BOTH Depreciation and ALL
+    # Interest (Term Loan + WC) — a bare "BEP Sales" label reads as a pure
+    # OPERATING break-even to a CA/banker, when it's actually a FINANCIAL
+    # break-even (the sales level needed to cover financing costs too, not
+    # just operating costs). Both figures are now shown, correctly labelled,
+    # so a reader isn't left guessing which one a bare "BEP" means.
+    # Row labels are Paragraph-wrapped, not plain strings — several of the
+    # new labels below are too long for this column at 68mm and would
+    # otherwise overflow, unwrapped, straight into the Year 1 value cell
+    # (ReportLab does not auto-wrap plain strings in a Table).
+    _bep_lbl_style      = _s("bep_lbl",      fontSize=8.5, fontName="Helvetica",      textColor=BLK, leading=10.5)
+    _bep_lbl_bold_style = _s("bep_lbl_bold", fontSize=8.5, fontName="Helvetica-Bold", textColor=BLK, leading=10.5)
+    def _bep_lbl(text, bold=False):
+        return Paragraph(text, _bep_lbl_bold_style if bold else _bep_lbl_style)
     bep_t = Table([
         ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
-        ["Income from Operations"]    + [r(b["revenue"])            for b in bep],
-        ["Variable Expenses"]         + [r(b["variable_expenses"])  for b in bep],
-        ["Contribution"]              + [r(b["contribution"])       for b in bep],
-        ["Fixed Expenses (incl Dep)"] + [r(b["fixed_expenses"])     for b in bep],
-        ["BEP Sales (Rs.)"]           + [_bep_val(b, "bep_sales")   for b in bep],
-        ["BEP as % of Capacity"]      + [_bep_pct_val(b)            for b in bep],
-        ["Contribution Margin %"]     + [rp(b["contribution_pct"])  for b in bep],
-    ], colWidths=[60*mm]+[22*mm]*5)
-    bep_t.setStyle(BTS()); bep_t.setStyle(TOT(5))
+        [_bep_lbl("Income from Operations")]    + [r(b["revenue"])            for b in bep],
+        [_bep_lbl("Variable Expenses")]         + [r(b["variable_expenses"])  for b in bep],
+        [_bep_lbl("Contribution", True)]        + [r(b["contribution"])       for b in bep],
+        [_bep_lbl("Contribution Margin %")]     + [rp(b["contribution_pct"])  for b in bep],
+        [_bep_lbl("Operating Fixed Expenses (incl. Dep, excl. Interest)")] + [r(b.get("operating_fixed_expenses", 0)) for b in bep],
+        [_bep_lbl("Operating Break-Even Sales (Excl. Financing Costs)", True)] + [_bep_val(b, "operating_bep_sales", "operating_bep_not_achievable") for b in bep],
+        [_bep_lbl("Operating BEP as % of Capacity")]                       + [_bep_pct_val(b, "operating_bep_pct", "operating_bep_not_achievable") for b in bep],
+        [_bep_lbl("Financial Fixed Expenses (incl. Dep & Interest)")]      + [r(b["fixed_expenses"])     for b in bep],
+        [_bep_lbl("Financial Break-Even Sales (Incl. Dep & Interest)", True)] + [_bep_val(b, "bep_sales")   for b in bep],
+        [_bep_lbl("Financial BEP as % of Capacity")]                       + [_bep_pct_val(b)            for b in bep],
+    ], colWidths=[68*mm]+[20.4*mm]*5)
+    bep_t.setStyle(BTS())
+    for _bep_idx in [3, 6, 9]: bep_t.setStyle(TOT(_bep_idx))
     story.append(bep_t)
-    if any(b.get("bep_not_achievable") for b in bep):
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Operating Break-Even</b> is the sales level needed to cover operating costs only "
+        "(variable costs + admin/labour + depreciation), before financing costs. "
+        "<b>Financial Break-Even</b> additionally covers Term Loan and WC Interest — the sales "
+        "level needed to service both operations AND the financing structure. Financial BEP is "
+        "always ≥ Operating BEP for a project carrying any debt.",
+        ST["small"]))
+    if any(b.get("bep_not_achievable") or b.get("operating_bep_not_achievable") for b in bep):
         NL(story, 3)
         story.append(Paragraph(
             "<b>BEP not computable</b> in year(s) where Contribution Margin ≤ 0 — variable costs "
@@ -2473,9 +2579,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "Illustrative"),
         _fdef_row(
             "ROE",
-            "= PAT ÷ Average Equity × 100. "
-            "Average Equity = average of Net Worth (Equity + WC Margin + Reserves) at the start and end of the "
-            "reference year (from the projected Balance Sheet). Falls back to Promoter Equity if Average Equity "
+            "= PAT ÷ Average Promoter Equity × 100. "
+            "Average Promoter Equity = average of (Promoter Fixed Equity + Promoter WC Margin + Reserves & "
+            "Surplus) at the start and end of the reference year (from the projected Balance Sheet). "
+            "<b>Government/state capital subsidy is deliberately EXCLUDED from this denominator</b> — it is "
+            "the promoter's own return being measured, not a return on subsidy funds; if a bank's own "
+            "policy instead treats the subsidy as part of owners' funds for this purpose, ROE should be "
+            "recalculated on that wider base. Falls back to Promoter Equity alone if Average Promoter Equity "
             "is not meaningful (zero or negative). Can legitimately be extreme for a thinly-capitalised, "
             "highly-leveraged project; a large magnitude is a leverage signal, not an error.",
             "Illustrative"),
@@ -2503,8 +2613,16 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "= EBITDA (or PAT) / Sales Revenue × 100",
             "> 20% / > 10%"),
         _fdef_row(
-            "Break-Even Point",
-            "= Fixed Costs / (1 − Variable Cost Ratio). "
+            "Operating Break-Even Sales",
+            "= Operating Fixed Costs (Admin/Labour + Depreciation, excl. Interest) / (1 − Variable Cost "
+            "Ratio). Sales needed to cover operations only, before financing costs. "
+            "Not computable when Contribution Margin ≤ 0 (shown as N/A, not forced to a number).",
+            "< Monthly Revenue"),
+        _fdef_row(
+            "Financial Break-Even Sales",
+            "= Financial Fixed Costs (Admin/Labour + Depreciation + Term Loan &amp; WC Interest) / "
+            "(1 − Variable Cost Ratio). Sales needed to cover operations AND service the financing "
+            "structure — always ≥ Operating Break-Even Sales. "
             "Not computable when Contribution Margin ≤ 0 (shown as N/A, not forced to a number).",
             "< Monthly Revenue"),
         _fdef_row(

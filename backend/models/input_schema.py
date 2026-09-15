@@ -170,6 +170,10 @@ class AssumptionsInfo(BaseModel):
     term_loan_pct:         float = Field(default=75.0, description="% of fixed capital financed by term loan")
     wc_loan_pct:           float = Field(default=60.0, description="% of WC financed by bank")
     capital_subsidy_pct:   float = Field(default=0.0,  description="MSME state capital-investment subsidy % on fixed assets (land+building+P&M). 0 = none.")
+    capital_subsidy_scheme_details: str = Field(default="",
+                                description="Subsidy scheme name / sanction order no. / sanction date / eligible "
+                                            "amount / conditions attached — free text, for bank submission "
+                                            "supporting documentation. Optional; shown in the report only when provided.")
     interest_rate_pct:     float = Field(default=10.5)
     tenure_months:         int   = Field(default=60)
     moratorium_months:     int   = Field(default=0)

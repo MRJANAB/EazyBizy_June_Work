@@ -562,3 +562,194 @@ class TestApplicantProfileFreeTextFields:
         text = _download_pdf_text(resp.json()["report_id"])
         assert "Intermediate (12th)" in text
         assert "12Th" not in text
+
+
+class TestBalanceSheetFormatLabel:
+    """CA AUDIT: "Schedule III Format" is a Companies Act, 2013 presentation
+    framework — it applies to companies (Private Limited/OPC), not to a
+    Proprietorship, Partnership, LLP, HUF or Cooperative. Section 24's
+    title must reflect the applicant's actual constitution."""
+
+    def test_proprietorship_gets_indicative_cma_format_label(self):
+        payload = _cgtmse_payload()
+        payload["business"]["business_type"] = "proprietorship"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Indicative CMA Format" in text
+        assert "Schedule III Format" not in text
+
+    def test_private_limited_keeps_schedule_iii_format_label(self):
+        payload = _cgtmse_payload()
+        payload["business"]["business_type"] = "private_limited"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Schedule III Format" in text
+
+
+class TestRoeExcludesGovernmentSubsidy:
+    """CA AUDIT: pb["equity"] used as the ROE denominator is Promoter Fixed
+    Equity only — the Government/state capital subsidy is tracked
+    separately in pb["margin_money"] and is never added into it — but the
+    report never said so explicitly, leaving a reader to guess why ROE
+    looked high relative to a Balance Sheet that also shows the subsidy
+    inside Owners' Funds. Section 15 and Section 30's methodology must say
+    so explicitly."""
+
+    def test_roe_wording_explicitly_excludes_subsidy(self):
+        payload = _msme_psu_subsidy_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        assert "excl. Subsidy" in flat or "excl. Govt. Subsidy" in flat
+        assert "Average Promoter Equity" in flat
+        assert "deliberately EXCLUDED from this denominator" in flat
+
+
+class TestSubsidyAccountingTreatmentDisclosure:
+    """CA AUDIT: the exact accounting treatment of a government/state
+    capital subsidy depends on the specific scheme's conditions and the
+    applicable accounting framework — this platform cannot assert one
+    treatment (Capital Reserve vs Deferred Income vs netted against asset
+    cost) as settled fact. Must be disclosed as indicative, with a place
+    to record the scheme's own documentation."""
+
+    def test_subsidy_note_is_indicative_not_asserted(self):
+        payload = _msme_psu_subsidy_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        assert "This treatment is" in flat and "indicative" in flat
+        assert "Capital Reserve" in flat and "Deferred Income" in flat
+
+    def test_subsidy_scheme_details_shown_when_provided(self):
+        payload = _msme_psu_subsidy_payload()
+        payload["assumptions"]["capital_subsidy_scheme_details"] = (
+            "MP State Capital Subsidy Scheme 2023, Order No. MSME/2023/451, "
+            "Sanctioned 2024-08-01, Eligible Amount Rs.1,72,500, subject to 3-year lock-in."
+        )
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        assert "MP State Capital Subsidy Scheme 2023" in flat
+        assert "Order No. MSME/2023/451" in flat
+
+    def test_subsidy_scheme_details_placeholder_shown_when_absent(self):
+        payload = _msme_psu_subsidy_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        assert "Subsidy Scheme Details: not provided" in flat
+
+
+class TestServiceWorkingCapitalCycleConsistency:
+    """CA AUDIT: Section 16's own WC model for a SERVICE business never
+    includes a Creditors/Payables Rs. line (no inventory bought on
+    supplier credit) — but Section 18 used to always show "Less:
+    Creditor/Payable Days" and net it against Receivable Days regardless,
+    producing a Net Operating Cycle netted against a creditor figure with
+    no corresponding Rs. amount anywhere in Section 16."""
+
+    def test_service_business_section18_has_no_creditor_days_line(self):
+        payload = _msme_psu_subsidy_payload()  # industry_type="service"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        idx = text.find("SECTION 18")
+        section18 = text[idx:idx + 800]
+        assert "Creditor" not in section18
+        assert "NET OPERATING CYCLE" not in section18
+        assert "Operating (Receivable) Cycle" in section18
+
+    def test_manufacturing_business_section18_keeps_creditor_days_line(self):
+        payload = _cgtmse_payload()  # industry_type="manufacturing"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        idx = text.find("SECTION 18")
+        section18 = text[idx:idx + 800]
+        assert "Creditor / Payable Days" in section18
+        assert "NET OPERATING CYCLE" in section18
+
+
+class TestTotalDebtSchedulePastFiveYears:
+    """CA AUDIT: Year 6+ used to show Total Debt as "Rs.0*" whenever the
+    Term Loan happened to be fully amortised by then — reading as "Total
+    Debt is zero", when really the WC Bank Loan component (the other half
+    of Total Debt) is simply unprojected that far, not zero."""
+
+    def test_total_debt_beyond_year5_shows_not_projected_not_zero(self):
+        payload = _cgtmse_payload()
+        payload["assumptions"]["tenure_months"] = 84  # 7 years > 5-year WC projection
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        idx = text.find("SECTION 22")
+        assert idx != -1
+        section22 = text[idx:idx + 1200]
+        assert "Not Projected" in section22
+        assert "Rs.0*" not in section22 and "0*" not in section22.replace("Not Projected*", "")
+
+
+class TestOperatingVsFinancialBreakEven:
+    """CA AUDIT: "Fixed Expenses" in the break-even calc includes BOTH
+    Depreciation and ALL Interest (Term Loan + WC) — a bare "BEP Sales"
+    label reads as a pure operating break-even to a CA/banker when it's
+    actually a financial one. Both must be shown, correctly labelled, and
+    Financial BEP must always be >= Operating BEP for a leveraged project."""
+
+    def test_both_bep_variants_shown_with_correct_labels(self):
+        payload = _msme_psu_subsidy_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        assert "Operating Break-Even Sales (Excl. Financing Costs)" in flat
+        assert "Financial Break-Even Sales (Incl. Dep & Interest)" in flat
+
+    def test_financial_bep_at_least_operating_bep_every_year(self):
+        payload = _msme_psu_subsidy_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        report_id = resp.json()["report_id"]
+        dl = client.get(f"/api/v1/report/{report_id}/download")
+        text = _download_pdf_text(report_id)
+        idx = text.find("SECTION 25")
+        section25 = text[idx:idx + 1600]
+        op_idx = section25.find("Operating Break-Even Sales")
+        fin_idx = section25.find("Financial Break-Even Sales")
+        assert op_idx != -1 and fin_idx != -1
+        op_vals = re.findall(r"[\d,]+", section25[op_idx:op_idx + 200])[:5]
+        fin_vals = re.findall(r"[\d,]+", section25[fin_idx:fin_idx + 200])[:5]
+        op_nums = [float(v.replace(",", "")) for v in op_vals]
+        fin_nums = [float(v.replace(",", "")) for v in fin_vals]
+        assert len(op_nums) == 5 and len(fin_nums) == 5
+        for o, f in zip(op_nums, fin_nums):
+            assert f >= o
+
+
+class TestPromoterDrawingsDisclosure:
+    """CA AUDIT: promoter_drawings_pct defaults to 0% — PAT is projected as
+    fully retained with no personal withdrawal assumed. For an
+    owner-operated business this is a real, silent assumption worth
+    surfacing rather than leaving unstated."""
+
+    def test_zero_drawings_triggers_disclosure(self):
+        payload = _msme_psu_subsidy_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Promoter Drawings assumption is 0%" in text
+
+    def test_nonzero_drawings_does_not_trigger_disclosure(self):
+        payload = _msme_psu_subsidy_payload()
+        payload["assumptions"]["promoter_drawings_pct"] = 40
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Promoter Drawings assumption is 0%" not in text

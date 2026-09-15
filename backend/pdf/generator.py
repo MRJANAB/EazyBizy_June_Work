@@ -462,6 +462,8 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "semi_skilled_daily_wage":   R(float(manpower_inp.get("semi_skilled_salary", 0) or 0) / 26),
         "unskilled_daily_wage":      R(float(manpower_inp.get("unskilled_salary", 0) or 0) / 26),
         # Financial assumptions — all read from user input, never hardcoded
+        "capital_subsidy_scheme_details": assum.get("capital_subsidy_scheme_details", "") or "",
+        "promoter_drawings_pct": float(assum.get("promoter_drawings_pct", 0) or 0),
         "contingency_rate":   float(assum.get("contingency_pct", 0) or 0) / 100,
         "term_loan_pct":      float(assum.get("term_loan_pct", 75) or 75) / 100,
         "wc_loan_pct":        float(assum.get("wc_loan_pct", 60) or 60) / 100,

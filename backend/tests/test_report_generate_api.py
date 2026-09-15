@@ -116,3 +116,49 @@ class TestRawMaterialSectionTotalMatchesItsOwnRows:
         text = _download_pdf_text(report_id)
         # input_qty_per_day(200) x working_days(300) x rm_cost_per_unit(60) = 3,600,000
         assert "3,600,000" in text, "Raw Material row and TOTAL must both show the 100%-capacity figure"
+
+
+class TestSalesRealizationShowsTrue100PctCapacity:
+    def test_manufacturing_products_table_scaled_to_100pct_not_year1_actual(self):
+        """BUG FIX: Section 11's "Annual Sales Realization (Year 1, at 100%
+        Capacity)" table, for a manufacturing/agriculture business with no
+        real user-entered products list, fell back to pdf/generator.py's
+        synthetic single-product fallback — whose units_per_month is the
+        Year-1 ACTUAL (capacity-adjusted) quantity, not the 100%-capacity
+        quantity the table's own header claims. Reported by a CA reviewer:
+        a report showed "Quantity/month = 7,125" and "Rs.85.50L" under an
+        "at 100% Capacity" heading, when the true 100%-capacity figures
+        were 11,875 units/month and Rs.1,42,50,000.
+
+        For this fixture: 100%-capacity output = 200/day x 300 days x 95%
+        yield = 57,000 units/yr @ Rs.150 = Rs.85,50,000/yr (100% capacity),
+        vs Year-1-actual (60% capacity) = Rs.51,30,000/yr. The table must
+        show the former, not the latter.
+
+        The synthetic fallback product's "category" is set from
+        business.nature_of_business — that field must be non-empty (as a
+        real applicant's would be) to reproduce the branch the bug lived
+        in; the shared fixture leaves it blank, so it's set here.
+        """
+        payload = _cgtmse_payload()
+        payload["business"]["nature_of_business"] = "Precision Machining of Automotive Components"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        report_id = resp.json()["report_id"]
+        text = _download_pdf_text(report_id)
+        idx = text.find("Annual Sales Realization")
+        end = text.find("Revenue Build-Up", idx)
+        assert idx != -1 and end != -1, "Section 11 sales realization table not found"
+        section = text[idx:end]
+        assert "4,750" in section, (
+            "Quantity/Month must be scaled up to the true 100%-capacity figure (4,750), "
+            "not the Year-1-actual (60%-capacity) quantity (2,850)"
+        )
+        assert "8,550,000" in section, (
+            "Annual Sales Realization table must show the true 100%-capacity "
+            "annual revenue (Rs.85,50,000), not the Year-1-actual (60%-capacity) figure"
+        )
+        assert "5,130,000" not in section, (
+            "Annual Sales Realization table must not show the Year-1-actual "
+            "(60%-capacity) revenue under a heading that claims 100% capacity"
+        )

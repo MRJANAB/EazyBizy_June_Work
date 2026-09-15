@@ -1106,14 +1106,22 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         products = inp.get("products_list") or cma.get("products") or []
         if products and len(products) > 0 and products[0].get("category") and products[0].get("category") != "Products/Services":
             sales_rows = [["Product","Price (Rs./Unit)","Quantity/Month","Annual Revenue (Rs.)"]]
+            # Entered units_per_month is the Year-1 (current-capacity) figure, not
+            # 100%-capacity — scale every row's quantity up to ps["annual_production_kg"]
+            # (the same 100%-capacity figure used in Production Parameters above and in
+            # the per-year table below) so this table's total is never a separate,
+            # silently-different basis than the header it sits under.
+            total_rev_y1 = sum(p.get("units_per_month", 0) * p.get("avg_price", p.get("selling_price", 0)) * 12 for p in products)
+            total_rev_100pct = float(ps.get("revenue_at_100pct", 0) or 0) or total_rev_y1
+            scale = (total_rev_100pct / total_rev_y1) if total_rev_y1 else 1
             total_rev = 0
             for p in products:
-                qty = p.get("units_per_month", 0)
+                qty_100 = p.get("units_per_month", 0) * scale
                 sp = p.get("avg_price", p.get("selling_price", 0))
-                ann_rev = qty * sp * 12
+                ann_rev = qty_100 * sp * 12
                 total_rev += ann_rev
                 name = p.get("name") or p.get("category") or "Product"
-                sales_rows.append([name, r(sp), r(qty), r(ann_rev)])
+                sales_rows.append([name, r(sp), r(qty_100), r(ann_rev)])
             sales_rows.append(["Total at 100% Capacity", "", "", r(total_rev)])
             sales_t = Table(sales_rows, colWidths=[65*mm,35*mm,35*mm,35*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(len(sales_rows)-1))

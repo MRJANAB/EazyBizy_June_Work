@@ -625,18 +625,25 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         weaknesses.append(f"Annual PAT is negative (Rs.{_obs_annual_pat:,.0f}) — the project is loss-making under stated assumptions.")
     if display_promoter_contribution > 0 and display_loan_amount / max(display_promoter_contribution, 1) > 3:
         weaknesses.append("Leverage is high relative to promoter contribution.")
-    # CA AUDIT: existing_monthly_emi is captured (Section 05) but was never
-    # used anywhere downstream — Term Loan DSCR, cash flow and the credit
-    # score all implicitly assume this pre-existing obligation doesn't
-    # exist. Disclosed here rather than silently ignored, matching the
-    # existing "promoter remuneration not considered" caveat pattern.
+    # CA AUDIT: existing_monthly_emi (Section 05, existing business loan) and
+    # promoter_net_worth.home_loan_emi (personal home loan) are both
+    # pre-existing obligations, separate from the new term loan. They are
+    # excluded from the PRIMARY Term Loan DSCR above (by design — that DSCR
+    # is scoped to the new term loan only, per CA/RBI convention), but ARE
+    # now reflected in the "Adjusted Term Loan DSCR" table in Section 28.
     _existing_emi = float(inp.get("existing_monthly_emi", 0) or 0)
-    if _existing_emi > 0:
+    _home_loan_emi = float((cma.get("promoter_net_worth") or {}).get("home_loan_emi", 0) or 0)
+    if _existing_emi > 0 or _home_loan_emi > 0:
+        _emi_parts = []
+        if _existing_emi > 0:
+            _emi_parts.append(f"existing business loan EMI of Rs.{_existing_emi:,.0f}/month (Section 05)")
+        if _home_loan_emi > 0:
+            _emi_parts.append(f"personal home loan EMI of Rs.{_home_loan_emi:,.0f}/month")
         weaknesses.append(
-            f"Existing loan EMI of Rs.{_existing_emi:,.0f}/month (Section 05) is a pre-existing "
-            "obligation NOT deducted from projected cash accruals anywhere in this report — Term "
-            "Loan DSCR and the credit score both assume it doesn't exist. Actual debt-service "
-            "capacity is lower than shown."
+            "Borrower carries a " + " and a ".join(_emi_parts) + " — pre-existing obligations NOT "
+            "included in the primary Term Loan DSCR above (scoped to the new term loan only). See "
+            f"'Adjusted Term Loan DSCR' in Section 28 (average {dscr.get('average_adjusted_dscr', dscr.get('average', 0))}x) "
+            "for debt-service capacity after ALL known obligations."
         )
     _funding_gap_total = sum(float(pb.get("short_term_funding", 0) or 0) for pb in pbs[1:] if float(pb.get("short_term_funding", 0) or 0) > 0)
     if not strengths:
@@ -982,7 +989,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # Three different % figures, each on a different denominator, were
     # previously all labelled "Promoter Contribution %" — labelled distinctly
     # here so a banker never has to guess which base a given % is measured against.
-    _pc_fixed_project_cost   = R(pc["term_loan"] + display_promoter_fixed_equity, 2)
+    # BUG FIX: this used to independently recompute "term_loan + promoter_
+    # fixed_equity", the exact same bug already fixed for Section 02's
+    # "Fixed Project Cost" — silently excluding the scheme's margin-money/
+    # capital subsidy. Reuse display_fixed_project_cost (which already
+    # includes it) instead of re-deriving a second, disagreeing figure.
+    _pc_fixed_project_cost   = display_fixed_project_cost
     _pc_wc_requirement_total = float(wc[0].get("total", 0)) if wc else 0.0
     _pc_total_funding_reqd   = R(_pc_fixed_project_cost + _pc_wc_requirement_total, 2)
     _pc_promoter_share_total_funding = round(display_promoter_contribution / _pc_total_funding_reqd * 100, 1) if _pc_total_funding_reqd else 0
@@ -1038,7 +1050,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     SEC("SECTION 10 — KEY FINANCIAL ASSUMPTIONS", story)
     _assump_rows = [
         ["Assumption","Value","Assumption","Value"],
-        ["Contingency Rate",         rp(inp.get("contingency_rate",0)),  "Term Loan %",          rp(inp["term_loan_pct"])],
+        # BUG FIX: this showed the raw term_loan_pct ASSUMPTION (e.g. 75%)
+        # even for schemes with a capital subsidy, where that rate is
+        # applied to the fixed cost NET of subsidy, not the gross Fixed
+        # Project Cost shown elsewhere on this same page — a reader
+        # checking Term Loan (Section 03) ÷ Fixed Project Cost (Section 02)
+        # would get a different, lower %. Now derives the actual effective
+        # rate directly, so it always matches what a reader can verify.
+        ["Contingency Rate",         rp(inp.get("contingency_rate",0)),  "Term Loan % (of Fixed Cost)", rp(tl["amount"] / max(display_fixed_project_cost, 1))],
         ["WC Loan %",                rp(inp["wc_loan_pct"]),              "Term Loan Interest",   rp(inp["term_loan_interest"])],
         ["WC Interest Rate",         rp(inp["wc_interest_rate"]),         "Annual Salary Hike",   rp(inp["salary_increase_rate"])],
         ["Admin Expense Increase",   rp(inp["admin_increase_rate"]),      "Marketing % of Rev",   rp(inp["marketing_expense_pct"])],
@@ -2185,15 +2204,56 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     min_req = 1.25
     avg = dscr["average"]
     status = "ABOVE" if avg >= min_req else "BELOW"
-    rep_t = Table([
+    rep_rows = [
         ["Metric","Value","Benchmark","Status"],
         ["Average Term Loan DSCR (5-Year)",  str(cma.get("avg_dscr_5yr", cma.get("avg_dscr", 0))),  ">= 1.25 (illustrative)", cma["dscr_label"]],
         ["Payback Period (months)", _fmt_payback(cma), "< 24 mo", ("Not Achievable" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else ("Good" if float(cma.get("breakeven_months",0))<24 else "Monitor"))],
         ["Margin of Safety",       rp2(cma["margin_of_safety"]),"> 0",    "Positive" if cma["margin_of_safety"]>0 else "Negative"],
-    ], colWidths=[70*mm,35*mm,35*mm,30*mm])
+    ]
+    rep_t = Table(rep_rows, colWidths=[70*mm,35*mm,35*mm,30*mm])
     rep_t.setStyle(BTS())
     story.append(rep_t)
     NL(story, 4)
+
+    # CA AUDIT: existing_monthly_emi (Section 05, an existing-business loan)
+    # and promoter_net_worth.home_loan_emi (Section 09/personal net worth)
+    # are pre-existing obligations that draw on the same cash accruals as
+    # the new term loan above but were never deducted anywhere. Adjusted
+    # DSCR below re-runs the SAME term_loan_dscr() formula with those
+    # combined EMIs subtracted from cash accruals first — a genuine
+    # after-all-obligations debt-service view, shown only when such EMIs
+    # exist so an unaffected report's Section 28 is unchanged.
+    if dscr.get("has_existing_emi"):
+        H2("Adjusted Term Loan DSCR (Including Existing EMI Obligations)", story)
+        _existing_emi_mo = dscr["existing_annual_emi"] / 12
+        story.append(Paragraph(
+            f"<b>Combined existing EMI:</b> Rs.{_existing_emi_mo:,.0f}/month "
+            f"(Rs.{dscr['existing_annual_emi']:,.0f}/year) — existing business loan EMI (Section 05) "
+            "plus the promoter's personal home loan EMI (Section 09), both pre-existing obligations "
+            "not related to the new term loan being appraised here.",
+            ST["small"]))
+        NL(story, 2)
+        adj_t = Table([
+            ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
+            ["(A) Cash Accruals (PAT + Dep)"]        + [r(d["cash_accruals"])          for d in dr],
+            ["(A) Less: Existing EMI (Annualised)"]  + [r(d["existing_emi_annual"])     for d in dr],
+            ["(A) Adjusted Cash Accruals"]           + [r(d["adjusted_cash_accruals"])  for d in dr],
+            ["(A) Add: Interest on TL"]              + [r(d["tl_interest"])             for d in dr],
+            ["Adjusted Total (A) — Numerator"]       + [r(d["adjusted_total_a"])        for d in dr],
+            ["Total (B) — Denominator (unchanged)"]  + [r(d["total_b"])                 for d in dr],
+            ["Adjusted Term Loan DSCR"]              + [str(d["adjusted_dscr"])         for d in dr],
+        ], colWidths=[60*mm]+[22*mm]*5)
+        adj_t.setStyle(BTS())
+        for idx in [3, 5]: adj_t.setStyle(TOT(idx))
+        story.append(adj_t)
+        NL(story, 3)
+        story.append(Paragraph(
+            f"<b>Average Adjusted DSCR (5-Year):</b> {dscr['average_adjusted_dscr']} "
+            f"({dscr['adjusted_dscr_label']}) vs. the primary Average Term Loan DSCR of {avg} above — "
+            "this is the more conservative, real-world debt-service capacity after ALL known "
+            "obligations, not just the new term loan.",
+            ST["normal"]))
+        NL(story, 4)
     # CA AUDIT: Payback Period must show its own working, not just assert a
     # number — a cumulative cash-flow recovery walk against the Initial
     # Investment, using each year's own (declining or growing) Cash Accrual.

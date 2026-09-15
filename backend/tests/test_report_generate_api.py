@@ -359,13 +359,140 @@ class TestMoratoriumDisplayMatchesEffectiveSchedule:
         assert "9 month(s) moratorium was requested" in text, "Must disclose the original request and the rounding applied"
 
 
+def _msme_psu_subsidy_payload():
+    """A minimal MSME_PSU payload with a state capital subsidy — exercises
+    the crude-vs-real working-capital-estimate reconciliation bug."""
+    return {
+        "scheme": "msme_psu",
+        "loan_purpose": "Purchase of printing equipment",
+        "applicant": {"full_name": "Test Promoter", "mobile": "9999999999", "area_type": "Urban"},
+        "business": {
+            "business_name": "Test Printing Co",
+            "industry_type": "service",
+            "business_status": "New Business",
+            "location": "Indore", "district": "Indore",
+        },
+        "project": {
+            "building_cost": 100000,
+            "machinery_items": [{"name": "Digital Press", "quantity": 1, "unit_price": 800000}],
+            "tools_installation": 40000,
+            "computers_cost": 80000,
+            "furniture_cost": 30000,
+            "electrification_cost": 40000,
+            "preliminary_expenses": 20000,
+        },
+        "production": {"input_qty_per_day": 0, "selling_price_per_unit": 280000, "working_days_per_year": 300},
+        "assumptions": {
+            "term_loan_pct": 75, "wc_loan_pct": 60, "interest_rate_pct": 11.0,
+            "tenure_months": 72, "moratorium_months": 6, "capital_subsidy_pct": 15,
+            "revenue_growth_pct": 7, "expense_growth_pct": 6, "tax_rate_pct": 25,
+            "depreciation_pct": 15, "building_dep_rate_pct": 10,
+            "stock_holding_days": 15, "debtor_days": 15, "creditor_days": 20,
+            "capacity_y1_pct": 85, "capacity_y2_pct": 90, "capacity_y3_pct": 95,
+            "capacity_y4_pct": 98, "capacity_y5_pct": 100,
+        },
+        "expenses": {"rent": 15000, "raw_materials": 60000},
+        "manpower": {"skilled_count": 1, "skilled_salary": 15000},
+    }
+
+
+class TestProjectCostSingleSourceOfTruth:
+    """CA AUDIT: route_scheme() can only estimate Year-1 working capital with
+    a crude heuristic ("1.5 months of 50%-capacity revenue") before the
+    real, detailed WC schedule exists — every downstream consumer of
+    scheme_data["project_cost"] (Payback Period's Initial Investment,
+    Section 09's Promoter Share, the scorecard's ROI) used to silently read
+    that crude estimate, disagreeing with Section 07's own item-summed
+    Total Project Cost."""
+
+    def test_payback_initial_investment_matches_section07_total_project_cost(self):
+        resp = client.post("/api/v1/report/generate", json=_msme_psu_subsidy_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        section07_total = _year1_row_value("TOTAL (Initial Project Investment)", text)
+        idx = text.find("Initial Investment (Total Project Cost)")
+        assert idx != -1
+        payback_initial_investment = _year1_row_value("Initial Investment (Total Project Cost)", text[idx:])
+        assert payback_initial_investment == section07_total, (
+            f"Section 28's Payback Period Initial Investment ({payback_initial_investment}) must equal "
+            f"Section 07's own Total Project Cost ({section07_total}) — both describe the same project"
+        )
+
+    def test_promoter_share_of_total_funding_uses_subsidy_inclusive_fixed_cost(self):
+        """Section 09's "Total Funding Requirement Promoter Share %" used to
+        exclude the capital subsidy from its own Fixed Cost component
+        (the same bug already fixed for Section 02's "Fixed Project Cost"),
+        understating the true funding-requirement base."""
+        resp = client.post("/api/v1/report/generate", json=_msme_psu_subsidy_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        fixed_cost = _year1_row_value("Fixed Project Cost", text)
+        wc_total = _year1_row_value("Working Capital Requirement", text)
+        promoter_total = _year1_row_value("Total Promoter Contribution", text)
+        idx = text.find("Total Funding Requirement Promoter Share")
+        assert idx != -1
+        m = re.search(r"[\d.]+", text[idx + len("Total Funding Requirement Promoter Share"):])
+        displayed_pct = float(m.group(0))
+        expected_pct = round(promoter_total / (fixed_cost + wc_total) * 100, 1)
+        assert displayed_pct == expected_pct, (
+            f"Displayed {displayed_pct}% must equal Promoter Contribution / (Fixed Cost + WC Requirement) "
+            f"= {expected_pct}%, both using the subsidy-inclusive Fixed Cost"
+        )
+
+    def test_term_loan_pct_shows_actual_effective_rate_not_the_raw_assumption(self):
+        """Section 10 used to show the raw term_loan_pct assumption (e.g.
+        75%) even when a capital subsidy meant the term loan actually funds
+        a smaller share of the (subsidy-inclusive) Fixed Project Cost."""
+        resp = client.post("/api/v1/report/generate", json=_msme_psu_subsidy_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        fixed_cost = _year1_row_value("Fixed Project Cost", text)
+        # "A. Term Loan" heading's own "Amount" row — unambiguous, unlike
+        # bare "Term Loan" which also matches "Term Loan %" / "Term Loan
+        # Interest" / "Term Loan Requested" elsewhere on the page.
+        term_loan = _year1_row_value("Amount", text[text.find("A. Term Loan"):])
+        idx = text.find("Term Loan % (of Fixed Cost)")
+        assert idx != -1, "Section 10 must label this as the effective rate, not a bare assumption"
+        m = re.search(r"[\d.]+", text[idx + len("Term Loan % (of Fixed Cost)"):])
+        displayed_pct = float(m.group(0))
+        expected_pct = round(term_loan / fixed_cost * 100, 1)
+        assert displayed_pct == expected_pct
+        assert displayed_pct != 75.0, "fixture's subsidy must make the effective rate differ from the raw 75% assumption"
+
+
+class TestConstitutionSinglePromoterDisclosure:
+    """CA AUDIT: the input schema (ApplicantInfo) only ever captures ONE
+    signing promoter's KYC/net-worth data — there is no partner list. A
+    report whose declared constitution (business_type) is a multi-person
+    entity (Partnership/LLP/Private Limited/Cooperative) is therefore
+    silently missing every other partner's financials. This must be
+    flagged as an advisory warning (V14), not silently accepted."""
+
+    def test_partnership_constitution_triggers_v14_warning(self):
+        payload = _msme_psu_subsidy_payload()
+        payload["business"]["business_type"] = "Partnership"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        warnings = resp.json().get("validation_warnings") or []
+        assert any("V14" in w and "Partnership" in w for w in warnings), warnings
+
+    def test_proprietorship_constitution_does_not_trigger_v14_warning(self):
+        payload = _msme_psu_subsidy_payload()
+        payload["business"]["business_type"] = "Proprietorship"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        warnings = resp.json().get("validation_warnings") or []
+        assert not any("V14" in w for w in warnings), warnings
+
+
 class TestExistingLoanEmiDisclosure:
     def test_existing_emi_caveat_appears_when_reported(self):
-        """BUG FIX: existing_monthly_emi is captured (Section 05) but never
-        deducted from projected cash accruals anywhere — Term Loan DSCR and
-        the credit score both implicitly assume it doesn't exist. Must be
-        disclosed as a caveat, matching the existing "promoter remuneration
-        not considered" pattern."""
+        """CA AUDIT: existing_monthly_emi (Section 05) is a pre-existing
+        obligation excluded from the PRIMARY Term Loan DSCR (by design —
+        that DSCR is scoped to the new term loan only). It must still be
+        disclosed, and must point the reader to the "Adjusted Term Loan
+        DSCR" (Section 28) that actually accounts for it — not merely say
+        it's ignored everywhere."""
         payload = _cgtmse_payload()
         payload["business"]["business_status"] = "Existing Business"
         payload["business"]["business_duration_months"] = 24
@@ -376,8 +503,32 @@ class TestExistingLoanEmiDisclosure:
         resp = client.post("/api/v1/report/generate", json=payload)
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
-        assert "Existing loan EMI of Rs.9,000/month" in text
-        assert "NOT deducted from projected" in text and "cash accruals" in text
+        assert "existing business loan EMI of Rs.9,000/month" in text
+        assert "Adjusted Term Loan DSCR" in text
+
+    def test_adjusted_dscr_table_reflects_combined_existing_and_home_loan_emi(self):
+        """The Adjusted DSCR in Section 28 must combine BOTH the existing
+        business loan EMI (Section 05) and the promoter's personal home
+        loan EMI (Section 09/net worth) — they are separate obligations,
+        and both draw on the same cash accruals as the new term loan."""
+        payload = _cgtmse_payload()
+        payload["business"]["business_status"] = "Existing Business"
+        payload["business"]["business_duration_months"] = 24
+        payload["business"]["commencement_date"] = "2024-06-01"
+        payload["business"]["existing_annual_turnover"] = 2000000
+        payload["business"]["existing_annual_profit"] = 150000
+        payload["business"]["existing_monthly_emi"] = 9000
+        payload["promoter_net_worth"] = {"home_loan_emi": 5000}
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        # Normalize whitespace — ReportLab Paragraph-wraps this sentence
+        # across lines, so pypdf's extracted text can carry a "\n" wherever
+        # the layout happened to wrap, splitting an otherwise-contiguous
+        # phrase in the raw string.
+        flat = " ".join(text.split())
+        assert "Combined existing EMI: Rs.14,000/month" in flat
+        assert "personal home loan EMI of Rs.5,000/month" in flat
 
 
 class TestApplicantProfileFreeTextFields:

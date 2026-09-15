@@ -276,6 +276,27 @@ def validate_report(report_data: dict) -> None:
         except (ValueError, TypeError):
             pass  # unparseable date — not this check's concern
 
+    # V14: Constitution declared as a multi-person entity (Partnership/LLP/
+    # Private Limited/Cooperative) but the input schema only ever captures
+    # ONE signing promoter's KYC and net-worth data (ApplicantInfo has no
+    # partner list) — every net-worth, DSCR and personal-guarantee figure
+    # in the report is therefore that single promoter's alone, silently
+    # understating a genuine multi-partner entity's actual means/liability,
+    # or simply being the wrong label for what is really a one-person
+    # business. Advisory only: the schema cannot check the real partner
+    # count, so this can't be a hard error.
+    _multi_person_types = ("partnership", "llp", "private limited", "pvt ltd",
+                            "cooperative", "co-operative", "huf")
+    _biz_type_lc = str(business_info.get("business_type", "") or "").lower()
+    if any(t in _biz_type_lc for t in _multi_person_types):
+        warnings.append(
+            f"V14 WARN — Constitution is declared as '{business_info.get('business_type')}', "
+            "but this report captures financial/KYC data for only ONE promoter. If other "
+            "partners/directors exist, their net worth, collateral and personal guarantees "
+            "are NOT reflected anywhere in this report — confirm the constitution and, if "
+            "multiple partners are involved, obtain their details separately before submission."
+        )
+
     # ── Attach warnings ───────────────────────────────────────────────────────
     report_data["validation_warnings"] = warnings
 

@@ -1141,6 +1141,14 @@ def _build_dpr_from_report(
             "tl_interest": d.get("tl_interest", d.get("interest", 0)),  # BUG 8 fix: key renamed
             "total_a": d.get("total_a", 0),
             "tl_repayment": d.get("principal", 0), "total_b": d.get("total_b", 0), "dscr": d.get("dscr", 0),
+            # CA AUDIT: Adjusted DSCR (incl. existing EMI obligations) —
+            # propagate through, since builder.py's Section 28 reads from
+            # THIS rebuilt dict (dpr["dscr"]), not calculate_dscr()'s raw
+            # output directly.
+            "existing_emi_annual":      d.get("existing_emi_annual", 0),
+            "adjusted_cash_accruals":   d.get("adjusted_cash_accruals", d.get("cash_accruals", 0)),
+            "adjusted_total_a":         d.get("adjusted_total_a", d.get("total_a", 0)),
+            "adjusted_dscr":            d.get("adjusted_dscr", d.get("dscr", 0)),
         })
 
     # Revenue at 100% capacity = Year-1 revenue ÷ Year-1 capacity (before growth)
@@ -1183,7 +1191,13 @@ def _build_dpr_from_report(
         "balance_sheet_years":   bs,
         "cash_flow_years":       _build_cash_flow(income, loan_sched, wc_sched, bs),
         "breakeven_years":       bep,
-        "dscr":                  {"years": dscr_years, "average": float(dscr_data.get("average", 0))},
+        "dscr":                  {
+            "years": dscr_years, "average": float(dscr_data.get("average", 0)),
+            "existing_annual_emi":   float(dscr_data.get("existing_annual_emi", 0)),
+            "average_adjusted_dscr": float(dscr_data.get("average_adjusted_dscr", dscr_data.get("average", 0))),
+            "adjusted_dscr_label":   dscr_data.get("adjusted_dscr_label", dscr_data.get("dscr_label", "")),
+            "has_existing_emi":      bool(dscr_data.get("has_existing_emi", False)),
+        },
         "profitability": {
             "reference_year": 3,
             "sales": float(income[2]["revenue"] if len(income) > 2 else 0),

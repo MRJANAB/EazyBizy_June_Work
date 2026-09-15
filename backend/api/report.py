@@ -85,8 +85,42 @@ async def generate_report(data: CMAReportInput):
         dep            = calculate_depreciation(data, scheme_data)
         loan_schedule  = calculate_loan_schedule(data, scheme_data)
         wc_schedule    = calculate_wc_by_year(data, scheme_data)
+
+        # CA AUDIT: route_scheme() (via _compute_project_cost) can only
+        # estimate Year-1 working capital with a crude heuristic ("1.5
+        # months of 50%-capacity revenue") — the REAL, detailed Tandon-
+        # style WC requirement (stock/debtors/WIP/FG minus creditors,
+        # actual days) isn't available until calculate_wc_by_year() runs,
+        # a step later in this same pipeline. Every downstream consumer of
+        # scheme_data["project_cost"]/"wc_margin"/"wc_loan"
+        # (calculate_scorecard's ROI, calculate_break_even's Payback Period
+        # Initial Investment, calculate_monthly_pnl, validator checks) was
+        # silently using that CRUDE estimate — e.g. one live report showed
+        # Section 07's own Total Project Cost as Rs.15,01,700 while Section
+        # 28's Payback Period used Rs.15,15,300 for the same "Initial
+        # Investment", because the two figures came from different WC
+        # bases. Overwrite scheme_data's WC-derived fields with the real
+        # ones now that they exist, exactly like the moratorium-override
+        # fix above — one correction here, before anything downstream
+        # reads it, instead of patching each consumer separately.
+        _real_wc_margin = float(wc_schedule[0].get("margin", 0) or 0) if wc_schedule else 0.0
+        _real_wc_loan   = float(wc_schedule[0].get("bank_loan", 0) or 0) if wc_schedule else 0.0
+        scheme_data["wc_margin"] = round(_real_wc_margin)
+        scheme_data["wc_loan"]   = round(_real_wc_loan)
+        scheme_data["project_cost"] = round(float(scheme_data.get("fixed_project_cost", 0) or 0) + _real_wc_margin)
+
         income         = calculate_income_statement(data, scheme_data, dep, loan_schedule, wc_schedule)
-        dscr           = calculate_dscr(income, loan_schedule, scheme_data)
+        # CA AUDIT: business.existing_monthly_emi (an existing-business loan
+        # already being serviced) and promoter_net_worth.home_loan_emi (the
+        # promoter's own personal home loan) are two SEPARATE pre-existing
+        # obligations, both drawing on the same cash accruals as the new
+        # term loan being appraised — combine them into one Adjusted DSCR
+        # input rather than deducting only one or leaving both unmodelled.
+        _existing_biz_emi  = float(getattr(data.business, "existing_monthly_emi", 0) or 0)
+        _existing_home_emi = float(getattr(data.promoter_net_worth, "home_loan_emi", 0) or 0)
+        _combined_existing_emi = _existing_biz_emi + _existing_home_emi
+        dscr           = calculate_dscr(income, loan_schedule, scheme_data,
+                                         existing_monthly_emi=_combined_existing_emi)
         # Backfill per-year DSCR into income rows (pdf_builder reads income[i]["dscr"])
         for i, row in enumerate(income):
             row["dscr"] = dscr["years"][i]["dscr"] if i < len(dscr["years"]) else 0.0

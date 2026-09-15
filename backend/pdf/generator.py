@@ -27,6 +27,23 @@ def _fmt_date(raw: str) -> str:
     return raw
 
 
+def _format_enum_or_freetext(raw: str) -> str:
+    """Title-case an underscore-separated ENUM token (e.g. "plus_two" ->
+    "Plus Two"), but pass free text straight through unchanged.
+
+    BUG FIX: this used to call .title() unconditionally on any value not
+    matching a known enum key — including free text an applicant actually
+    typed, like "Intermediate (12th)". Python's .title() capitalises after
+    every non-letter boundary, including digits, so "12th" became "12Th".
+    A value already containing a space or non-alphanumeric formatting is
+    free text, not an enum code, and must not be re-cased at all.
+    """
+    raw = str(raw or "")
+    if "_" in raw and " " not in raw:
+        return raw.replace("_", " ").title()
+    return raw
+
+
 def _calc_gross_margin_pct(income: list, monthly: dict | None = None) -> float:
     """Return Year-1 gross margin % = (Revenue − COGS) / Revenue × 100."""
     # Priority 1: Use monthly_pnl if available (most fresh)
@@ -364,7 +381,7 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
                                   "plus_two":      "+2 / Higher Secondary",
                                   "tenth":         "10th / SSC",
                               }.get(str(applicant.get("education", "")).lower(),
-                                    str(applicant.get("education", "")).replace("_", " ").title()),
+                                    _format_enum_or_freetext(applicant.get("education", ""))),
         "social_category":    str(applicant.get("social_category", "General")),
         "pan_number":         applicant.get("pan_number", ""),
         "aadhar_number":      applicant.get("aadhar_number", ""),
@@ -388,7 +405,7 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
                                   "cooperative":     "Cooperative Society",
                                   "trust":           "Trust / Society",
                               }.get(str(business.get("business_type", "")).lower(),
-                                    str(business.get("business_type", "")).replace("_", " ").title()),
+                                    _format_enum_or_freetext(business.get("business_type", ""))),
         "industry":           business.get("industry_type", ""),
         "commencement_date":  _fmt_date(business.get("commencement_date", "")),
         "primary_location":   business.get("location", ""),

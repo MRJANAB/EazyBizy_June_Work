@@ -704,10 +704,15 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Date of Birth",  inp.get("date_of_birth",""),      "Gender",          inp.get("gender","")],
         ["Education",      inp.get("education",""),          "Social Category", inp.get("social_category","")],
         ["PAN Number",     inp.get("pan_number",""),         "Aadhaar",         inp.get("aadhar_number","")],
-        ["Mobile",         inp.get("mobile",""),             "Email",           inp.get("email","")],
+        ["Mobile",         inp.get("mobile",""),             "Email",           Paragraph(inp.get("email","") or "—", ST["table_cell"])],
         ["Experience",     f"{inp.get('years_of_experience',0)} Years", "Business Status", inp.get("business_status","")],
-        ["Previous Employer", inp.get("previous_employer",""), "Previous Role", inp.get("previous_role","")],
-        ["Address",        inp.get("address",""),            "",                ""],
+        # BUG FIX: previous_employer/previous_role/address are free-text —
+        # a real employer name (e.g. "Guntur Mirchi Yard — Commission Agent
+        # Office") overflowed straight into the neighbouring "Previous
+        # Role" cell since plain strings don't wrap in a ReportLab Table.
+        ["Previous Employer", Paragraph(inp.get("previous_employer","") or "—", ST["table_cell"]),
+         "Previous Role", Paragraph(inp.get("previous_role","") or "—", ST["table_cell"])],
+        ["Address",        Paragraph(inp.get("address","") or "—", ST["table_cell"]), "", ""],
     ], colWidths=[30*mm,55*mm,30*mm,55*mm])
     appl.setStyle(BTS())
     story.append(appl)

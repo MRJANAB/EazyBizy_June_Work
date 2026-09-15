@@ -339,3 +339,36 @@ class TestTradingSectionsWithItemizedProductsList:
         text = _download_pdf_text(resp.json()["report_id"])
         assert "Nashik  Nashik" not in text
         assert "Nashik, Nashik" not in text
+
+
+class TestApplicantProfileFreeTextFields:
+    def test_previous_employer_renders_as_a_paragraph_not_a_raw_string(self):
+        """BUG FIX: "Previous Employer" is free text — a realistic value
+        like "Guntur Mirchi Yard — Commission Agent Office" visually
+        overflowed straight into the neighbouring "Previous Role" cell
+        (plain strings don't wrap in a ReportLab Table; confirmed by
+        rendering the page to an image — pypdf's text extraction doesn't
+        reorder on visual overlap, so it can't catch this by itself).
+        Fixed by Paragraph-wrapping the cell. This test pins the content
+        survives that wrap; the layout fix itself was verified visually."""
+        payload = _pmegp_trading_payload()
+        payload["applicant"]["previous_employer"] = "Guntur Mirchi Yard — Commission Agent Office"
+        payload["applicant"]["previous_role"] = "Grading & Quality Assistant"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Guntur Mirchi Yard" in text
+        assert "Grading & Quality Assistant" in text
+
+    def test_education_free_text_with_ordinal_is_not_mangled_by_title_case(self):
+        """BUG FIX: any education value not matching a known enum key fell
+        through to Python's .title(), which capitalises after every
+        non-letter boundary — including digits — so free text like
+        "Intermediate (12th)" became "Intermediate (12Th)"."""
+        payload = _pmegp_trading_payload()
+        payload["applicant"]["education"] = "Intermediate (12th)"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Intermediate (12th)" in text
+        assert "12Th" not in text

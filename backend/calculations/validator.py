@@ -10,7 +10,7 @@ V6.  PAT trend check (warn if all negative)
 V7.  Every ClosingCash_YearN > 0
 V8.  Sensitivity: higher revenue → higher PAT
 V9.  RM_YearN ≈ capacityPct[N] × RM_at100pct
-V10. GrossBlock_PM == PM_with_contingency
+V10. GrossBlock == Building + PM_with_contingency + Fixtures
 V11. PromoterCash >= 0
 V12. Balance sheet: TotalAssets == TotalLiabilities (each year)
 
@@ -164,13 +164,26 @@ def validate_report(report_data: dict) -> None:
                     "RM may not be scaling correctly from unit costs."
                 )
 
-    # V10: GrossBlock_PM == PM_with_contingency
-    dep_pm  = float(dep.get("pm_with_contingency", dep.get("machinery_gross", 0)) or 0)
-    dep_gb  = float(dep.get("machinery_gross", 0) or 0)
-    if dep_pm > 0 and dep_gb > 0 and not close(dep_pm, dep_gb, 1):
+    # V10: Gross Block must equal Building + P&M-with-contingency + Fixtures.
+    # BUG FIX: this used to compare pm_with_contingency against
+    # machinery_gross (the pre-contingency subtotal) and warn when they
+    # DIFFERED — but they are DESIGNED to differ whenever contingency_pct
+    # > 0 (the normal case for virtually every application), so the old
+    # check false-positived on every healthy report and could never
+    # actually catch anything. The real regression to guard against (BUG 5
+    # FIX in calculations/depreciation.py) is Gross Block silently being
+    # built from the pre-contingency figure instead of the loaded one —
+    # checked directly here by re-deriving Gross Block from its own
+    # stated components.
+    dep_pm       = float(dep.get("pm_with_contingency", 0) or 0)
+    dep_bldg     = float(dep.get("building_gross", 0) or 0)
+    dep_fixtures = float(dep.get("fixtures_gross", 0) or 0)
+    dep_gb       = float(dep.get("gross_block", 0) or 0)
+    expected_gb  = R(dep_bldg + dep_pm + dep_fixtures, 2)
+    if dep_gb > 0 and not close(dep_gb, expected_gb, 1):
         warnings.append(
-            f"V10 WARN — Gross Block P&M (₹{dep_gb:,.0f}) ≠ P&M with contingency (₹{dep_pm:,.0f}). "
-            "Depreciation base should include contingency."
+            f"V10 WARN — Gross Block (₹{dep_gb:,.0f}) ≠ Building + P&M-with-contingency + Fixtures "
+            f"(₹{expected_gb:,.0f}). Depreciation base may not correctly include contingency."
         )
 
     # V11: PromoterCash >= 0

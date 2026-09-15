@@ -623,6 +623,9 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "promoter_pct":       float(scheme.get("promoter_pct", 10)),
         "margin_money":       float(scheme.get("margin_money", 0) or 0),
         "margin_money_pct":   float(scheme.get("margin_money_pct", 0) or 0),
+        "cgtmse_annual_fee":  float(scheme.get("cgtmse_annual_fee", 0) or 0),
+        "cgtmse_agf_pct":     float(scheme.get("cgtmse_agf_pct", 0) or 0),
+        "cgtmse_coverage_pct": float(scheme.get("cgtmse_coverage_pct", 0) or 0),
         # Loan schedule filtered to actual tenure (no zero-padded rows shown in PDF)
         "yr_schedule":        loan_sched[:tenure_yrs],
         "projections_5yr":    income,
@@ -957,12 +960,20 @@ def _build_dpr_from_report(
                 "total_cost": total
             })
 
+    # BUG FIX: "leaves_cost" below is deliberately an "at 100% Capacity"
+    # figure (input_qty x working_days x rate — the section's own stated
+    # basis, per its "Raw Material & Consumables (at 100% Capacity)"
+    # heading), but "total" used to be cogs_y1 — the capacity-ADJUSTED
+    # actual Year-1 COGS. The row and its own TOTAL were on two different
+    # bases, so TOTAL never equalled the sum of the rows shown above it.
+    # TOTAL must sum the rows actually displayed in this table (Section 12).
+    _leaves_cost_100pct = R(rm_cost_per_unit * annual_leaves_qty) if annual_leaves_qty > 0 else R(cogs_y1)
     raw_materials = {
         "items":            formatted_rm_items,
-        "leaves_cost":      R(rm_cost_per_unit * annual_leaves_qty) if annual_leaves_qty > 0 else R(cogs_y1),
+        "leaves_cost":      _leaves_cost_100pct,
         "consumables_cost": 0,
         "bottles_cost":     0,
-        "total":            R(cogs_y1),
+        "total":            _leaves_cost_100pct,
         "annual_leaves_qty": annual_leaves_qty,
     }
 
@@ -997,6 +1008,7 @@ def _build_dpr_from_report(
             "depreciation":       dep_val,
             "admin_expenses":     float(yr.get("admin_expenses", 0) or 0),  # rent/overhead (separate from salary)
             "marketing_expenses": mktg_val,
+            "cgtmse_fee":         float(yr.get("cgtmse_fee", 0) or 0),
             "wc_interest":        wc_int_val,
             "tl_interest":        tl_int_val,
             "total_expenses":     total_exp_val,

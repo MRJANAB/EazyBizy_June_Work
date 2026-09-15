@@ -497,6 +497,45 @@ class TestIncomeStatement:
                     "PAT - TL Service formula when TL interest is nonzero"
                 )
 
+    def test_cgtmse_guarantee_fee_is_actually_charged(self):
+        """BUG FIX: schemes/cgtmse.py computes a real Annual Guarantee Fee
+        and its own docstring says it "MUST be added to annual operating
+        expenses" — but calculate_income_statement() accepted scheme_data
+        as a parameter and never once read it, so the fee was silently
+        dropped, overstating EBITDA/PAT/cash accruals/DSCR for every
+        CGTMSE report. It must now show up as its own fixed expense,
+        declining each year with the amortising loan balance (same base as
+        interest), and must actually reduce EBITDA."""
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        data = _make_data()
+        cgtmse_scheme = {**SCHEME_PMEGP, "cgtmse_agf_pct": 1.0}  # 1% p.a. on outstanding
+        dep  = calculate_depreciation(data, cgtmse_scheme)
+        loan = calculate_loan_schedule(data, cgtmse_scheme)
+        wc   = calculate_wc_by_year(data, cgtmse_scheme)
+        income_with_fee = calculate_income_statement(data, cgtmse_scheme, dep, loan, wc)
+        income_without_fee = calculate_income_statement(data, SCHEME_PMEGP, dep, loan, wc)
+        for i, yr in enumerate(income_with_fee):
+            expected_fee = round(loan[i]["opening_balance"] * 1.0 / 100, 2)
+            assert abs(yr["cgtmse_fee"] - expected_fee) < 1, (
+                f"Year {yr['year']}: cgtmse_fee {yr['cgtmse_fee']} != 1% of opening balance {expected_fee}"
+            )
+            if expected_fee > 0:
+                assert yr["cgtmse_fee"] > 0
+                # The fee must actually reduce EBITDA relative to an
+                # otherwise-identical report with no CGTMSE fee.
+                assert yr["ebitda"] < income_without_fee[i]["ebitda"]
+        # Fee must decline year over year as the loan amortises (never flat).
+        fees = [yr["cgtmse_fee"] for yr in income_with_fee if yr["cgtmse_fee"] > 0]
+        assert fees == sorted(fees, reverse=True), "CGTMSE fee must decline as the loan amortises"
+
+    def test_no_cgtmse_fee_when_scheme_is_not_cgtmse(self):
+        income = self._get_income()
+        for yr in income:
+            assert yr.get("cgtmse_fee", 0) == 0
+
     def test_revenue_increases_with_growth(self):
         income = self._get_income(revenue_growth_pct=7.0)
         for i in range(1, 4):  # Years 2-4 (not 5 because cap schedule ends)

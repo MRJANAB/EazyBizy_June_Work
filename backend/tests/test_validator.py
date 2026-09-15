@@ -130,6 +130,39 @@ class TestV13BusinessStatusVsCommencementDate:
         validate_report(report_data)  # must not raise
 
 
+class TestV10GrossBlockContingency:
+    """BUG FIX: V10 used to compare pm_with_contingency against
+    machinery_gross (the pre-contingency subtotal) and warn when they
+    DIFFERED — but they are designed to differ whenever contingency_pct
+    > 0 (virtually every real application), so the old check
+    false-positived on every healthy report using a contingency loading
+    at all, and could never actually catch a real regression."""
+
+    def test_healthy_report_with_contingency_does_not_false_positive(self):
+        report_data = _minimal_report_data(_scheme_data())
+        report_data["depreciation"] = {
+            "building_gross": 300000.0,
+            "machinery_gross": 700000.0,       # pre-contingency
+            "pm_with_contingency": 735000.0,   # +5% contingency — DIFFERS from machinery_gross by design
+            "fixtures_gross": 0.0,
+            "gross_block": 1035000.0,          # building + pm_with_contingency + fixtures
+        }
+        validate_report(report_data)  # must not raise, must not warn V10
+        assert not any("V10 WARN" in w for w in report_data["validation_warnings"])
+
+    def test_gross_block_not_matching_its_own_components_is_still_caught(self):
+        report_data = _minimal_report_data(_scheme_data())
+        report_data["depreciation"] = {
+            "building_gross": 300000.0,
+            "machinery_gross": 700000.0,
+            "pm_with_contingency": 735000.0,
+            "fixtures_gross": 0.0,
+            "gross_block": 700000.0,  # WRONG — used pre-contingency machinery_gross instead
+        }
+        validate_report(report_data)
+        assert any("V10 WARN" in w for w in report_data["validation_warnings"])
+
+
 class TestV5DscrMessageIsActionable:
     def test_dscr_failure_message_does_not_blame_a_fixed_bug(self):
         """The V5 message used to say 'likely RM is calculated from

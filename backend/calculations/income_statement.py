@@ -172,6 +172,18 @@ def calculate_income_statement(
     else:
         fixed_base = yr1_rev_at_cap * ind_defaults["fixed_ratio"]
 
+    # BUG FIX: scheme_data was accepted as a parameter but never actually
+    # read — for a CGTMSE-covered loan, schemes/cgtmse.py computes a real
+    # Annual Guarantee Fee (its own docstring says "MUST be added to annual
+    # operating expenses in the CMA") and router.py stores it on scheme_data,
+    # but nothing downstream ever added it to any expense line, so CGTMSE
+    # reports silently omitted a mandatory recurring cost — overstating
+    # EBITDA, PAT, cash accruals and DSCR. AGF is charged on the outstanding
+    # (guaranteed) loan balance each year, same base as term-loan interest,
+    # so it correctly declines as the loan amortises rather than staying
+    # flat on the original sanctioned amount.
+    _cgtmse_agf_pct = float((scheme_data or {}).get("cgtmse_agf_pct", 0) or 0)
+
     result              = []
     cumulative_reserves = 0.0
 
@@ -207,6 +219,15 @@ def calculate_income_statement(
             salary_exp     = 0.0
             rent_admin_exp = 0.0
             fixed_exp      = R(fixed_base * (1 + exp_g) ** i)
+
+        # CGTMSE Annual Guarantee Fee — charged on the outstanding term loan
+        # balance (same base as interest), so it declines with the loan.
+        # Genuinely a fixed cost (independent of capacity/volume), so it is
+        # folded into fixed_exp — every downstream consumer that reads
+        # "fixed_expenses" (e.g. calculations/break_even.py) picks it up
+        # automatically — and also exposed under its own key for display.
+        cgtmse_fee = R(float(loan_schedule[i]["opening_balance"]) * _cgtmse_agf_pct / 100, 2) if _cgtmse_agf_pct > 0 else 0.0
+        fixed_exp  = R(fixed_exp + cgtmse_fee)
 
         total_opex = R(cogs + marketing + other_var + fixed_exp)
         ebitda     = R(rev - total_opex)
@@ -245,6 +266,7 @@ def calculate_income_statement(
             "marketing_expenses": marketing,
             "labour":             salary_exp if _actual_fixed_base > 0 else fixed_exp,
             "admin_expenses":     rent_admin_exp,
+            "cgtmse_fee":         cgtmse_fee,
             "fixed_expenses":     fixed_exp,
             "total_fixed":        R(fixed_exp + marketing),
             "total_expenses":     R(total_opex + dep_yr + interest + wc_int),

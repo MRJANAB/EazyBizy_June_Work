@@ -66,6 +66,21 @@ async def generate_report(data: CMAReportInput):
         # 1. Route scheme → get financing structure
         scheme_data = route_scheme(data)
 
+        # BUG FIX: route_scheme() resolves a scheme-specific moratorium
+        # (e.g. CGTMSE / Mudra tiers default to their own moratorium via
+        # the Rules engine, distinct from whatever the applicant typed)
+        # into scheme_data["moratorium_months"] — but nothing downstream
+        # ever read that key. calculate_loan_schedule() (and every PDF
+        # display, via generator.py's inp dict) read
+        # data.assumptions.moratorium_months directly, so the scheme's own
+        # mandated moratorium was silently ignored in favour of whatever
+        # value happened to be in the raw input. Apply it once here so the
+        # rest of the pipeline is consistent with what route_scheme()
+        # actually decided.
+        _scheme_moratorium = scheme_data.get("moratorium_months")
+        if _scheme_moratorium is not None:
+            data.assumptions.moratorium_months = int(_scheme_moratorium)
+
         # 2. Run calculations in dependency order
         dep            = calculate_depreciation(data, scheme_data)
         loan_schedule  = calculate_loan_schedule(data, scheme_data)

@@ -1239,15 +1239,29 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     NL(story, 6)
 
     H2("Operating Expenses Summary (Year 1 → Year 5)", story)
+    _has_cgtmse_fee = any(float(cy.get("cgtmse_fee", 0) or 0) > 0 for cy in cop)
     opex_rows = [["Expense"] + [f"Year {cy['year']}" for cy in cop]]
     opex_rows.append(["Salary"] + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)])
     opex_rows.append(["Utilities / Power"] + [r(cy["power"]) for cy in cop])
     opex_rows.append(["Admin & Misc Expenses"] + [r(cy["admin_expenses"]) for cy in cop])
     opex_rows.append(["Marketing Expenses"] + [r(cy["marketing_expenses"]) for cy in cop])
-    opex_rows.append(["TOTAL OPEX"] + [r(cy["labour"] + cy["power"] + cy["admin_expenses"] + cy["marketing_expenses"]) for cy in cop])
+    if _has_cgtmse_fee:
+        opex_rows.append(["CGTMSE Guarantee Fee"] + [r(cy.get("cgtmse_fee", 0)) for cy in cop])
+    _opex_total_row = len(opex_rows)
+    opex_rows.append(["TOTAL OPEX"] + [
+        r(cy["labour"] + cy["power"] + cy["admin_expenses"] + cy["marketing_expenses"] + cy.get("cgtmse_fee", 0))
+        for cy in cop
+    ])
     opex_t = Table(opex_rows, colWidths=[40*mm]+[26*mm]*5)
-    opex_t.setStyle(BTS()); opex_t.setStyle(TOT(5))
+    opex_t.setStyle(BTS()); opex_t.setStyle(TOT(_opex_total_row))
     story.append(opex_t)
+    if _has_cgtmse_fee:
+        NL(story, 3)
+        story.append(Paragraph(
+            f"<b>CGTMSE Guarantee Fee:</b> {cma.get('cgtmse_agf_pct', 0)}% p.a. on the outstanding term loan "
+            "balance (declines as the loan amortises) — a mandatory recurring cost of CGTMSE coverage, "
+            "included as a fixed operating expense above.",
+            ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════
@@ -1259,6 +1273,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "Less: Direct Service Delivery Cost"  if _is_service else
         "Less: COGS"
     )
+    _cgtmse_fee_row = (["CGTMSE Guarantee Fee"] + [r(cy.get("cgtmse_fee", 0)) for cy in cop]) if _has_cgtmse_fee else None
     if _is_trading_service:
         pl_rows = [
             ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
@@ -1272,22 +1287,31 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ["Utilities / Power"]     + [r(cy["power"])              for cy in cop],
             ["Admin & Misc Expenses"] + [r(cy["admin_expenses"])     for cy in cop],
             ["Marketing Expenses"]    + [r(cy["marketing_expenses"]) for cy in cop],
-            ["EBITDA"]                + [r(cy.get("ebitda", cy["revenue"] - cy["raw_materials"] - cy["labour"] - cy["power"] - cy["admin_expenses"] - cy["marketing_expenses"])) for cy in cop],
+        ]
+        if _cgtmse_fee_row: pl_rows.append(_cgtmse_fee_row)
+        _ebitda_row = len(pl_rows)
+        pl_rows.append(["EBITDA"] + [r(cy.get("ebitda", 0)) for cy in cop])
+        pl_rows += [
             ["Depreciation"]          + [r(cy["depreciation"])       for cy in cop],
             ["Interest on WC"]        + [r(cy["wc_interest"])        for cy in cop],
             ["Interest on Term Loan"] + [r(cy["tl_interest"])        for cy in cop],
-            ["TOTAL EXPENSES"]        + [r(cy["total_expenses"])     for cy in cop],
+        ]
+        _total_exp_row = len(pl_rows)
+        pl_rows.append(["TOTAL EXPENSES"] + [r(cy["total_expenses"]) for cy in cop])
+        pl_rows += [
             ["Profit Before Tax"]     + [r(cy.get("profit_before_tax", cy["net_profit"])) for cy in cop],
             ["Less: Tax"]             + [r(cy.get("tax", 0))         for cy in cop],
-            ["NET PROFIT (PAT)"]      + [r(cy["net_profit"])         for cy in cop],
-            ["Reserves & Surplus"]    + [r(cy["reserves_surplus"])   for cy in cop],
-            ["Cash Accruals"]         + [r(cy["cash_accruals"])      for cy in cop],
         ]
+        _pat_row = len(pl_rows)
+        pl_rows.append(["NET PROFIT (PAT)"] + [r(cy["net_profit"]) for cy in cop])
+        pl_rows.append(["Reserves & Surplus"] + [r(cy["reserves_surplus"]) for cy in cop])
+        _cash_acc_row = len(pl_rows)
+        pl_rows.append(["Cash Accruals"] + [r(cy["cash_accruals"]) for cy in cop])
         pl_t = Table(pl_rows, colWidths=[58*mm]+[22.4*mm]*5)
         pl_t.setStyle(BTS())
-        for idx in [5, 6, 11, 15, 18, 20]: pl_t.setStyle(TOT(idx))
+        for idx in [5, _ebitda_row, _total_exp_row, _pat_row, _cash_acc_row]: pl_t.setStyle(TOT(idx))
     else:
-        pl_t = Table([
+        pl_rows = [
             ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
             ["Revenue at 100%"]             + [r(v) for v in _rev100_by_year],
             ["Capacity Utilisation"]        + [rp(cy["capacity"])                    for cy in cop],
@@ -1298,19 +1322,29 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ["Less: Labour & Wages"]        + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)],
             ["Less: Admin & Overhead"]      + [r(cy["admin_expenses"])               for cy in cop],
             ["Less: Marketing Expenses"]    + [r(cy["marketing_expenses"])           for cy in cop],
-            ["EBITDA"]                      + [r(cy.get("ebitda", 0))               for cy in cop],
+        ]
+        if _cgtmse_fee_row: pl_rows.append(_cgtmse_fee_row)
+        _ebitda_row = len(pl_rows)
+        pl_rows.append(["EBITDA"] + [r(cy.get("ebitda", 0)) for cy in cop])
+        pl_rows += [
             ["Less: Depreciation"]          + [r(cy["depreciation"])                for cy in cop],
             ["Less: Interest on WC"]        + [r(cy["wc_interest"])                 for cy in cop],
             ["Less: Interest on Term Loan"] + [r(cy["tl_interest"])                 for cy in cop],
-            ["TOTAL EXPENSES"]              + [r(cy["total_expenses"])              for cy in cop],
+        ]
+        _total_exp_row = len(pl_rows)
+        pl_rows.append(["TOTAL EXPENSES"] + [r(cy["total_expenses"]) for cy in cop])
+        pl_rows += [
             ["Profit Before Tax"]           + [r(cy.get("profit_before_tax", cy["net_profit"])) for cy in cop],
             ["Less: Tax"]                   + [r(cy.get("tax", 0))                  for cy in cop],
-            ["NET PROFIT (PAT)"]            + [r(cy["net_profit"])                  for cy in cop],
-            ["Reserves & Surplus"]          + [r(cy["reserves_surplus"])            for cy in cop],
-            ["Cash Accruals"]               + [r(cy["cash_accruals"])               for cy in cop],
-        ], colWidths=[58*mm]+[22.4*mm]*5)
+        ]
+        _pat_row = len(pl_rows)
+        pl_rows.append(["NET PROFIT (PAT)"] + [r(cy["net_profit"]) for cy in cop])
+        pl_rows.append(["Reserves & Surplus"] + [r(cy["reserves_surplus"]) for cy in cop])
+        _cash_acc_row = len(pl_rows)
+        pl_rows.append(["Cash Accruals"] + [r(cy["cash_accruals"]) for cy in cop])
+        pl_t = Table(pl_rows, colWidths=[58*mm]+[22.4*mm]*5)
         pl_t.setStyle(BTS())
-        for idx in [5, 10, 14, 17, 19]: pl_t.setStyle(TOT(idx))
+        for idx in [5, _ebitda_row, _total_exp_row, _pat_row, _cash_acc_row]: pl_t.setStyle(TOT(idx))
     story.append(pl_t)
     PB(story)
 
@@ -1621,18 +1655,37 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # SECTION 22 — TOTAL DEBT SCHEDULE
     # ════════════════════════════════════════════════════════════════
     SEC("SECTION 22 — TOTAL DEBT SCHEDULE", story)
+    # BUG FIX: this platform's CMA projection (P&L, DSCR, Cash Flow, Balance
+    # Sheet, and the WC schedule itself) is always exactly 5 years — but a
+    # Term Loan can run longer (e.g. 7 years here), and this table used to
+    # keep listing TL years past Year 5 with WC Bank Loan silently shown as
+    # "0", implying the working capital facility had been repaid off by
+    # Year 6 — which is not true; WC simply isn't projected that far. Years
+    # beyond the 5-year WC projection show "—" (not projected) instead of a
+    # misleading zero, and Total Debt for those years is Term Loan only.
+    _has_beyond_5yr = len(cma["yr_schedule"]) > len(wc)
     debt_rows = [["Year", "Term Loan Closing (Rs.)", "WC Bank Loan (Rs.)", "Total Debt (Rs.)"]]
     for i, y in enumerate(cma["yr_schedule"]):
-        _wc_bank_yr = float(wc[i]["bank_loan"]) if i < len(wc) else 0.0
-        debt_rows.append([str(y["year"]), r(y["closing_balance"]), r(_wc_bank_yr), r(y["closing_balance"] + _wc_bank_yr)])
-    debt_t = Table(debt_rows, colWidths=[20*mm, 50*mm, 50*mm, 50*mm])
+        if i < len(wc):
+            _wc_bank_yr = float(wc[i]["bank_loan"])
+            debt_rows.append([str(y["year"]), r(y["closing_balance"]), r(_wc_bank_yr), r(y["closing_balance"] + _wc_bank_yr)])
+        else:
+            debt_rows.append([str(y["year"]), r(y["closing_balance"]), "— (not projected)", r(y["closing_balance"]) + "*"])
+    debt_t = Table(debt_rows, colWidths=[20*mm, 45*mm, 45*mm, 35*mm])
     debt_t.setStyle(BTS())
     story.append(debt_t)
     NL(story, 3)
-    story.append(Paragraph(
+    _debt_note = (
         "Term Loan reduces to zero by the end of tenure (amortising facility); WC Bank Loan is a "
-        "revolving facility renewed annually and does not amortise.",
-        ST["small"]))
+        "revolving facility renewed annually and does not amortise."
+    )
+    if _has_beyond_5yr:
+        _debt_note += (
+            " This platform's detailed CMA projection (P&amp;L, Balance Sheet, Cash Flow) covers 5 years; "
+            "the Term Loan's own amortisation is shown beyond Year 5 for reference, but WC Bank Loan is "
+            "not separately projected that far — marked with * (Term Loan only, not a true Total Debt figure)."
+        )
+    story.append(Paragraph(_debt_note, ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════

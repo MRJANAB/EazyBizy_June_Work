@@ -447,17 +447,30 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(cover)
     NL(story, int(8*mm))
 
+    # CA AUDIT: "No collateral required" / "Collateral-free" used to be
+    # stated as flat fact for every PMEGP/Mudra/CGTMSE report, regardless
+    # of the specific applicant's sanctioned exposure or the lender's own
+    # policy — each of these schemes' collateral exemption is conditional
+    # (loan-size thresholds, eligibility, guarantee-cover limits), not an
+    # unconditional guarantee this platform can certify. Reworded to defer
+    # to the financing bank's own verification, on every scheme branch.
     scheme_note = ""
     if _is_pmegp:
         mm_pct = cma.get("margin_money_pct", 0)
         mm_amt = cma.get("margin_money", 0)
-        scheme_note = f"PMEGP Subsidy: {mm_pct:.0f}% = Rs.{mm_amt:,.0f} (TDR held for 3 yrs) | No collateral required"
+        scheme_note = (f"PMEGP Subsidy: {mm_pct:.0f}% = Rs.{mm_amt:,.0f} (TDR held for 3 yrs) | "
+                        "Collateral/Security: subject to applicable PMEGP guidelines, lender policy "
+                        "and sanctioned exposure — to be confirmed by the financing bank")
     elif _is_mudra:
-        scheme_note = "Mudra Loan: Collateral-free as per RBI guidelines | CGFMU guarantee cover"
+        scheme_note = ("Mudra Loan | Collateral/Security: RBI guidelines exempt collateral up to the "
+                        "prescribed Mudra limit, with CGFMU guarantee cover — final requirement subject "
+                        "to lender policy and sanctioned exposure")
     elif _is_cgtmse:
-        scheme_note = "CGTMSE Cover: No physical collateral required | Guarantee fee applicable"
+        scheme_note = ("CGTMSE Cover: guarantee fee applicable | Collateral/Security: subject to CGTMSE "
+                        "eligibility, guarantee cover limits and lender policy — to be confirmed by the "
+                        "financing bank")
     else:
-        scheme_note = "Standard MSME Term Loan | Subject to bank credit policy"
+        scheme_note = "Standard MSME Term Loan | Collateral/Security: subject to bank credit policy"
 
     scheme_banner = Table([[Paragraph(scheme_note, ST["small"])]], colWidths=[170*mm])
     scheme_banner.setStyle(TableStyle([
@@ -568,6 +581,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ("BOTTOMPADDING", (0,0),(-1,-1), 8),
     ]))
     story.append(rec_box)
+    NL(story, 2)
+    story.append(Paragraph(
+        "This banner and the Viability Grade / Risk Level / Weighted Score used throughout this report "
+        "are model-derived indicators computed from the stated assumptions — they are not a bank "
+        "sanction rating, credit grade, or lending decision. The sanctioning bank's own credit "
+        "appraisal governs any actual lending decision.",
+        ST["small"]))
     NL(story, 5)
 
     H2("Project & Funding Snapshot", story)
@@ -1044,6 +1064,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "Service WC uses receivables, salary float, expense float, and cash reserve. "
             "Manufacturing/trading inventory norms are intentionally excluded.",
             ST["small"]))
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Note:</b> The holding-period assumptions above (stock, WIP, finished goods, debtor and "
+        "creditor days) are applicant-provided / model assumptions specific to this project, not "
+        "universal banking norms — they should be validated against the actual production and "
+        "collection cycle before bank submission, and revised if the real cycle differs.",
+        ST["small"]))
 
     H2("Working Capital Financing", story)
     NL(story, 3)
@@ -1177,7 +1204,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Amount",              rs(tl["amount"]),               "Purpose",           "Fixed Capital Expenditure"],
         ["Interest Rate",       rp(tl["interest_rate"]),         "Moratorium",        _morat_str],
         ["Repayment Frequency", "Half-yearly (reducing balance)", "Tenure",           f"{inp.get('loan_tenure_years',5)} Years"],
-        ["Half-Yearly Instalment", rs(tl["half_yearly_instalment"]), "Total Interest", rs(tl["total_interest"])],
+        # BUG FIX: this figure is the PRINCIPAL-only half-yearly repayment
+        # (term_loan / repayment half-years, per calculations/loan_schedule.py)
+        # — labelling it a bare "Instalment" reads as the full cash amount
+        # payable each half-year, when the actual instalment is this plus
+        # that period's own interest (shown per-period in Section-H's
+        # schedule below, since interest declines as the balance amortises).
+        ["Half-Yearly Principal Repayment", rs(tl["half_yearly_instalment"]), "Total Interest", rs(tl["total_interest"])],
     ], colWidths=[42*mm,43*mm,42*mm,43*mm])
     tl_prop.setStyle(BTS())
     story.append(tl_prop)
@@ -1605,6 +1638,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _sup_t = Table(_supplier_rows, colWidths=[8*mm,55*mm,45*mm,27*mm,32*mm])
         _sup_t.setStyle(BTS())
         story.append(_sup_t)
+        NL(story, 2)
+        story.append(Paragraph(
+            "<b>Note:</b> Vendor/supplier details above are indicative, as provided by the applicant, "
+            "and are not verified quotations. Actual supplier quotations, proforma invoices and any "
+            "bank-approved vendor documentation must be submitted separately before sanction.",
+            ST["small"]))
         NL(story, 4)
 
     H2("Gross Block", story)
@@ -2142,12 +2181,18 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     tl_meta = Table([
         ["Parameter","Value","Parameter","Value"],
         ["Term Loan Amount",       rs(tl["amount"]),              "Interest Rate",    rp(tl["interest_rate"])],
-        ["Half-Yearly Instalment", rs(tl["half_yearly_instalment"]),"Moratorium",    _morat_str],
+        ["Half-Yearly Principal Repayment", rs(tl["half_yearly_instalment"]),"Moratorium",    _morat_str],
         ["Total Interest Payable", rs(tl["total_interest"]),      "Loan Tenure",     f"{inp.get('loan_tenure_years',5)} Years"],
     ], colWidths=[50*mm,35*mm,50*mm,35*mm])
     tl_meta.setStyle(BTS())
     story.append(tl_meta)
-    NL(story, 5)
+    NL(story, 2)
+    story.append(Paragraph(
+        "<b>Note:</b> The Half-Yearly Principal Repayment above is the principal component only — the "
+        "actual cash instalment payable each half-year is this amount PLUS that period's own interest "
+        "(interest declines each period as the balance amortises; see the year-wise schedule below).",
+        ST["small"]))
+    NL(story, 3)
     tl_rows = [["Year","Opening Balance","Mid-Year Balance","Principal Repaid","Closing Balance","Interest H1","Interest H2","Total Interest"]]
     for row in tl["schedule"]:
         tl_rows.append([str(row["year"]),r(row["opening"]),r(row["mid"]),r(row["principal_repaid"]),r(row["closing"]),
@@ -2315,11 +2360,27 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     if dscr.get("has_existing_emi"):
         H2("Adjusted Term Loan DSCR (Including Existing EMI Obligations)", story)
         _existing_emi_mo = dscr["existing_annual_emi"] / 12
+        # BUG FIX: this caption used to unconditionally claim BOTH an
+        # "existing business loan EMI" AND a "personal home loan EMI"
+        # regardless of which one(s) actually contributed a nonzero
+        # figure — for a New Business (Section-A correctly shows "No
+        # existing banking facilities"), the combined EMI is entirely the
+        # promoter's personal home loan, but this caption still claimed a
+        # business loan EMI existed too, reading as a direct contradiction
+        # of Section-A's own, correct disclosure. Built from the same two
+        # components (and the same >0 checks) as the Credit Assessment
+        # weakness bullet, so the two can never again disagree.
+        _dscr_existing_biz_emi  = float(inp.get("existing_monthly_emi", 0) or 0)
+        _dscr_home_loan_emi     = float((cma.get("promoter_net_worth") or {}).get("home_loan_emi", 0) or 0)
+        _dscr_emi_source_parts = []
+        if _dscr_existing_biz_emi > 0:
+            _dscr_emi_source_parts.append("existing business loan EMI (Section-A)")
+        if _dscr_home_loan_emi > 0:
+            _dscr_emi_source_parts.append("the promoter's personal home loan EMI (Section-B)")
         story.append(Paragraph(
             f"<b>Combined existing EMI:</b> Rs.{_existing_emi_mo:,.0f}/month "
-            f"(Rs.{dscr['existing_annual_emi']:,.0f}/year) — existing business loan EMI (Section-A) "
-            "plus the promoter's personal home loan EMI (Section-B), both pre-existing obligations "
-            "not related to the new term loan being appraised here.",
+            f"(Rs.{dscr['existing_annual_emi']:,.0f}/year) — " + " plus ".join(_dscr_emi_source_parts) +
+            ", a pre-existing obligation not related to the new term loan being appraised here.",
             ST["small"]))
         NL(story, 2)
         adj_t = Table([
@@ -2483,7 +2544,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(Paragraph(
         "<b>Base Case</b> = Year 1 monthly values from the master financial engine. "
         "Variable costs scale proportionally with revenue; fixed costs remain constant. "
-        "DSCR shown is the Term Loan DSCR: (PAT + Dep + Term Loan Interest) / (Term Loan Principal + Term Loan Interest).",
+        "<b>Revenue, COGS, EBITDA and PAT in this table are MONTHLY figures</b> — TL DSCR, however, is "
+        "an annual debt-service measure, calculated by re-running the full 5-year loan schedule under "
+        "each scenario's changed assumption and taking that scenario's Year 1 annual DSCR "
+        "(PAT + Dep + Term Loan Interest) / (Term Loan Principal + Term Loan Interest); it is not derived "
+        "from the monthly figures shown alongside it in the same row.",
         ST["small"]))
     NL(story, 2)
     # Reduced from 6 to 5 scenarios — the +20% "Best Case" extreme added a
@@ -2604,7 +2669,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     NL(story, 2)
     story.append(Paragraph(
         "Subjective factors such as market opportunity, competitive position, and business model are excluded "
-        "from the ratio table above. This grade may still use the approved backend scoring engine.",
+        "from the ratio table above. The Viability Grade, Risk Level and Weighted Score are model-derived "
+        "indicators computed from the stated assumptions — they are not a bank sanction rating, credit "
+        "grade, or lending decision, and do not substitute for the sanctioning bank's own credit appraisal.",
         ST["small"]))
     PB(story)
 

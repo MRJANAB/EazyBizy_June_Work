@@ -868,3 +868,83 @@ class TestFixedAssetSupplierReferenceTableWraps:
         section = flat[idx:idx + 400]
         assert long_name in section
         assert long_supplier in section
+
+
+class TestAdjustedDscrCaptionMatchesActualEmiSources:
+    """CA AUDIT: for a New Business (Section-A correctly shows "No
+    existing banking facilities"), the Adjusted DSCR caption used to
+    unconditionally claim BOTH an "existing business loan EMI" AND a
+    "personal home loan EMI" regardless of which actually had a nonzero
+    value — reading as a direct contradiction of Section-A's own,
+    correct disclosure when only the home loan EMI was real."""
+
+    def test_new_business_with_only_home_loan_emi_does_not_mention_business_loan(self):
+        payload = _msme_psu_subsidy_payload()
+        payload["business"]["business_status"] = "New Business"
+        payload["business"]["existing_monthly_emi"] = 0
+        payload["promoter_net_worth"] = {"home_loan_emi": 4000}
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        idx = flat.find("Combined existing EMI")
+        assert idx != -1
+        caption = flat[idx:idx + 250]
+        assert "existing business loan EMI" not in caption
+        assert "personal home loan EMI" in caption
+
+    def test_existing_business_with_both_emis_mentions_both(self):
+        payload = _cgtmse_payload()
+        payload["business"]["business_status"] = "Existing Business"
+        payload["business"]["business_duration_months"] = 24
+        payload["business"]["commencement_date"] = "2024-06-01"
+        payload["business"]["existing_annual_turnover"] = 2000000
+        payload["business"]["existing_annual_profit"] = 150000
+        payload["business"]["existing_monthly_emi"] = 9000
+        payload["promoter_net_worth"] = {"home_loan_emi": 5000}
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        idx = flat.find("Combined existing EMI")
+        assert idx != -1
+        caption = flat[idx:idx + 250]
+        assert "existing business loan EMI" in caption
+        assert "personal home loan EMI" in caption
+
+
+class TestCollateralWordingIsHedgedNotCategorical:
+    """CA AUDIT: "No collateral required" (PMEGP/Mudra/CGTMSE) was stated
+    as flat fact for every report of that scheme, regardless of the
+    applicant's actual sanctioned exposure or the lender's own policy —
+    each scheme's collateral exemption is conditional, not an
+    unconditional guarantee this platform can certify."""
+
+    def test_pmegp_collateral_wording_is_hedged(self):
+        payload = _msme_psu_subsidy_payload()
+        payload["scheme"] = "pmegp"
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "No collateral required" not in text
+        assert "to be confirmed by the financing bank" in text
+
+
+class TestHalfYearlyLabelIsPrincipalOnly:
+    def test_label_says_principal_repayment_not_bare_instalment(self):
+        payload = _cgtmse_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Half-Yearly Principal Repayment" in text
+        assert "Half-Yearly Instalment" not in text
+
+
+class TestViabilityGradeDisclaimerPresent:
+    def test_executive_summary_banner_has_not_a_bank_rating_disclaimer(self):
+        payload = _cgtmse_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        assert "not a bank sanction rating" in flat

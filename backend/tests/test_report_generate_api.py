@@ -753,3 +753,118 @@ class TestPromoterDrawingsDisclosure:
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
         assert "Promoter Drawings assumption is 0%" not in text
+
+
+class TestLongNatureOfBusinessTextNotTruncated:
+    """CA AUDIT: nature_of_business is free text — a full business
+    description (e.g. "Manufacturing and packaging of RO-purified
+    drinking water in 20-litre jars for local retail and institutional
+    supply") used to be silently cut at 60 characters with no ellipsis on
+    the cover page, and used as a synthetic fallback product's "category"
+    (a plain, un-wrapped string) in the "Annual Revenue at 100% Installed
+    Capacity" table, where it overflowed into the price/quantity columns."""
+
+    _LONG_DESC = ("Manufacturing and packaging of RO-purified drinking water "
+                  "in 20-litre jars for local retail and institutional supply")
+
+    def test_cover_page_shows_full_text_not_60_char_cutoff(self):
+        """Scoped to JUST the cover page (before the first section) —
+        the full description also legitimately appears elsewhere in the
+        document (Section-A's own Business Overview), so a whole-document
+        text search can't distinguish "shown in full on the cover page"
+        from "the 60-char cutoff happened, but the full text still shows
+        up later." Only a cover-page-scoped check catches the truncation."""
+        payload = _cgtmse_payload()
+        payload["business"]["nature_of_business"] = self._LONG_DESC
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        # Scope to the dark cover banner specifically — the "Field/
+        # Details" table right below it (on the same physical cover
+        # page) has its own, separately-fixed, untruncated "Business
+        # Type / Loan Purpose" row, which would otherwise make this
+        # assertion pass regardless of whether the banner itself was cut.
+        cover_banner = flat[:flat.find("Applicant / Business Name")]
+        assert self._LONG_DESC in cover_banner
+
+    def test_project_overview_business_model_row_shows_full_text(self):
+        """The "Business Model" row specifically used `_nature_biz[:60]`
+        (character-level truncation, distinct from the "Nature of
+        Project" row just above it, which was never sliced) — scope to
+        that one row so the fix is actually exercised, not just the
+        untruncated "Nature of Project" row next to it."""
+        payload = _cgtmse_payload()
+        payload["business"]["nature_of_business"] = self._LONG_DESC
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        idx = flat.find("Business Model")
+        assert idx != -1
+        assert self._LONG_DESC in flat[idx:idx + 200]
+
+    def test_synthetic_fallback_product_name_in_revenue_table_not_truncated(self):
+        """No explicit products list -> generator.py synthesizes one whose
+        category is the long nature_of_business string; the "Annual
+        Revenue at 100% Installed Capacity" table must render it in full,
+        Paragraph-wrapped, not as a plain string overflowing the row."""
+        payload = _cgtmse_payload()
+        payload["business"]["nature_of_business"] = self._LONG_DESC
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        idx = flat.find("Annual Revenue at 100% Installed Capacity")
+        assert idx != -1
+        assert self._LONG_DESC in flat[idx:idx + 400]
+
+
+class TestGenericRawMaterialTableOmitsPhantomZeroRows:
+    """CA AUDIT: "Consumables" and "Packing Material" are legacy rows from
+    a specific (leaf/tea-style) business model — generator.py always
+    hardcodes both to 0 for the generic single-rate
+    raw_material_cost_per_unit model every other manufacturing payload
+    uses, so every such report showed two meaningless "Rs.0" rows."""
+
+    def test_zero_cost_consumables_and_packing_rows_are_omitted(self):
+        payload = _cgtmse_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        idx = text.find("D3. Raw Materials & Consumables Cost (100% Capacity)")
+        assert idx != -1
+        section = text[idx:idx + 500]
+        # The row itself is "Raw Material & Consumables" — that's the only
+        # legitimate occurrence of "Consumables" (inside the heading and
+        # that one row); a standalone "Consumables" row would add a second.
+        assert section.count("Consumables") == 2, section  # heading + the one combined row
+        assert "Packing Material" not in section
+        assert "Raw Material & Consumables" in section
+
+
+class TestFixedAssetSupplierReferenceTableWraps:
+    """CA AUDIT: a real machinery name (e.g. "Automatic Jar Rinsing,
+    Filling & Capping Machine") is unbounded free text — the Supplier /
+    Vendor Reference table's Equipment/Asset column used to render it as
+    a plain string, overflowing straight into the Supplier Name column
+    (this table's column is much narrower than the main machinery table's,
+    so the same name that fit fine there did not fit here)."""
+
+    def test_long_machinery_and_supplier_names_both_appear_in_full(self):
+        payload = _cgtmse_payload()
+        long_name = "Automatic Jar Rinsing, Filling & Capping Machine"
+        long_supplier = "Shakti Pharmatech Private Limited"
+        payload["project"]["machinery_items"][0] = {
+            "name": long_name, "quantity": 1, "unit_price": 300000,
+            "supplier_name": long_supplier, "supplier_city": "Ahmedabad",
+        }
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        flat = " ".join(text.split())
+        idx = flat.find("Supplier / Vendor Reference")
+        assert idx != -1
+        section = flat[idx:idx + 400]
+        assert long_name in section
+        assert long_supplier in section

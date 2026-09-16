@@ -432,7 +432,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         [Paragraph(f"{_promoter_name}", ST["cover_sub"])],
         [Paragraph(f"{inp.get('business_name','')}", ST["cover_body"])],
         [Spacer(1, 4)],
-        [Paragraph(f"{_industry_str} | {_nature_biz[:60] if _nature_biz else 'Business Activity'}", ST["cover_body"])],
+        # BUG FIX: nature_of_business is free text and used to be silently
+        # truncated to 60 characters with no ellipsis — a longer sentence
+        # (e.g. a full business description) got cut off mid-word with no
+        # indication text was missing. This row's own Table cell auto-sizes
+        # to its Paragraph's height, so it can simply wrap instead.
+        [Paragraph(f"{_industry_str} | {_nature_biz if _nature_biz else 'Business Activity'}", ST["cover_body"])],
     ], colWidths=[170*mm])
     cover.setStyle(TableStyle([
         ("BACKGROUND",    (0,0),(-1,-1), DG),
@@ -826,10 +831,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # ── SECTION 06 — PROJECT OVERVIEW ──────────────────────────────────
     SEC("2 / SECTION-B: PROJECT DETAILS", story)
     H2("B1. Project Overview", story)
+    # BUG FIX: both rows below used to show/truncate free-text
+    # nature_of_business as a plain string — a long business description
+    # either overflowed this table's 120mm Details column or got silently
+    # cut at 60 characters with no ellipsis. Paragraph-wrapped, untruncated.
     _overview_rows = [
         ["Field", "Details"],
-        ["Nature of Project",   inp.get("nature_of_business","") or "—"],
-        ["Business Model",      _industry_str + (f" | {_nature_biz[:60]}" if _nature_biz else "")],
+        ["Nature of Project",   Paragraph(inp.get("nature_of_business","") or "—", ST["table_cell"])],
+        ["Business Model",      Paragraph(_industry_str + (f" | {_nature_biz}" if _nature_biz else ""), ST["table_cell"])],
         ["Location",             location_district(inp)],
         ["Area Type",            inp.get("area_type", "Rural")],
         ["Capacity Schedule (Y1-Y5)", f"{rp(inp.get('capacity_y1',0.5))} / {rp(inp.get('capacity_y2',0.6))} / {rp(inp.get('capacity_y3',0.7))} / {rp(inp.get('capacity_y4',0.75))} / {rp(inp.get('capacity_y5',0.8))}"],
@@ -1354,12 +1363,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 scale = (total_rev_100pct / total_rev_y1) if total_rev_y1 else 1
                 for p in products:
                     ann_rev_y1 = p.get("monthly_revenue", 0) * 12
-                    name = p.get("name") or p.get("category") or "Product"
+                    # BUG FIX: product name/category can be long free text
+                    # (e.g. a full nature-of-business sentence used as the
+                    # synthetic fallback product's category) — plain
+                    # strings don't wrap in a ReportLab Table, so this
+                    # overflowed straight into the neighbouring columns.
+                    name = Paragraph(p.get("name") or p.get("category") or "Product", ST["table_cell"])
                     mix = (ann_rev_y1 / total_rev_y1 * 100) if total_rev_y1 else 0
                     sales_rows.append([name, r(ann_rev_y1 * scale), rp2(mix)])
                 sales_rows.append(["Total at 100% Capacity (Year 1)", r(total_rev_100pct), "100.0%"])
             else:
-                sales_rows.append([primary_product, r(ps["revenue_at_100pct"]), "100.0%"])
+                sales_rows.append([Paragraph(primary_product, ST["table_cell"]), r(ps["revenue_at_100pct"]), "100.0%"])
                 sales_rows.append(["Total at 100% Capacity (Year 1)", r(ps["revenue_at_100pct"]), "100.0%"])
             sales_t = Table(sales_rows, colWidths=[90*mm,50*mm,30*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(len(sales_rows)-1))
@@ -1435,7 +1449,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 sp = p.get("avg_price", p.get("selling_price", 0))
                 ann_rev = qty_100 * sp * 12
                 total_rev += ann_rev
-                name = p.get("name") or p.get("category") or "Product"
+                # BUG FIX: same overflow risk as the trading/service branch
+                # above — a long free-text category (e.g. the synthetic
+                # fallback product's nature-of-business sentence) overflows
+                # an un-wrapped plain string straight into the price/qty
+                # columns.
+                name = Paragraph(p.get("name") or p.get("category") or "Product", ST["table_cell"])
                 sales_rows.append([name, r(sp), r(qty_100), r(ann_rev)])
             sales_rows.append(["Total at 100% Capacity", "", "", r(total_rev)])
             sales_t = Table(sales_rows, colWidths=[65*mm,35*mm,35*mm,35*mm])
@@ -1443,7 +1462,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         else:
             sales_t = Table([
                 ["Product","Price (Rs./Unit)","Quantity (Units)","Revenue (Rs.)"],
-                [primary_product, r(inp.get("selling_price_per_kg", 0)), r(ps.get("annual_production_kg", 0)), r(ps.get("revenue_at_100pct", 0))],
+                [Paragraph(primary_product, ST["table_cell"]), r(inp.get("selling_price_per_kg", 0)), r(ps.get("annual_production_kg", 0)), r(ps.get("revenue_at_100pct", 0))],
                 ["Total at 100% Capacity","","",r(ps.get("revenue_at_100pct", 0))],
             ], colWidths=[65*mm,35*mm,35*mm,35*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(2))
@@ -1506,11 +1525,20 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 rm_rows.append([str(i+1), item.get("name","Material"), r(item.get("unit_price",0)), r(item.get("annual_qty",0)), r(item.get("total_cost",0))])
             rm_rows.append(["","TOTAL","","",r(rm["total"])])
         else:
+            # BUG FIX: "Consumables" and "Packing Material" are legacy rows
+            # from a specific (leaf/tea-style) business model — for the
+            # generic single-rate raw_material_cost_per_unit model used by
+            # most businesses, generator.py always hardcodes both to 0
+            # (never populated), so every such report showed two phantom
+            # "Rs.0" rows with no meaning. Only show them when they
+            # actually carry a nonzero cost.
             rm_rows = [["Sl.","Item","Rate (Rs.)","Qty / Year","Cost (Rs.)"],
-                       ["1","Raw Material",     r(inp.get("cost_fresh_leaves_per_kg",0)),  r(rm.get("annual_leaves_qty",0)),       r(rm.get("leaves_cost",0))],
-                       ["2","Consumables",      str(inp.get("cost_consumables_per_kg",0)), r(rm.get("annual_leaves_qty",0)),       r(rm.get("consumables_cost",0))],
-                       ["3","Packing Material", str(inp.get("cost_pet_bottle",0)),         r(ps.get("annual_production_kg",0)/10), r(rm.get("bottles_cost",0))],
-                       ["","TOTAL","","",r(rm["total"])]]
+                       ["1","Raw Material & Consumables", r(inp.get("cost_fresh_leaves_per_kg",0)),  r(rm.get("annual_leaves_qty",0)),       r(rm.get("leaves_cost",0))]]
+            if float(rm.get("consumables_cost", 0) or 0) > 0:
+                rm_rows.append([str(len(rm_rows)),"Consumables",      str(inp.get("cost_consumables_per_kg",0)), r(rm.get("annual_leaves_qty",0)),       r(rm.get("consumables_cost",0))])
+            if float(rm.get("bottles_cost", 0) or 0) > 0:
+                rm_rows.append([str(len(rm_rows)),"Packing Material", str(inp.get("cost_pet_bottle",0)),         r(ps.get("annual_production_kg",0)/10), r(rm.get("bottles_cost",0))])
+            rm_rows.append(["","TOTAL","","",r(rm["total"])])
         rm_t = Table(rm_rows, colWidths=[10*mm,70*mm,28*mm,28*mm,30*mm])
         rm_t.setStyle(BTS()); rm_t.setStyle(TOT(len(rm_rows)-1))
         story.append(rm_t)
@@ -1551,7 +1579,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     NL(story, 3)
     mach_rows = [["Sl.","Description","Qty","Unit Price (Rs.)","Total (Rs.)"]]
     for i,m in enumerate(mc["items"]):
-        mach_rows.append([str(i+1), m["name"], str(m["qty"]), r(m["unit_price"]), r(m["total"])])
+        # Paragraph-wrapped defensively — this column is wide enough for most
+        # names, but a real user-entered machine name is unbounded free text.
+        mach_rows.append([str(i+1), Paragraph(m["name"], ST["table_cell"]), str(m["qty"]), r(m["unit_price"]), r(m["total"])])
     mach_rows.append(["","TOTAL","","",r(mc["total"])])
     mach_t = Table(mach_rows, colWidths=[10*mm,85*mm,12*mm,35*mm,28*mm])
     mach_t.setStyle(BTS()); mach_t.setStyle(TOT(len(mach_rows)-1))
@@ -1564,7 +1594,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _scity = str(m.get("supplier_city", "") or "")
         _sph   = str(m.get("supplier_phone", "") or "")
         if _sname or _scity or _sph:
-            _supplier_rows.append([str(i+1), m["name"], _sname or "—", _scity or "—", _sph or "—"])
+            # BUG FIX: a real equipment name (e.g. "Automatic Jar Rinsing,
+            # Filling & Capping Machine") easily exceeds this column's
+            # width — plain strings don't wrap in a ReportLab Table, so it
+            # overflowed straight into the Supplier Name column.
+            _supplier_rows.append([str(i+1), Paragraph(m["name"], ST["table_cell"]), Paragraph(_sname or "—", ST["table_cell"]), _scity or "—", _sph or "—"])
     if len(_supplier_rows) > 1:
         story.append(Paragraph("Supplier / Vendor Reference (Banks require quotations for items above Rs. 50,000)", ST["small"]))
         NL(story, 2)

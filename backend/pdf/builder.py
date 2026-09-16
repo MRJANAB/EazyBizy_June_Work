@@ -20,7 +20,7 @@ figure across multiple sections. No calculation logic was touched.
 
 Sections deliberately removed as duplicates/empty (per explicit request):
   - "Profitability Index" as a separate late-report page -> merged into
-    Financial Analysis right after the P&L (Section 16).
+    Financial Analysis right after the P&L (Section-B).
   - Q1 (Repayment Coverage) and old Section N (DSCR detail) restated DSCR
     twice -> merged into one DSCR & Debt Servicing section (26).
   - Q3 (Promoter Net Worth) was disconnected from promoter contribution ->
@@ -367,7 +367,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # BUG FIX: this used to be computed as just term_loan + promoter_fixed_equity,
     # silently dropping the scheme's margin-money/capital subsidy (e.g. PMEGP) —
     # money that IS part of the fixed capital outlay, just not funded by the
-    # promoter's own cash or the bank. Section 08's own Means-of-Finance total
+    # promoter's own cash or the bank. Section-B's own Means-of-Finance total
     # ("TOTAL (Fixed Project Cost)") already includes it; this must match.
     _display_margin_money = pc.get("margin_money", 0) or cma.get("margin_money", 0) or 0
     display_fixed_project_cost = R(pc["term_loan"] + display_promoter_fixed_equity + _display_margin_money, 2)
@@ -393,9 +393,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
 
     # Single source of truth for "100%-capacity revenue" per year — it is NOT
     # constant across years (it grows with the revenue-escalation assumption,
-    # independently of the capacity ramp-up), so both Section 11 and Section
+    # independently of the capacity ramp-up), so both Section-D and Section
     # 14 must read this SAME computed list rather than each restating (or, as
-    # Section 14 previously did, flatly repeating) a Year-1-only figure.
+    # Section-J previously did, flatly repeating) a Year-1-only figure.
     _rev100_by_year = []
     for _cy in cop:
         _cap_pct = float(_cy.get("capacity", 0) or 0)
@@ -409,7 +409,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _wc_bank_coverage = float(cma.get("wc_bank_finance_coverage_ratio", cma.get("current_ratio", 0)) or 0)
     # A genuine Current Ratio, computed from the actual projected Balance
     # Sheet (Year 1): Total Current Assets (WC current assets + cash, floored
-    # at 0 — see Section 24) ÷ Total Current Liabilities (WC bank borrowing,
+    # at 0 — see Section-K) ÷ Total Current Liabilities (WC bank borrowing,
     # the only current liability this balance sheet models; the term loan is
     # carried entirely as a long-term liability).
     _bs_y1 = pbs[1] if len(pbs) > 1 else {}
@@ -532,8 +532,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "Revise revenue projections, reduce costs, or adjust loan tenure before bank submission.",
             ST["small"]))
         NL(story, 6)
+    # ════════════════════════════════════════════════════════════════════════════
+    # EXECUTIVE CREDIT SUMMARY
+    # ════════════════════════════════════════════════════════════════════════════
 
-    SEC("SECTION 02 — EXECUTIVE CREDIT SUMMARY", story)
+    SEC("EXECUTIVE CREDIT SUMMARY", story)
 
     # Neutral feasibility-assessment labels, never lending-decision language.
     _rec_raw = cma.get("recommendation", "") or ""
@@ -598,7 +601,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         f"<b>WC Bank Finance Coverage:</b> {r2(_wc_bank_coverage)}x  |  "
         f"<b>Term Loan D:E:</b> {round(pc['term_loan'] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0} : 1  |  "
         f"<b>Promoter % of Initial Investment:</b> {pof(display_promoter_contribution, display_total_project_cost)}  |  "
-        f"<b>Payback Period (cumulative cash-flow, Section 28):</b> " + ("Not achievable under current projections" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else f"within {round(float(cma.get('breakeven_months',0)),1)} months"),
+        f"<b>Payback Period (cumulative cash-flow, Section-N):</b> " + ("Not achievable under current projections" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else f"within {round(float(cma.get('breakeven_months',0)),1)} months"),
         ST["small"]))
     NL(story, 5)
 
@@ -619,7 +622,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         )
     if float(man.get("promoter_annual", 0) or 0) <= 0:
         weaknesses.append("Promoter remuneration not considered — profitability may be overstated.")
-    # CA AUDIT: promoter_drawings_pct (Section 23's Cash Flow "Less:
+    # CA AUDIT: promoter_drawings_pct (Section-L's Cash Flow "Less:
     # Promoter Drawings" row) defaults to 0% — PAT is fully retained with
     # no assumed personal withdrawal. That's a real, silent assumption:
     # for an owner-operated business the promoter/partners almost always
@@ -630,7 +633,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     _drawings_pct = float(inp.get("promoter_drawings_pct", 0) or 0)
     if _drawings_pct <= 0:
         weaknesses.append(
-            "Promoter Drawings assumption is 0% (Section 23) — PAT is projected as fully retained with "
+            "Promoter Drawings assumption is 0% (Section-L) — PAT is projected as fully retained with "
             "no personal withdrawal assumed. If the promoter/partners actually draw funds for personal "
             "use, Reserves and Closing Cash will be lower than shown; confirm the intended drawings "
             "level before relying on the projected cash position."
@@ -641,24 +644,24 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         weaknesses.append(f"Annual PAT is negative (Rs.{_obs_annual_pat:,.0f}) — the project is loss-making under stated assumptions.")
     if display_promoter_contribution > 0 and display_loan_amount / max(display_promoter_contribution, 1) > 3:
         weaknesses.append("Leverage is high relative to promoter contribution.")
-    # CA AUDIT: existing_monthly_emi (Section 05, existing business loan) and
+    # CA AUDIT: existing_monthly_emi (Section-A, existing business loan) and
     # promoter_net_worth.home_loan_emi (personal home loan) are both
     # pre-existing obligations, separate from the new term loan. They are
     # excluded from the PRIMARY Term Loan DSCR above (by design — that DSCR
     # is scoped to the new term loan only, per CA/RBI convention), but ARE
-    # now reflected in the "Adjusted Term Loan DSCR" table in Section 28.
+    # now reflected in the "Adjusted Term Loan DSCR" table in Section-N.
     _existing_emi = float(inp.get("existing_monthly_emi", 0) or 0)
     _home_loan_emi = float((cma.get("promoter_net_worth") or {}).get("home_loan_emi", 0) or 0)
     if _existing_emi > 0 or _home_loan_emi > 0:
         _emi_parts = []
         if _existing_emi > 0:
-            _emi_parts.append(f"existing business loan EMI of Rs.{_existing_emi:,.0f}/month (Section 05)")
+            _emi_parts.append(f"existing business loan EMI of Rs.{_existing_emi:,.0f}/month (Section-A)")
         if _home_loan_emi > 0:
             _emi_parts.append(f"personal home loan EMI of Rs.{_home_loan_emi:,.0f}/month")
         weaknesses.append(
             "Borrower carries a " + " and a ".join(_emi_parts) + " — pre-existing obligations NOT "
             "included in the primary Term Loan DSCR above (scoped to the new term loan only). See "
-            f"'Adjusted Term Loan DSCR' in Section 28 (average {dscr.get('average_adjusted_dscr', dscr.get('average', 0))}x) "
+            f"'Adjusted Term Loan DSCR' in Section-N (average {dscr.get('average_adjusted_dscr', dscr.get('average', 0))}x) "
             "for debt-service capacity after ALL known obligations."
         )
     _funding_gap_total = sum(float(pb.get("short_term_funding", 0) or 0) for pb in pbs[1:] if float(pb.get("short_term_funding", 0) or 0) > 0)
@@ -672,7 +675,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(Paragraph(
             f"• <b>Funding Gap:</b> the model shows an unfunded cash shortfall building up to "
             f"Rs.{max(float(pb.get('short_term_funding',0) or 0) for pb in pbs[1:]):,.0f} by Year 5 "
-            "(see Section 24, Balance Sheet — shown as \"Additional Funding Required\", not an arranged facility).",
+            "(see Section-K, Balance Sheet — shown as \"Additional Funding Required\", not an arranged facility).",
             ST["bullet"]))
     story.append(Paragraph(
         f"• <b>Overall Assessment:</b> Viability Grade <b>{cma['credit_rating']}</b>, Risk Level <b>{cma['risk_level']}</b>. "
@@ -684,7 +687,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             f"• <b>Leverage Caveat:</b> {cma['leverage_caveat']}. Term Loan D:E "
             f"({cma.get('scorecard_de_ratio', 'N/A')} : 1) and/or Total Leverage "
             f"({cma.get('scorecard_total_leverage', 'N/A')} : 1) exceed this platform's own "
-            f"&lt;2:1 / &lt;3:1 benchmarks (Section 29) — the Viability Grade above has already been "
+            f"&lt;2:1 / &lt;3:1 benchmarks (Section-U) — the Viability Grade above has already been "
             f"capped one notch to reflect this; it is not a bare pass on DSCR/ROI alone.",
             ST["bullet"]))
     story.append(Paragraph(_scheme_advisory(inp, cma), ST["bullet"]))
@@ -695,57 +698,16 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ST["small"]))
     PB(story)
 
-    # ── SECTION 03 — LOAN PROPOSAL / CREDIT STRUCTURE ──────────────────
-    SEC("SECTION 03 — LOAN PROPOSAL / CREDIT STRUCTURE", story)
-    _morat_mo = inp.get("moratorium_months", inp.get("moratorium_years", 0) * 12)
-    _morat_str = f"{_morat_mo} Month(s)" if _morat_mo > 0 else "None"
-    H2("A. Term Loan", story)
-    tl_prop = Table([
-        ["Parameter","Value","Parameter","Value"],
-        ["Amount",              rs(tl["amount"]),               "Purpose",           "Fixed Capital Expenditure"],
-        ["Interest Rate",       rp(tl["interest_rate"]),         "Moratorium",        _morat_str],
-        ["Repayment Frequency", "Half-yearly (reducing balance)", "Tenure",           f"{inp.get('loan_tenure_years',5)} Years"],
-        ["Half-Yearly Instalment", rs(tl["half_yearly_instalment"]), "Total Interest", rs(tl["total_interest"])],
-    ], colWidths=[42*mm,43*mm,42*mm,43*mm])
-    tl_prop.setStyle(BTS())
-    story.append(tl_prop)
-    NL(story, 3)
-    # CA AUDIT: the half-yearly repayment schedule can only skip WHOLE
-    # half-yearly instalments, so a moratorium not entered as a multiple of
-    # 6 months (e.g. 9 months) is rounded to the nearest half-year — here
-    # that is transparently disclosed, rather than the requested figure
-    # being shown next to a schedule that actually applied a different one.
-    _morat_requested = int(inp.get("moratorium_months_requested", _morat_mo) or 0)
-    if _morat_requested != _morat_mo:
-        story.append(Paragraph(
-            f"<i>Note: {_morat_requested} month(s) moratorium was requested. The half-yearly repayment "
-            f"schedule can only skip whole half-yearly instalments, so this has been rounded to the "
-            f"nearest half-year — {_morat_mo} month(s) — which is the figure applied in the schedule "
-            f"below and used throughout this report.</i>",
-            ST["small"]))
-        NL(story, 2)
-
-    H2("B. Working Capital Facility", story)
-    wc_prop = Table([
-        ["Parameter","Value","Parameter","Value"],
-        ["WC Requirement (Year 1)", rs(wc[0]["total"]) if wc else "—", "Facility Type", "Cash Credit / Overdraft (Revolving)"],
-        ["Promoter WC Margin",      rs(_exec_wc_margin),               "Bank WC Finance", rs(_exec_wc_loan)],
-    ], colWidths=[42*mm,43*mm,42*mm,43*mm])
-    wc_prop.setStyle(BTS())
-    story.append(wc_prop)
-    NL(story, 3)
-    story.append(Paragraph(
-        "Working Capital Finance is a revolving operational facility, renewed annually based on "
-        "utilisation, and is not part of the fixed project cost.",
-        ST["small"]))
-    PB(story)
+    # ════════════════════════════════════════════════════════════════════════════
+    # 1 / SECTION-A — APPLICANT & BUSINESS PROFILE
+    # ════════════════════════════════════════════════════════════════════════════
 
     # ── SECTION 04 — APPLICANT & BUSINESS PROFILE ──────────────────────
     # (Includes the promoter's own profile — the input model carries a
     # single applicant/promoter, so a separate "Promoter Profile" page
     # would only restate these same fields; kept as one section instead
     # of an empty duplicate.)
-    SEC("SECTION 04 — APPLICANT & BUSINESS PROFILE", story)
+    SEC("1 / SECTION-A: APPLICANT & BUSINESS PROFILE", story)
 
     H2("A1. Personal / Promoter Profile", story)
     appl = Table([
@@ -838,10 +800,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             _comp_t.setStyle(BTS())
             story.append(_comp_t)
             NL(story, 4)
-    PB(story)
 
-    # ── SECTION 05 — EXISTING BANKING & BORROWINGS ─────────────────────
-    SEC("SECTION 05 — EXISTING BANKING & BORROWINGS", story)
+    H2("A5. Existing Banking & Borrowings", story)
+    NL(story, 3)
     _ex_turnover = float(inp.get("existing_annual_turnover", 0) or 0)
     _ex_profit   = float(inp.get("existing_annual_profit", 0) or 0)
     _ex_emi      = float(inp.get("existing_monthly_emi", 0) or 0)
@@ -858,8 +819,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(Paragraph("No existing banking facilities reported by the applicant.", ST["normal"]))
     PB(story)
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # 2 / SECTION-B — PROJECT DETAILS
+    # ════════════════════════════════════════════════════════════════════════════
+
     # ── SECTION 06 — PROJECT OVERVIEW ──────────────────────────────────
-    SEC("SECTION 06 — PROJECT OVERVIEW", story)
+    SEC("2 / SECTION-B: PROJECT DETAILS", story)
+    H2("B1. Project Overview", story)
     _overview_rows = [
         ["Field", "Details"],
         ["Nature of Project",   inp.get("nature_of_business","") or "—"],
@@ -872,12 +838,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     ov_t = Table(_overview_rows, colWidths=[50*mm, 120*mm])
     ov_t.setStyle(BTS())
     story.append(ov_t)
-    PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 07 — PROJECT COST
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 07 — PROJECT COST", story)
+    H2("B2. Initial Project Investment", story)
+    NL(story, 3)
     cost_rows = [["Sl.","Particulars","Amount (Rs.)","% of Total"]]
     for item in cma["project_cost_items"]:
         cost_rows.append([str(item["code"]), item["particulars"],
@@ -886,12 +849,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     cost_t = Table(cost_rows, colWidths=[10*mm,90*mm,38*mm,28*mm])
     cost_t.setStyle(BTS()); cost_t.setStyle(TOT(len(cost_rows)-1))
     story.append(cost_t)
-    PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 08 — MEANS OF FINANCE
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 08 — MEANS OF FINANCE", story)
+    H2("B3. Means of Finance – Fixed Project Funding", story)
+    NL(story, 3)
     _b2_margin_money = pc.get("margin_money", 0) or cma.get("margin_money", 0)
     _b2_wc_loan      = R(cma.get("working_capital_loan", pc.get("wc_loan", 0)) or 0, 2)
     _b2_wc_margin    = R(float(wc[0].get("margin", 0) if wc else 0), 2)
@@ -960,13 +920,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             f"\"Funding Gap (Arranged Sources)\" is Rs.0 by construction — every rupee of Fixed Cost and "
             "WC Requirement above is funded by the sources listed. If the business subsequently runs a "
             "cash deficit from operating losses, that shows up as \"Additional Funding Required\" in the "
-            "Balance Sheet (Section 24) and as a negative Closing Cash Balance in the Cash Flow Statement "
-            "(Section 23) — it is a separate, operational shortfall, not a gap in the initial funding plan.",
+            "Balance Sheet (Section-K) and as a negative Closing Cash Balance in the Cash Flow Statement "
+            "(Section-L) — it is a separate, operational shortfall, not a gap in the initial funding plan.",
             ST["small"]))
         NL(story, 2)
         story.append(Paragraph(
             f"<b>Note:</b> TOTAL FUNDING here (Rs.{_total_funding:,.0f}) is larger than \"Total Project Cost\" "
-            f"shown on the cover page and in Section 07 (Rs.{display_total_project_cost:,.0f}) by exactly the "
+            f"shown on the cover page and in Section-B (Rs.{display_total_project_cost:,.0f}) by exactly the "
             f"WC Bank Finance amount (Rs.{_b2_wc_loan:,.0f}) — \"Total Project Cost\" deliberately excludes the "
             "WC bank loan (a revolving facility, not part of fixed project cost), while this total includes it "
             "since it covers the full WC Requirement, bank-funded portion included.",
@@ -1020,17 +980,134 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 "scheme name, sanction order no., sanction date, eligible amount, and any conditions "
                 "attached to the grant should be documented here.",
                 ST["small"]))
-    PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 09 — PROMOTER CONTRIBUTION
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 09 — PROMOTER CONTRIBUTION", story)
+    H2("B4. Working Capital Requirement — Assessment", story)
+    NL(story, 3)
+    _stock_days   = inp.get("stock_holding_days", inp.get("wc_raw_material_days", 30))
+    _wip_days     = inp.get("wip_days",           inp.get("wc_wip_days", 15))
+    _fg_days      = inp.get("fg_days",            inp.get("wc_finished_goods_days", 30))
+    _debtor_days  = inp.get("debtor_days",        30)
+    _creditor_days= inp.get("creditor_days",      15)
+
+    def _wc(w, *keys):
+        """Return first non-None numeric value found for the given key sequence."""
+        for key in keys:
+            val = w.get(key)
+            if val is not None:
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    pass
+        return 0.0
+
+    _wc_industry   = str(inp.get("industry", inp.get("industry_type", "manufacturing"))).lower()
+    _is_trading_wc = _wc_industry == "trading"
+    _is_service_wc = _wc_industry in ("service", "services")
+    _is_mfg_wc     = not (_is_trading_wc or _is_service_wc)
+    _wc_rows = [["Particulars", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"]]
+    if _is_service_wc:
+        _wc_rows += [
+            [f"Receivables ({_debtor_days} day client billing cycle)"] + [r(_wc(w, "debtors")) for w in wc],
+            ["Salary Float (30 days payroll)"]                         + [r(_wc(w, "salary_float")) for w in wc],
+            ["Expense Float (30 days operating cost)"]                 + [r(_wc(w, "expense_float")) for w in wc],
+            ["Cash Reserve (15 days operating buffer)"]                + [r(_wc(w, "cash_reserve")) for w in wc],
+        ]
+    else:
+        _stock_label = "Stock of Goods" if _is_trading_wc else "Raw Material Stock"
+        _wc_rows.append([f"{_stock_label} ({_stock_days} days)"] + [r(_wc(w, "rm_stock", "rm_wc", "stock")) for w in wc])
+    if _is_mfg_wc:
+        _wc_rows.append([f"Work in Progress ({_wip_days} days)"] + [r(_wc(w, "wip", "wip_wc")) for w in wc])
+        _wc_rows.append([f"Finished Goods ({_fg_days} days)"]    + [r(_wc(w, "fg", "fg_wc"))   for w in wc])
+    if not _is_service_wc:
+        _wc_rows += [
+            [f"Debtors ({_debtor_days} days)"] + [r(_wc(w, "debtors")) for w in wc],
+            ["Less: Creditors"]               + [r(_wc(w, "creditors")) for w in wc],
+        ]
+    _wc_rows.append(["Total WC Required"] + [r(w["total"]) for w in wc])
+    _wc_total_row_idx = len(_wc_rows) - 1
+    wc_t = Table(_wc_rows, colWidths=[62*mm] + [21.6*mm] * 5)
+    wc_t.setStyle(BTS())
+    wc_t.setStyle(TOT(_wc_total_row_idx))
+    story.append(wc_t)
+    if _is_service_wc:
+        NL(story, 3)
+        story.append(Paragraph(
+            "Service WC uses receivables, salary float, expense float, and cash reserve. "
+            "Manufacturing/trading inventory norms are intentionally excluded.",
+            ST["small"]))
+
+    H2("Working Capital Financing", story)
+    NL(story, 3)
+    wcfin_rows = [["Particulars", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"]]
+    wcfin_rows.append(["Total WC Requirement"]    + [r(w["total"]) for w in wc])
+    wcfin_rows.append(["WC Margin (Promoter's Share)"] + [r(w["margin"]) for w in wc])
+    wcfin_rows.append(["Bank WC Loan"]            + [r(w["bank_loan"]) for w in wc])
+    wcfin_rows.append(["Margin %"]                + [pof(w["margin"], w["total"]) for w in wc])
+    wcfin_rows.append(["Bank Finance %"]          + [pof(w["bank_loan"], w["total"]) for w in wc])
+    wcfin_rows.append(["WC Interest"]             + [r(w["wc_interest"]) for w in wc])
+    wcfin_t = Table(wcfin_rows, colWidths=[62*mm] + [21.6*mm] * 5)
+    wcfin_t.setStyle(BTS()); wcfin_t.setStyle(TOT(1))
+    story.append(wcfin_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        f"<b>Note:</b> WC Bank Loan (Rs. {wc[0]['bank_loan']:,.0f}) is a revolving credit facility -- "
+        "not part of project cost. Renewed annually based on utilisation. This facility is separate "
+        "from the term loan (Section-H) and is not amortised.",
+        ST["small"]))
+
+    H2("Working Capital Cycle", story)
+    NL(story, 3)
+    _cycle_flow = (
+        "Service Delivery → Customer Billing → Receivables → Collection → Cash. "
+        "Inventory assumptions are not used for this service business — see Section-B."
+        if _is_service_wc else
+        "Purchases → Inventory → Sales → Receivables → Cash, financed against Supplier Credit → Payables."
+    )
+    story.append(Paragraph(_cycle_flow, ST["normal"]))
+    NL(story, 4)
+    _cycle_rows = [["Component", "Days"]]
+    if not _is_service_wc:
+        _cycle_rows.append(["Stock / Inventory Holding Days", str(_stock_days)])
+    if _is_mfg_wc:
+        _cycle_rows.append(["Work-in-Progress Days", str(_wip_days)])
+        _cycle_rows.append(["Finished Goods Holding Days", str(_fg_days)])
+    _cycle_rows.append(["Receivable / Debtor Days", str(_debtor_days)])
+    # CA AUDIT: Section-B's own WC model for a SERVICE business never
+    # includes a Creditors/Payables line (there is no inventory purchased
+    # on supplier credit) — but this section used to always show
+    # "Less: Creditor/Payable Days" and net it against Receivable Days
+    # regardless, producing a Net Operating Cycle netted against a
+    # creditor figure that has no corresponding Rs. amount anywhere in
+    # Section-B. Only show/net creditor days for non-service (mfg/trading)
+    # businesses, where Section-B actually models a "Less: Creditors" Rs.
+    # line — keeping both sections on the same WC model.
+    if not _is_service_wc:
+        _cycle_rows.append(["Less: Creditor / Payable Days", f"-{_creditor_days}"])
+    _net_cycle = (
+        (0 if _is_service_wc else int(_stock_days))
+        + (int(_wip_days) + int(_fg_days) if _is_mfg_wc else 0)
+        + int(_debtor_days) - (0 if _is_service_wc else int(_creditor_days))
+    )
+    _cycle_rows.append(["NET OPERATING CYCLE (Days)" if not _is_service_wc else "Operating (Receivable) Cycle (Days)", str(_net_cycle)])
+    cycle_t = Table(_cycle_rows, colWidths=[130*mm, 40*mm])
+    cycle_t.setStyle(BTS()); cycle_t.setStyle(TOT(len(_cycle_rows)-1))
+    story.append(cycle_t)
+    if _is_service_wc:
+        NL(story, 3)
+        story.append(Paragraph(
+            "<b>Note:</b> This is a service business — the operating cycle above reflects only the "
+            f"{_debtor_days}-day receivable/client-billing cycle used in Section-B. Inventory and "
+            "trade-creditor cycles are not separately modelled for this business type (there is no "
+            "stock purchased on supplier credit to net against).",
+            ST["small"]))
+
+    H2("B5. Promoter Contribution & Net Worth", story)
+    NL(story, 3)
     # Three different % figures, each on a different denominator, were
     # previously all labelled "Promoter Contribution %" — labelled distinctly
     # here so a banker never has to guess which base a given % is measured against.
     # BUG FIX: this used to independently recompute "term_loan + promoter_
-    # fixed_equity", the exact same bug already fixed for Section 02's
+    # fixed_equity", the exact same bug already fixed for the Executive Credit Summary's
     # "Fixed Project Cost" — silently excluding the scheme's margin-money/
     # capital subsidy. Reuse display_fixed_project_cost (which already
     # includes it) instead of re-deriving a second, disagreeing figure.
@@ -1080,21 +1157,60 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(Paragraph(
             f"Promoter's net worth of Rs.{_net_nw:,.0f} provides additional comfort to the lending institution.",
             ST["small"]))
-    PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # PART II — FINANCIAL ANALYSIS  (Sections 10-27)
-    # ════════════════════════════════════════════════════════════════
+    H2("B6. Loan Proposal / Credit Structure", story)
+    NL(story, 3)
+    _morat_mo = inp.get("moratorium_months", inp.get("moratorium_years", 0) * 12)
+    _morat_str = f"{_morat_mo} Month(s)" if _morat_mo > 0 else "None"
+    H2("A. Term Loan", story)
+    tl_prop = Table([
+        ["Parameter","Value","Parameter","Value"],
+        ["Amount",              rs(tl["amount"]),               "Purpose",           "Fixed Capital Expenditure"],
+        ["Interest Rate",       rp(tl["interest_rate"]),         "Moratorium",        _morat_str],
+        ["Repayment Frequency", "Half-yearly (reducing balance)", "Tenure",           f"{inp.get('loan_tenure_years',5)} Years"],
+        ["Half-Yearly Instalment", rs(tl["half_yearly_instalment"]), "Total Interest", rs(tl["total_interest"])],
+    ], colWidths=[42*mm,43*mm,42*mm,43*mm])
+    tl_prop.setStyle(BTS())
+    story.append(tl_prop)
+    NL(story, 3)
+    # CA AUDIT: the half-yearly repayment schedule can only skip WHOLE
+    # half-yearly instalments, so a moratorium not entered as a multiple of
+    # 6 months (e.g. 9 months) is rounded to the nearest half-year — here
+    # that is transparently disclosed, rather than the requested figure
+    # being shown next to a schedule that actually applied a different one.
+    _morat_requested = int(inp.get("moratorium_months_requested", _morat_mo) or 0)
+    if _morat_requested != _morat_mo:
+        story.append(Paragraph(
+            f"<i>Note: {_morat_requested} month(s) moratorium was requested. The half-yearly repayment "
+            f"schedule can only skip whole half-yearly instalments, so this has been rounded to the "
+            f"nearest half-year — {_morat_mo} month(s) — which is the figure applied in the schedule "
+            f"below and used throughout this report.</i>",
+            ST["small"]))
+        NL(story, 2)
 
-    # ── SECTION 10 — KEY FINANCIAL ASSUMPTIONS ─────────────────────────
-    SEC("SECTION 10 — KEY FINANCIAL ASSUMPTIONS", story)
+    H2("B. Working Capital Facility", story)
+    wc_prop = Table([
+        ["Parameter","Value","Parameter","Value"],
+        ["WC Requirement (Year 1)", rs(wc[0]["total"]) if wc else "—", "Facility Type", "Cash Credit / Overdraft (Revolving)"],
+        ["Promoter WC Margin",      rs(_exec_wc_margin),               "Bank WC Finance", rs(_exec_wc_loan)],
+    ], colWidths=[42*mm,43*mm,42*mm,43*mm])
+    wc_prop.setStyle(BTS())
+    story.append(wc_prop)
+    NL(story, 3)
+    story.append(Paragraph(
+        "Working Capital Finance is a revolving operational facility, renewed annually based on "
+        "utilisation, and is not part of the fixed project cost.",
+        ST["small"]))
+
+    H2("B7. Key Financial Assumptions", story)
+    NL(story, 3)
     _assump_rows = [
         ["Assumption","Value","Assumption","Value"],
         # BUG FIX: this showed the raw term_loan_pct ASSUMPTION (e.g. 75%)
         # even for schemes with a capital subsidy, where that rate is
         # applied to the fixed cost NET of subsidy, not the gross Fixed
         # Project Cost shown elsewhere on this same page — a reader
-        # checking Term Loan (Section 03) ÷ Fixed Project Cost (Section 02)
+        # checking Term Loan (Section-B) ÷ Fixed Project Cost (the Executive Credit Summary)
         # would get a different, lower %. Now derives the actual effective
         # rate directly, so it always matches what a reader can verify.
         ["Contingency Rate",         rp(inp.get("contingency_rate",0)),  "Term Loan % (of Fixed Cost)", rp(tl["amount"] / max(display_fixed_project_cost, 1))],
@@ -1148,22 +1264,26 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ST["small"]))
     PB(story)
 
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 3 / SECTION-D — PRODUCTION PARAMETERS & MANUFACTURING SCHEDULE
+    # ════════════════════════════════════════════════════════════════════════════
     # ════════════════════════════════════════════════════════════════
     # SECTION 11 — CAPACITY & REVENUE PROJECTION
     # ════════════════════════════════════════════════════════════════
     _sec11_title = (
-        "SECTION 11 — SALES MODEL & CAPACITY / REVENUE PROJECTION" if _is_trading else
-        "SECTION 11 — SERVICE REVENUE MODEL & CAPACITY / REVENUE PROJECTION" if _is_service else
-        "SECTION 11 — PRODUCTION PARAMETERS & CAPACITY / REVENUE PROJECTION"
+        "3 / SECTION-D: SALES MODEL & CAPACITY / REVENUE PROJECTION" if _is_trading else
+        "3 / SECTION-D: SERVICE REVENUE MODEL & CAPACITY / REVENUE PROJECTION" if _is_service else
+        "3 / SECTION-D: PRODUCTION PARAMETERS & CAPACITY / REVENUE PROJECTION"
     )
     SEC(_sec11_title, story)
 
     if _is_trading_service:
-        H2("Operating Parameters", story)
+        H2("D1. Operating Parameters", story)
         if _is_service:
             _d1_rows = [
                 ["Parameter","Value","Unit"],
-                ["Service Revenue Model", "Client/project billing (see Section 04, A3)", ""],
+                ["Service Revenue Model", "Client/project billing (see Section-A, A3)", ""],
                 ["Client Billing Cycle",  f"{inp.get('debtor_days', 30)} days", "Collection"],
                 ["Hours of Operation / Day", str(inp["hours_of_operation"]), "Hours"],
                 ["Annual Revenue (100% Cap, Year 1)", rs(ps["revenue_at_100pct"]), "Rs."],
@@ -1173,7 +1293,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 ["Parameter","Value","Unit"],
                 ["Working Days per Year",     r(inp["working_days_per_year"]),  "Days"],
                 ["Annual Revenue (100% Cap, Year 1)", rs(ps["revenue_at_100pct"]),      "Rs."],
-                ["Revenue Model",             "Revenue-based (see Section 04, A3 for product details)", ""],
+                ["Revenue Model",             "Revenue-based (see Section-A, A3 for product details)", ""],
             ]
         prod_params = Table(_d1_rows, colWidths=[90*mm,55*mm,20*mm])
         prod_params.setStyle(BTS())
@@ -1252,7 +1372,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         # figure even at a lower stated capacity %.
         story.append(Paragraph(
             "<b>Revenue Build-Up:</b> 100%-capacity revenue grows with the revenue escalation assumption "
-            f"({rp2(inp.get('revenue_growth_pct', 0))}/year, Section 10), independently of the capacity "
+            f"({rp2(inp.get('revenue_growth_pct', 0))}/year, Section-B), independently of the capacity "
             "ramp-up below.",
             ST["small"]))
         NL(story, 3)
@@ -1277,7 +1397,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 ST["small"]))
     else:
         # Manufacturing / Agriculture: full production parameters
-        H2("Production Parameters", story)
+        H2("D1. Production Parameters", story)
         prod_params = Table([
             ["Parameter","Value","Unit"],
             ["Working Days per Year",    r(inp["working_days_per_year"]),   "Days"],
@@ -1331,7 +1451,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         NL(story, 5)
         story.append(Paragraph(
             "<b>Revenue Build-Up:</b> 100%-capacity revenue grows with the revenue escalation assumption "
-            f"({rp2(inp.get('revenue_growth_pct', 0))}/year, Section 10), independently of the capacity "
+            f"({rp2(inp.get('revenue_growth_pct', 0))}/year, Section-B), independently of the capacity "
             "ramp-up below.",
             ST["small"]))
         NL(story, 3)
@@ -1355,12 +1475,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 f"<b>Year 1 Projected Revenue at {rp(_y1_cap_pct)} Capacity = {rs(_y1_proj_rev)}</b> "
                 "— these are two different figures; the second is NOT the 100%-capacity figure.",
                 ST["small"]))
-    PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 12 — COST OF OPERATIONS
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 12 — COST OF OPERATIONS", story)
+    H2("Cost of Operations", story)
+    NL(story, 3)
     if _is_trading_service:
         H2("Direct Cost Structure", story)
         if _industry == "trading":
@@ -1382,7 +1499,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                     f"calculated margins for this {_industry.capitalize()} business.",
                     ST["normal"]))
     else:
-        H2("Raw Material & Consumables (at 100% Capacity)", story)
+        H2("D3. Raw Materials & Consumables Cost (100% Capacity)", story)
         if rm.get("items"):
             rm_rows = [["Sl.","Item","Rate (Rs.)","Qty / Year","Cost (Rs.)"]]
             for i, item in enumerate(rm["items"]):
@@ -1415,368 +1532,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     gp_t = Table(gp_rows, colWidths=[40*mm]+[26*mm]*5)
     gp_t.setStyle(BTS()); gp_t.setStyle(TOT(3))
     story.append(gp_t)
-    PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 13 — OPERATING EXPENSES
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 13 — OPERATING EXPENSES", story)
-    H2("Manpower & Wage Structure", story)
-    total_staff = (man.get("num_skilled", 0) + man.get("num_semi", 0) + man.get("num_unskilled", 0))
-    hr_rows = [
-        ["Sl.", "Category", "Headcount", "Monthly Salary (Rs.)", "Annual Salary (Rs.)", "Annual Total (Rs.)"],
-        ["1", "Promoter / Owner", "1", rs(0), rs(man.get("promoter_annual", 0)), rs(man.get("promoter_annual", 0))],
-        ["2", "Skilled Worker",
-         str(man.get("num_skilled", 0)),
-         rs(man.get("skilled_per_annual", man.get("skilled_annual", 0)) / 12) if man.get("num_skilled", 0) else "—",
-         rs(man.get("skilled_per_annual", man.get("skilled_annual", 0))),
-         rs(man.get("skilled_total", 0))],
-        ["3", "Semi-Skilled Worker",
-         str(man.get("num_semi", 0)),
-         rs(man.get("semi_skilled_per_annual", man.get("semi_skilled_annual", 0)) / 12) if man.get("num_semi", 0) else "—",
-         rs(man.get("semi_skilled_per_annual", man.get("semi_skilled_annual", 0))),
-         rs(man.get("semi_skilled_total", 0))],
-        ["4", "Unskilled / Helper",
-         str(man.get("num_unskilled", 0)),
-         rs(man.get("unskilled_per_annual", man.get("unskilled_annual", 0)) / 12) if man.get("num_unskilled", 0) else "—",
-         rs(man.get("unskilled_per_annual", man.get("unskilled_annual", 0))),
-         rs(man.get("unskilled_total", 0))],
-        ["", "PF / ESI / Benefits (10%)", "", "", "", rs(man.get("benefits", 0))],
-        ["", f"TOTAL ({total_staff} staff)", "", "", "", rs(cma.get("annual_salary_total", man.get("total_wages", 0)))],
-    ]
-    hr_t = Table(hr_rows, colWidths=[8*mm, 42*mm, 18*mm, 28*mm, 32*mm, 32*mm])
-    hr_t.setStyle(BTS())
-    hr_t.setStyle(TOT(len(hr_rows) - 1))
-    story.append(hr_t)
-    if float(man.get("promoter_annual", 0) or 0) <= 0:
-        NL(story, 3)
-        story.append(Paragraph(
-            "<b>Promoter remuneration not considered.</b> Profitability may be overstated because owner salary/drawings are not included as an operating cost.",
-            ST["small"]))
-    NL(story, 6)
-
-    H2("Operating Expenses Summary (Year 1 → Year 5)", story)
-    _has_cgtmse_fee = any(float(cy.get("cgtmse_fee", 0) or 0) > 0 for cy in cop)
-    opex_rows = [["Expense"] + [f"Year {cy['year']}" for cy in cop]]
-    opex_rows.append(["Salary"] + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)])
-    opex_rows.append(["Utilities / Power"] + [r(cy["power"]) for cy in cop])
-    opex_rows.append(["Admin & Misc Expenses"] + [r(cy["admin_expenses"]) for cy in cop])
-    opex_rows.append(["Marketing Expenses"] + [r(cy["marketing_expenses"]) for cy in cop])
-    if _has_cgtmse_fee:
-        opex_rows.append(["CGTMSE Guarantee Fee"] + [r(cy.get("cgtmse_fee", 0)) for cy in cop])
-    _opex_total_row = len(opex_rows)
-    opex_rows.append(["TOTAL OPEX"] + [
-        r(cy["labour"] + cy["power"] + cy["admin_expenses"] + cy["marketing_expenses"] + cy.get("cgtmse_fee", 0))
-        for cy in cop
-    ])
-    opex_t = Table(opex_rows, colWidths=[40*mm]+[26*mm]*5)
-    opex_t.setStyle(BTS()); opex_t.setStyle(TOT(_opex_total_row))
-    story.append(opex_t)
-    if _has_cgtmse_fee:
-        NL(story, 3)
-        story.append(Paragraph(
-            f"<b>CGTMSE Guarantee Fee:</b> {cma.get('cgtmse_agf_pct', 0)}% p.a. on the outstanding term loan "
-            "balance (declines as the loan amortises) — an assumed CGTMSE-related guarantee fee provision, "
-            "included as a fixed operating expense above, subject to applicable scheme terms and bank "
-            "confirmation. The percentage is configurable and should be verified against the AGF slab "
-            "actually applicable to this loan at sanction.",
-            ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 14 — PROJECTED PROFIT & LOSS
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 14 — PROJECTED PROFIT & LOSS", story)
-    _pl_cogs_label = (
-        "Less: Purchase Cost (COGS)"          if _is_trading else
-        "Less: Direct Service Delivery Cost"  if _is_service else
-        "Less: COGS"
-    )
-    _cgtmse_fee_row = (["CGTMSE Guarantee Fee"] + [r(cy.get("cgtmse_fee", 0)) for cy in cop]) if _has_cgtmse_fee else None
-    if _is_trading_service:
-        pl_rows = [
-            ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
-            ["Revenue at 100%"]       + [r(v) for v in _rev100_by_year],
-            ["Capacity Utilisation"]  + [rp(cy["capacity"])          for cy in cop],
-            ["Sales Revenue"]         + [r(cy["revenue"])            for cy in cop],
-            [_pl_cogs_label]          + [r(cy["raw_materials"])      for cy in cop],
-            ["Gross Profit"]          + [r(cy["revenue"] - cy["raw_materials"]) for cy in cop],
-            ["Less: Operating Expenses", "","","","",""],
-            ["Salary"]                + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)],
-            ["Utilities / Power"]     + [r(cy["power"])              for cy in cop],
-            ["Admin & Misc Expenses"] + [r(cy["admin_expenses"])     for cy in cop],
-            ["Marketing Expenses"]    + [r(cy["marketing_expenses"]) for cy in cop],
-        ]
-        if _cgtmse_fee_row: pl_rows.append(_cgtmse_fee_row)
-        _ebitda_row = len(pl_rows)
-        pl_rows.append(["EBITDA"] + [r(cy.get("ebitda", 0)) for cy in cop])
-        pl_rows += [
-            ["Depreciation"]          + [r(cy["depreciation"])       for cy in cop],
-            ["Interest on WC"]        + [r(cy["wc_interest"])        for cy in cop],
-            ["Interest on Term Loan"] + [r(cy["tl_interest"])        for cy in cop],
-        ]
-        _total_exp_row = len(pl_rows)
-        pl_rows.append(["TOTAL EXPENSES"] + [r(cy["total_expenses"]) for cy in cop])
-        pl_rows += [
-            ["Profit Before Tax"]     + [r(cy.get("profit_before_tax", cy["net_profit"])) for cy in cop],
-            ["Less: Tax"]             + [r(cy.get("tax", 0))         for cy in cop],
-        ]
-        _pat_row = len(pl_rows)
-        pl_rows.append(["NET PROFIT (PAT)"] + [r(cy["net_profit"]) for cy in cop])
-        pl_rows.append(["Reserves & Surplus"] + [r(cy["reserves_surplus"]) for cy in cop])
-        _cash_acc_row = len(pl_rows)
-        pl_rows.append(["Cash Accruals"] + [r(cy["cash_accruals"]) for cy in cop])
-        pl_t = Table(pl_rows, colWidths=[58*mm]+[22.4*mm]*5)
-        pl_t.setStyle(BTS())
-        for idx in [5, _ebitda_row, _total_exp_row, _pat_row, _cash_acc_row]: pl_t.setStyle(TOT(idx))
-    else:
-        pl_rows = [
-            ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
-            ["Revenue at 100%"]             + [r(v) for v in _rev100_by_year],
-            ["Capacity Utilisation"]        + [rp(cy["capacity"])                    for cy in cop],
-            ["Gross Sales Revenue"]         + [r(cy["revenue"])                      for cy in cop],
-            ["Less: Raw Materials / COGS"]  + [r(cy["raw_materials"])                for cy in cop],
-            ["Gross Profit"]                + [r(cy.get("gross_profit", 0))          for cy in cop],
-            ["Less: Utilities & Variable Exp"] + [r(cy["power"])                     for cy in cop],
-            ["Less: Labour & Wages"]        + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)],
-            ["Less: Admin & Overhead"]      + [r(cy["admin_expenses"])               for cy in cop],
-            ["Less: Marketing Expenses"]    + [r(cy["marketing_expenses"])           for cy in cop],
-        ]
-        if _cgtmse_fee_row: pl_rows.append(_cgtmse_fee_row)
-        _ebitda_row = len(pl_rows)
-        pl_rows.append(["EBITDA"] + [r(cy.get("ebitda", 0)) for cy in cop])
-        pl_rows += [
-            ["Less: Depreciation"]          + [r(cy["depreciation"])                for cy in cop],
-            ["Less: Interest on WC"]        + [r(cy["wc_interest"])                 for cy in cop],
-            ["Less: Interest on Term Loan"] + [r(cy["tl_interest"])                 for cy in cop],
-        ]
-        _total_exp_row = len(pl_rows)
-        pl_rows.append(["TOTAL EXPENSES"] + [r(cy["total_expenses"]) for cy in cop])
-        pl_rows += [
-            ["Profit Before Tax"]           + [r(cy.get("profit_before_tax", cy["net_profit"])) for cy in cop],
-            ["Less: Tax"]                   + [r(cy.get("tax", 0))                  for cy in cop],
-        ]
-        _pat_row = len(pl_rows)
-        pl_rows.append(["NET PROFIT (PAT)"] + [r(cy["net_profit"]) for cy in cop])
-        pl_rows.append(["Reserves & Surplus"] + [r(cy["reserves_surplus"]) for cy in cop])
-        _cash_acc_row = len(pl_rows)
-        pl_rows.append(["Cash Accruals"] + [r(cy["cash_accruals"]) for cy in cop])
-        pl_t = Table(pl_rows, colWidths=[58*mm]+[22.4*mm]*5)
-        pl_t.setStyle(BTS())
-        for idx in [5, _ebitda_row, _total_exp_row, _pat_row, _cash_acc_row]: pl_t.setStyle(TOT(idx))
-    story.append(pl_t)
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 15 — PROFITABILITY & RETURN ANALYSIS
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 15 — PROFITABILITY & RETURN ANALYSIS (Based on Year 3)", story)
-    # "Capital Employed" (CA/ROCE convention) = Promoter Equity + Term Loan —
-    # the long-term funds actually deployed — defined ONCE here and reused
-    # for every return metric below and in Section 30's methodology table.
-    # NOTE: the "Term Loan" column below is deliberately NOT total business
-    # debt — Capital Employed (ROCE convention) = Promoter Equity + TERM
-    # LOAN only, excluding the WC bank facility (a short-term revolving
-    # facility, not part of long-term capital employed). See Section 22 for
-    # actual Total Debt (Term Loan + WC Bank Loan).
-    # Header cells are Paragraph-wrapped, not plain strings — ReportLab does
-    # NOT auto-wrap plain strings, so this longer header text would
-    # otherwise overflow into the neighbouring column.
-    _ref_hdr_style = _s("ref_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
-    ref_t = Table([
-        [Paragraph(h, _ref_hdr_style) for h in
-         ["Reference Sales (Rs.)", "Total Project Investment (Rs.)", "Promoter Equity (Rs.)",
-          "Term Loan — Long-Term Debt (Rs.)", "Capital Employed (Rs.)"]],
-        [r(prof["sales"]), r(prof["total_investment"]), r(prof.get("promoter_equity", 0)),
-         r(prof.get("total_debt", 0)), r(prof["capital_employed"])],
-    ], colWidths=[34*mm,38*mm,34*mm,30*mm,34*mm])
-    ref_t.setStyle(BTS())
-    story.append(ref_t)
-    NL(story, 5)
-    _t_capital_employed = max(prof["capital_employed"], 1)
-    # Average Equity (for ROE) = average of Net Worth at the start and end of
-    # Year 3 — Net Worth = Equity + Promoter WC Margin + Reserves, taken from
-    # the projected Balance Sheet's own Year 2 (opening) and Year 3 (closing)
-    # rows, so ROE is never computed against a static, unchanging equity
-    # figure. Falls back to Promoter Equity only when Average Equity isn't
-    # meaningful (zero or negative, e.g. accumulated losses have eroded it).
-    # CA AUDIT: pb["equity"] is already Promoter Fixed Equity only — the
-    # Government/state capital subsidy is tracked SEPARATELY in
-    # pb["margin_money"] and is NEVER added in here, so this denominator
-    # already excludes it. The report previously didn't say so explicitly,
-    # leaving a reader to guess why ROE looked high relative to a Balance
-    # Sheet that also shows the subsidy inside Owners' Funds.
-    _net_worth = lambda pb: float(pb.get("equity", 0) or 0) + float(pb.get("promoter_wc_margin", 0) or 0) + float(pb.get("reserves", 0) or 0)
-    _avg_equity = None
-    if len(pbs) > 3:
-        _avg_equity_calc = R((_net_worth(pbs[2]) + _net_worth(pbs[3])) / 2, 2)
-        if _avg_equity_calc > 0:
-            _avg_equity = _avg_equity_calc
-    _roe_denom = _avg_equity if _avg_equity else max(prof.get("promoter_equity", 0), 1)
-    _roe_basis = "Average Promoter Equity (Year 2→3, excl. Govt. Subsidy)" if _avg_equity else "Promoter Equity (Average Equity not meaningful; excl. Govt. Subsidy)"
-    _pi_hdr_style = _s("pi_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
-    pi_t = Table([
-        [Paragraph(h, _pi_hdr_style) for h in
-         ["Metric", "Amount (Rs.)", "% of Sales", "ROCE = EBIT ÷ Capital Employed × 100",
-          "ROE = PAT ÷ Avg. Promoter Equity × 100 (excl. Subsidy)", "ROI = PAT ÷ Initial Investment × 100"]],
-        ["EBIT", rs(prof.get("ebit", 0)), rp2(R(prof.get("ebit", 0) / max(prof["sales"], 1) * 100, 2)),
-         pof(prof.get("ebit", 0), _t_capital_employed), "—", "—"],
-        ["PAT (Net Profit)", rs(prof["pat"]), rp2(prof["pat_pct_sales"]),
-         "—", pof(prof['pat'], _roe_denom), pof(prof['pat'], max(prof['total_investment'],1))],
-    ], colWidths=[24*mm,24*mm,18*mm,38*mm,30*mm,36*mm])
-    pi_t.setStyle(BTS())
-    story.append(pi_t)
-    NL(story, 3)
-    story.append(Paragraph(
-        f"<b>ROCE</b> = EBIT ÷ Capital Employed (Promoter Equity + Term Loan) × 100 — return on all "
-        "long-term funds deployed, before financing structure is considered. "
-        f"<b>ROE</b> = PAT ÷ {_roe_basis} × 100 — return to the promoter specifically. "
-        "<b>ROI</b> = PAT ÷ Initial Project Investment × 100. "
-        "ROE/ROCE can legitimately run very high (or very negative) for a thinly-capitalised, "
-        "highly-leveraged project, since a small equity base amplifies both gains and losses — "
-        "a large magnitude is a leverage signal, not a calculation error.",
-        ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 16 — WORKING CAPITAL ASSESSMENT
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 16 — WORKING CAPITAL ASSESSMENT", story)
-    _stock_days   = inp.get("stock_holding_days", inp.get("wc_raw_material_days", 30))
-    _wip_days     = inp.get("wip_days",           inp.get("wc_wip_days", 15))
-    _fg_days      = inp.get("fg_days",            inp.get("wc_finished_goods_days", 30))
-    _debtor_days  = inp.get("debtor_days",        30)
-    _creditor_days= inp.get("creditor_days",      15)
-
-    def _wc(w, *keys):
-        """Return first non-None numeric value found for the given key sequence."""
-        for key in keys:
-            val = w.get(key)
-            if val is not None:
-                try:
-                    return float(val)
-                except (TypeError, ValueError):
-                    pass
-        return 0.0
-
-    _wc_industry   = str(inp.get("industry", inp.get("industry_type", "manufacturing"))).lower()
-    _is_trading_wc = _wc_industry == "trading"
-    _is_service_wc = _wc_industry in ("service", "services")
-    _is_mfg_wc     = not (_is_trading_wc or _is_service_wc)
-    _wc_rows = [["Particulars", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"]]
-    if _is_service_wc:
-        _wc_rows += [
-            [f"Receivables ({_debtor_days} day client billing cycle)"] + [r(_wc(w, "debtors")) for w in wc],
-            ["Salary Float (30 days payroll)"]                         + [r(_wc(w, "salary_float")) for w in wc],
-            ["Expense Float (30 days operating cost)"]                 + [r(_wc(w, "expense_float")) for w in wc],
-            ["Cash Reserve (15 days operating buffer)"]                + [r(_wc(w, "cash_reserve")) for w in wc],
-        ]
-    else:
-        _stock_label = "Stock of Goods" if _is_trading_wc else "Raw Material Stock"
-        _wc_rows.append([f"{_stock_label} ({_stock_days} days)"] + [r(_wc(w, "rm_stock", "rm_wc", "stock")) for w in wc])
-    if _is_mfg_wc:
-        _wc_rows.append([f"Work in Progress ({_wip_days} days)"] + [r(_wc(w, "wip", "wip_wc")) for w in wc])
-        _wc_rows.append([f"Finished Goods ({_fg_days} days)"]    + [r(_wc(w, "fg", "fg_wc"))   for w in wc])
-    if not _is_service_wc:
-        _wc_rows += [
-            [f"Debtors ({_debtor_days} days)"] + [r(_wc(w, "debtors")) for w in wc],
-            ["Less: Creditors"]               + [r(_wc(w, "creditors")) for w in wc],
-        ]
-    _wc_rows.append(["Total WC Required"] + [r(w["total"]) for w in wc])
-    _wc_total_row_idx = len(_wc_rows) - 1
-    wc_t = Table(_wc_rows, colWidths=[62*mm] + [21.6*mm] * 5)
-    wc_t.setStyle(BTS())
-    wc_t.setStyle(TOT(_wc_total_row_idx))
-    story.append(wc_t)
-    if _is_service_wc:
-        NL(story, 3)
-        story.append(Paragraph(
-            "Service WC uses receivables, salary float, expense float, and cash reserve. "
-            "Manufacturing/trading inventory norms are intentionally excluded.",
-            ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 17 — WORKING CAPITAL FINANCING
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 17 — WORKING CAPITAL FINANCING", story)
-    wcfin_rows = [["Particulars", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"]]
-    wcfin_rows.append(["Total WC Requirement"]    + [r(w["total"]) for w in wc])
-    wcfin_rows.append(["WC Margin (Promoter's Share)"] + [r(w["margin"]) for w in wc])
-    wcfin_rows.append(["Bank WC Loan"]            + [r(w["bank_loan"]) for w in wc])
-    wcfin_rows.append(["Margin %"]                + [pof(w["margin"], w["total"]) for w in wc])
-    wcfin_rows.append(["Bank Finance %"]          + [pof(w["bank_loan"], w["total"]) for w in wc])
-    wcfin_rows.append(["WC Interest"]             + [r(w["wc_interest"]) for w in wc])
-    wcfin_t = Table(wcfin_rows, colWidths=[62*mm] + [21.6*mm] * 5)
-    wcfin_t.setStyle(BTS()); wcfin_t.setStyle(TOT(1))
-    story.append(wcfin_t)
-    NL(story, 3)
-    story.append(Paragraph(
-        f"<b>Note:</b> WC Bank Loan (Rs. {wc[0]['bank_loan']:,.0f}) is a revolving credit facility -- "
-        "not part of project cost. Renewed annually based on utilisation. This facility is separate "
-        "from the term loan (Section 21) and is not amortised.",
-        ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 18 — WORKING CAPITAL CYCLE
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 18 — WORKING CAPITAL CYCLE", story)
-    _cycle_flow = (
-        "Service Delivery → Customer Billing → Receivables → Collection → Cash. "
-        "Inventory assumptions are not used for this service business — see Section 16."
-        if _is_service_wc else
-        "Purchases → Inventory → Sales → Receivables → Cash, financed against Supplier Credit → Payables."
-    )
-    story.append(Paragraph(_cycle_flow, ST["normal"]))
-    NL(story, 4)
-    _cycle_rows = [["Component", "Days"]]
-    if not _is_service_wc:
-        _cycle_rows.append(["Stock / Inventory Holding Days", str(_stock_days)])
-    if _is_mfg_wc:
-        _cycle_rows.append(["Work-in-Progress Days", str(_wip_days)])
-        _cycle_rows.append(["Finished Goods Holding Days", str(_fg_days)])
-    _cycle_rows.append(["Receivable / Debtor Days", str(_debtor_days)])
-    # CA AUDIT: Section 16's own WC model for a SERVICE business never
-    # includes a Creditors/Payables line (there is no inventory purchased
-    # on supplier credit) — but this section used to always show
-    # "Less: Creditor/Payable Days" and net it against Receivable Days
-    # regardless, producing a Net Operating Cycle netted against a
-    # creditor figure that has no corresponding Rs. amount anywhere in
-    # Section 16. Only show/net creditor days for non-service (mfg/trading)
-    # businesses, where Section 16 actually models a "Less: Creditors" Rs.
-    # line — keeping both sections on the same WC model.
-    if not _is_service_wc:
-        _cycle_rows.append(["Less: Creditor / Payable Days", f"-{_creditor_days}"])
-    _net_cycle = (
-        (0 if _is_service_wc else int(_stock_days))
-        + (int(_wip_days) + int(_fg_days) if _is_mfg_wc else 0)
-        + int(_debtor_days) - (0 if _is_service_wc else int(_creditor_days))
-    )
-    _cycle_rows.append(["NET OPERATING CYCLE (Days)" if not _is_service_wc else "Operating (Receivable) Cycle (Days)", str(_net_cycle)])
-    cycle_t = Table(_cycle_rows, colWidths=[130*mm, 40*mm])
-    cycle_t.setStyle(BTS()); cycle_t.setStyle(TOT(len(_cycle_rows)-1))
-    story.append(cycle_t)
-    if _is_service_wc:
-        NL(story, 3)
-        story.append(Paragraph(
-            "<b>Note:</b> This is a service business — the operating cycle above reflects only the "
-            f"{_debtor_days}-day receivable/client-billing cycle used in Section 16. Inventory and "
-            "trade-creditor cycles are not separately modelled for this business type (there is no "
-            "stock purchased on supplier credit to net against).",
-            ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 19 — FIXED ASSET SCHEDULE
-    # ════════════════════════════════════════════════════════════════
     _sec19_title = (
-        "SECTION 19 — SHOP EQUIPMENT, FIXTURES & INTERIORS"    if _is_trading else
-        "SECTION 19 — OFFICE INFRASTRUCTURE & SERVICE SETUP"    if _is_service else
-        "SECTION 19 — AGRICULTURAL EQUIPMENT & INFRASTRUCTURE"  if _is_agri   else
-        "SECTION 19 — FIXED ASSET SCHEDULE (PLANT, MACHINERY & EQUIPMENT)"
+        "D4. Shop Equipment, Fixtures & Interiors"    if _is_trading else
+        "D4. Office Infrastructure & Service Setup"    if _is_service else
+        "D4. Agricultural Equipment & Infrastructure"  if _is_agri   else
+        "D4. Fixed Asset Schedule (Plant, Machinery & Equipment)"
     )
-    SEC(_sec19_title, story)
+    H2(_sec19_title, story)
     _cont_pct = inp.get("contingency_rate", 0)
     _cont_item_word = "fixture/fitting" if _is_trading else ("equipment" if _is_service else "machinery")
     _cont_note = (
@@ -1844,147 +1607,79 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(gb_t)
     PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 20 — DEPRECIATION (WDV)
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 20 — DEPRECIATION SCHEDULE (WDV METHOD)", story)
-    story.append(Paragraph("<b>Selected Depreciation Method: Written Down Value (WDV)</b>", ST["bold"]))
-    NL(story, 3)
-    _dep_sched = dep.get("schedule") or []
-    _sched_opening = [r(row["opening_wdv"]) for row in _dep_sched] or [r(dep["gross_block"])] * 5
-    _sched_dep     = [r(row["depreciation"]) for row in _dep_sched] or [r(dep["total_per_year"])] * 5
-    _sched_closing = [r(row["closing_wdv"]) for row in _dep_sched] or [r(dep["gross_block"])] * 5
-    _accum = 0.0
-    _sched_accum = []
-    for row in (_dep_sched or []):
-        _accum += float(row["depreciation"])
-        _sched_accum.append(r(_accum))
-    if not _sched_accum:
-        _sched_accum = [r(dep["total_per_year"] * y) for y in range(1, 6)]
-    dep_t = Table([
-        ["Particulars",                "Year 1",       "Year 2",       "Year 3",       "Year 4",       "Year 5"],
-        ["Opening WDV"]                 + _sched_opening,
-        ["Depreciation (WDV × Rate)"]   + _sched_dep,
-        ["Accumulated Depreciation"]    + _sched_accum,
-        ["Closing WDV (Net Block)"]     + _sched_closing,
-    ], colWidths=[60*mm] + [22*mm] * 5)
-    dep_t.setStyle(BTS())
-    dep_t.setStyle(TOT(4))
-    story.append(dep_t)
-    story.append(Paragraph(
-        "WDV Method: each year's depreciation = Opening WDV × Rate; Closing WDV = Opening WDV − Depreciation, "
-        "carried forward as next year's Opening WDV.",
-        ST["small"]))
-    PB(story)
+    # ════════════════════════════════════════════════════════════════════════════
+    # SECTION-E — HR & MANPOWER
+    # ════════════════════════════════════════════════════════════════════════════
 
     # ════════════════════════════════════════════════════════════════
-    # SECTION 21 — TERM LOAN SCHEDULE
+    # SECTION 13 — OPERATING EXPENSES
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 21 — TERM LOAN REPAYMENT & INTEREST SCHEDULE", story)
-    tl_meta = Table([
-        ["Parameter","Value","Parameter","Value"],
-        ["Term Loan Amount",       rs(tl["amount"]),              "Interest Rate",    rp(tl["interest_rate"])],
-        ["Half-Yearly Instalment", rs(tl["half_yearly_instalment"]),"Moratorium",    _morat_str],
-        ["Total Interest Payable", rs(tl["total_interest"]),      "Loan Tenure",     f"{inp.get('loan_tenure_years',5)} Years"],
-    ], colWidths=[50*mm,35*mm,50*mm,35*mm])
-    tl_meta.setStyle(BTS())
-    story.append(tl_meta)
-    NL(story, 5)
-    tl_rows = [["Year","Opening Balance","Mid-Year Balance","Principal Repaid","Closing Balance","Interest H1","Interest H2","Total Interest"]]
-    for row in tl["schedule"]:
-        tl_rows.append([str(row["year"]),r(row["opening"]),r(row["mid"]),r(row["principal_repaid"]),r(row["closing"]),
-                         r(row["int_h1"]),r(row["int_h2"]),r(row["total_interest"])])
-    tl_t = Table(tl_rows, colWidths=[12*mm]+[22.5*mm]*7)
-    tl_t.setStyle(BTS())
-    story.append(tl_t)
-    NL(story, 3)
-    _morat_note_mo = int(inp.get("moratorium_months", inp.get("moratorium_years", 0) * 12) or 0)
-    if _morat_note_mo > 0:
+    SEC("SECTION-E: HR & MANPOWER", story)
+    H2("E1. Manpower & Wage Structure", story)
+    total_staff = (man.get("num_skilled", 0) + man.get("num_semi", 0) + man.get("num_unskilled", 0))
+    hr_rows = [
+        ["Sl.", "Category", "Headcount", "Monthly Salary (Rs.)", "Annual Salary (Rs.)", "Annual Total (Rs.)"],
+        ["1", "Promoter / Owner", "1", rs(0), rs(man.get("promoter_annual", 0)), rs(man.get("promoter_annual", 0))],
+        ["2", "Skilled Worker",
+         str(man.get("num_skilled", 0)),
+         rs(man.get("skilled_per_annual", man.get("skilled_annual", 0)) / 12) if man.get("num_skilled", 0) else "—",
+         rs(man.get("skilled_per_annual", man.get("skilled_annual", 0))),
+         rs(man.get("skilled_total", 0))],
+        ["3", "Semi-Skilled Worker",
+         str(man.get("num_semi", 0)),
+         rs(man.get("semi_skilled_per_annual", man.get("semi_skilled_annual", 0)) / 12) if man.get("num_semi", 0) else "—",
+         rs(man.get("semi_skilled_per_annual", man.get("semi_skilled_annual", 0))),
+         rs(man.get("semi_skilled_total", 0))],
+        ["4", "Unskilled / Helper",
+         str(man.get("num_unskilled", 0)),
+         rs(man.get("unskilled_per_annual", man.get("unskilled_annual", 0)) / 12) if man.get("num_unskilled", 0) else "—",
+         rs(man.get("unskilled_per_annual", man.get("unskilled_annual", 0))),
+         rs(man.get("unskilled_total", 0))],
+        ["", "PF / ESI / Benefits (10%)", "", "", "", rs(man.get("benefits", 0))],
+        ["", f"TOTAL ({total_staff} staff)", "", "", "", rs(cma.get("annual_salary_total", man.get("total_wages", 0)))],
+    ]
+    hr_t = Table(hr_rows, colWidths=[8*mm, 42*mm, 18*mm, 28*mm, 32*mm, 32*mm])
+    hr_t.setStyle(BTS())
+    hr_t.setStyle(TOT(len(hr_rows) - 1))
+    story.append(hr_t)
+    if float(man.get("promoter_annual", 0) or 0) <= 0:
+        NL(story, 3)
         story.append(Paragraph(
-            f"Note: First {_morat_note_mo} month(s) are moratorium period — interest accrues but no principal repayment.",
+            "<b>Promoter remuneration not considered.</b> Profitability may be overstated because owner salary/drawings are not included as an operating cost.",
+            ST["small"]))
+    NL(story, 6)
+
+    H2("E2. Operating Expenses Summary (Year 1 → Year 5)", story)
+    _has_cgtmse_fee = any(float(cy.get("cgtmse_fee", 0) or 0) > 0 for cy in cop)
+    opex_rows = [["Expense"] + [f"Year {cy['year']}" for cy in cop]]
+    opex_rows.append(["Salary"] + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)])
+    opex_rows.append(["Utilities / Power"] + [r(cy["power"]) for cy in cop])
+    opex_rows.append(["Admin & Misc Expenses"] + [r(cy["admin_expenses"]) for cy in cop])
+    opex_rows.append(["Marketing Expenses"] + [r(cy["marketing_expenses"]) for cy in cop])
+    if _has_cgtmse_fee:
+        opex_rows.append(["CGTMSE Guarantee Fee"] + [r(cy.get("cgtmse_fee", 0)) for cy in cop])
+    _opex_total_row = len(opex_rows)
+    opex_rows.append(["TOTAL OPEX"] + [
+        r(cy["labour"] + cy["power"] + cy["admin_expenses"] + cy["marketing_expenses"] + cy.get("cgtmse_fee", 0))
+        for cy in cop
+    ])
+    opex_t = Table(opex_rows, colWidths=[40*mm]+[26*mm]*5)
+    opex_t.setStyle(BTS()); opex_t.setStyle(TOT(_opex_total_row))
+    story.append(opex_t)
+    if _has_cgtmse_fee:
+        NL(story, 3)
+        story.append(Paragraph(
+            f"<b>CGTMSE Guarantee Fee:</b> {cma.get('cgtmse_agf_pct', 0)}% p.a. on the outstanding term loan "
+            "balance (declines as the loan amortises) — an assumed CGTMSE-related guarantee fee provision, "
+            "included as a fixed operating expense above, subject to applicable scheme terms and bank "
+            "confirmation. The percentage is configurable and should be verified against the AGF slab "
+            "actually applicable to this loan at sanction.",
             ST["small"]))
     PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 22 — TOTAL DEBT SCHEDULE
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 22 — TOTAL DEBT SCHEDULE", story)
-    # BUG FIX: this platform's CMA projection (P&L, DSCR, Cash Flow, Balance
-    # Sheet, and the WC schedule itself) is always exactly 5 years — but a
-    # Term Loan can run longer (e.g. 7 years here), and this table used to
-    # keep listing TL years past Year 5 with WC Bank Loan silently shown as
-    # "0", implying the working capital facility had been repaid off by
-    # Year 6 — which is not true; WC simply isn't projected that far. Years
-    # beyond the 5-year WC projection show "—" (not projected) instead of a
-    # misleading zero, and Total Debt for those years is Term Loan only.
-    _has_beyond_5yr = len(cma["yr_schedule"]) > len(wc)
-    debt_rows = [["Year", "Term Loan Closing (Rs.)", "WC Bank Loan (Rs.)", "Total Debt (Rs.)"]]
-    for i, y in enumerate(cma["yr_schedule"]):
-        if i < len(wc):
-            _wc_bank_yr = float(wc[i]["bank_loan"])
-            debt_rows.append([str(y["year"]), r(y["closing_balance"]), r(_wc_bank_yr), r(y["closing_balance"] + _wc_bank_yr)])
-        else:
-            # CA AUDIT: showing "Rs.0*" here (Term Loan closing balance
-            # happens to be 0 once fully amortised) reads as "Total Debt
-            # is zero" — it isn't; the WC Bank Loan component is simply
-            # unknown, not zero. A total can't be asserted when one of its
-            # own components is unprojected, regardless of what the other
-            # component's value happens to be.
-            debt_rows.append([str(y["year"]), r(y["closing_balance"]), "— (not projected)", "Not Projected*"])
-    debt_t = Table(debt_rows, colWidths=[20*mm, 45*mm, 45*mm, 35*mm])
-    debt_t.setStyle(BTS())
-    story.append(debt_t)
-    NL(story, 3)
-    _debt_note = (
-        "Term Loan reduces to zero by the end of tenure (amortising facility); WC Bank Loan is a "
-        "revolving facility renewed annually and does not amortise."
-    )
-    if _has_beyond_5yr:
-        _debt_note += (
-            " This platform's detailed CMA projection (P&amp;L, Balance Sheet, Cash Flow) covers 5 years; "
-            "the Term Loan's own amortisation is shown beyond Year 5 for reference, but WC Bank Loan is "
-            "not separately projected that far — marked with * (Total Debt cannot be stated when one of "
-            "its two components, WC Bank Loan, is unprojected for that year)."
-        )
-    story.append(Paragraph(_debt_note, ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 23 — CASH FLOW STATEMENT
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 23 — PROJECTED CASH FLOW STATEMENT", story)
-    cf_t = Table([
-        ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
-        ["SOURCE OF FUNDS","","","","",""],
-        ["Cash Accruals"]           + [r(p["cash_accruals"])      for p in pcf],
-        ["Inc. in Bank Borrowings"] + [r(p["inc_wc_loan"])        for p in pcf],
-        ["Inc. in Promoter's WC Margin"] + [r(p.get("inc_wc_margin", 0)) for p in pcf],
-        ["Total Sources"]           + [r(p["total_sources"])       for p in pcf],
-        ["USE OF FUNDS","","","","",""],
-        ["Inc. in Current Assets"]  + [r(p["inc_current_assets"]) for p in pcf],
-        ["Term Loan Repayment"]     + [r(p["tl_repayment"])       for p in pcf],
-        ["Less: Promoter Drawings"] + [r(p.get("drawings", 0))    for p in pcf],
-        ["Total Uses"]             + [r(p["total_uses"])           for p in pcf],
-        ["Opening Cash Balance"]    + [r(p["opening_cash"])       for p in pcf],
-        ["Surplus / Deficit"]       + [r(p["surplus"])            for p in pcf],
-        ["Closing Cash Balance"]    + [r(p["closing_cash"])      for p in pcf],
-    ], colWidths=[60*mm]+[22*mm]*5)
-    cf_t.setStyle(BTS())
-    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
-    story.append(cf_t)
-    NL(story, 3)
-    story.append(Paragraph(
-        # A funding shortfall is never dressed up as an arranged borrowing
-        # source — a negative Closing Cash Balance IS the shortfall.
-        "<b>Note:</b> Closing Cash Balance is allowed to go negative when the term loan, WC bank finance, "
-        "and promoter's WC margin already factored into this report don't cover the cash requirement — "
-        "that negative figure IS the unarranged funding shortfall. It is deliberately not dressed up as a "
-        "borrowing source above. If this figure is negative in any year, the applicant will need to "
-        "either arrange additional promoter funding, secure a CC/OD or unsecured-loan enhancement, or "
-        "revise the underlying revenue/cost assumptions before bank submission.",
-        ST["small"]))
-    PB(story)
-
+    # ════════════════════════════════════════════════════════════════════════════
+    # 4 / SECTION-K — PROJECTED BALANCE SHEET
+    # ════════════════════════════════════════════════════════════════════════════
     # ════════════════════════════════════════════════════════════════
     # SECTION 24 — PROJECTED BALANCE SHEET
     # ════════════════════════════════════════════════════════════════
@@ -2009,9 +1704,9 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     )
     _bs_format_label = "Schedule III Format" if _is_company_constitution else "Indicative CMA Format"
     _bs_title = (
-        f"SECTION 24 — PROJECTED BALANCE SHEET (Illustrative Before Additional Funding — {_bs_format_label}, Amounts in Rs.)"
+        f"4 / SECTION-K: PROJECTED BALANCE SHEET (Illustrative Before Additional Funding — {_bs_format_label}, Amounts in Rs.)"
         if _has_funding_shortfall else
-        f"SECTION 24 — PROJECTED BALANCE SHEET ({_bs_format_label}, Amounts in Rs.)"
+        f"4 / SECTION-K: PROJECTED BALANCE SHEET ({_bs_format_label}, Amounts in Rs.)"
     )
     SEC(_bs_title, story)
     _display_reserve = lambda pb: max(float(pb.get("reserves", 0) or 0), 0)
@@ -2122,7 +1817,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _fg_tbl = Table(
             [[Paragraph(
                 "<b>Before bank submission:</b> " + " | ".join(_fg_yrs) + " of additional funding is needed "
-                "beyond what this report's Means of Finance (Section 08) already arranges. Either increase "
+                "beyond what this report's Means of Finance (Section-B) already arranges. Either increase "
                 "promoter funding, arrange an additional CC/OD or unsecured-loan facility for this amount, "
                 "or revise the revenue/cost assumptions driving the shortfall.",
                 ST["small"]
@@ -2168,10 +1863,321 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(_cap_ero_tbl)
     PB(story)
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # 5 / SECTION-J — PROFIT & LOSS STATEMENT
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # ════════════════════════════════════════════════════════════════
+    # SECTION 14 — PROJECTED PROFIT & LOSS
+    # ════════════════════════════════════════════════════════════════
+    SEC("5 / SECTION-J: PROFIT & LOSS STATEMENT", story)
+    _pl_cogs_label = (
+        "Less: Purchase Cost (COGS)"          if _is_trading else
+        "Less: Direct Service Delivery Cost"  if _is_service else
+        "Less: COGS"
+    )
+    _cgtmse_fee_row = (["CGTMSE Guarantee Fee"] + [r(cy.get("cgtmse_fee", 0)) for cy in cop]) if _has_cgtmse_fee else None
+    if _is_trading_service:
+        pl_rows = [
+            ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
+            ["Revenue at 100%"]       + [r(v) for v in _rev100_by_year],
+            ["Capacity Utilisation"]  + [rp(cy["capacity"])          for cy in cop],
+            ["Sales Revenue"]         + [r(cy["revenue"])            for cy in cop],
+            [_pl_cogs_label]          + [r(cy["raw_materials"])      for cy in cop],
+            ["Gross Profit"]          + [r(cy["revenue"] - cy["raw_materials"]) for cy in cop],
+            ["Less: Operating Expenses", "","","","",""],
+            ["Salary"]                + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)],
+            ["Utilities / Power"]     + [r(cy["power"])              for cy in cop],
+            ["Admin & Misc Expenses"] + [r(cy["admin_expenses"])     for cy in cop],
+            ["Marketing Expenses"]    + [r(cy["marketing_expenses"]) for cy in cop],
+        ]
+        if _cgtmse_fee_row: pl_rows.append(_cgtmse_fee_row)
+        _ebitda_row = len(pl_rows)
+        pl_rows.append(["EBITDA"] + [r(cy.get("ebitda", 0)) for cy in cop])
+        pl_rows += [
+            ["Depreciation"]          + [r(cy["depreciation"])       for cy in cop],
+            ["Interest on WC"]        + [r(cy["wc_interest"])        for cy in cop],
+            ["Interest on Term Loan"] + [r(cy["tl_interest"])        for cy in cop],
+        ]
+        _total_exp_row = len(pl_rows)
+        pl_rows.append(["TOTAL EXPENSES"] + [r(cy["total_expenses"]) for cy in cop])
+        pl_rows += [
+            ["Profit Before Tax"]     + [r(cy.get("profit_before_tax", cy["net_profit"])) for cy in cop],
+            ["Less: Tax"]             + [r(cy.get("tax", 0))         for cy in cop],
+        ]
+        _pat_row = len(pl_rows)
+        pl_rows.append(["NET PROFIT (PAT)"] + [r(cy["net_profit"]) for cy in cop])
+        pl_rows.append(["Reserves & Surplus"] + [r(cy["reserves_surplus"]) for cy in cop])
+        _cash_acc_row = len(pl_rows)
+        pl_rows.append(["Cash Accruals"] + [r(cy["cash_accruals"]) for cy in cop])
+        pl_t = Table(pl_rows, colWidths=[58*mm]+[22.4*mm]*5)
+        pl_t.setStyle(BTS())
+        for idx in [5, _ebitda_row, _total_exp_row, _pat_row, _cash_acc_row]: pl_t.setStyle(TOT(idx))
+    else:
+        pl_rows = [
+            ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
+            ["Revenue at 100%"]             + [r(v) for v in _rev100_by_year],
+            ["Capacity Utilisation"]        + [rp(cy["capacity"])                    for cy in cop],
+            ["Gross Sales Revenue"]         + [r(cy["revenue"])                      for cy in cop],
+            ["Less: Raw Materials / COGS"]  + [r(cy["raw_materials"])                for cy in cop],
+            ["Gross Profit"]                + [r(cy.get("gross_profit", 0))          for cy in cop],
+            ["Less: Utilities & Variable Exp"] + [r(cy["power"])                     for cy in cop],
+            ["Less: Labour & Wages"]        + [r(cma.get("annual_salary_total", cy["labour"]) if i==0 else cy["labour"]) for i,cy in enumerate(cop)],
+            ["Less: Admin & Overhead"]      + [r(cy["admin_expenses"])               for cy in cop],
+            ["Less: Marketing Expenses"]    + [r(cy["marketing_expenses"])           for cy in cop],
+        ]
+        if _cgtmse_fee_row: pl_rows.append(_cgtmse_fee_row)
+        _ebitda_row = len(pl_rows)
+        pl_rows.append(["EBITDA"] + [r(cy.get("ebitda", 0)) for cy in cop])
+        pl_rows += [
+            ["Less: Depreciation"]          + [r(cy["depreciation"])                for cy in cop],
+            ["Less: Interest on WC"]        + [r(cy["wc_interest"])                 for cy in cop],
+            ["Less: Interest on Term Loan"] + [r(cy["tl_interest"])                 for cy in cop],
+        ]
+        _total_exp_row = len(pl_rows)
+        pl_rows.append(["TOTAL EXPENSES"] + [r(cy["total_expenses"]) for cy in cop])
+        pl_rows += [
+            ["Profit Before Tax"]           + [r(cy.get("profit_before_tax", cy["net_profit"])) for cy in cop],
+            ["Less: Tax"]                   + [r(cy.get("tax", 0))                  for cy in cop],
+        ]
+        _pat_row = len(pl_rows)
+        pl_rows.append(["NET PROFIT (PAT)"] + [r(cy["net_profit"]) for cy in cop])
+        pl_rows.append(["Reserves & Surplus"] + [r(cy["reserves_surplus"]) for cy in cop])
+        _cash_acc_row = len(pl_rows)
+        pl_rows.append(["Cash Accruals"] + [r(cy["cash_accruals"]) for cy in cop])
+        pl_t = Table(pl_rows, colWidths=[58*mm]+[22.4*mm]*5)
+        pl_t.setStyle(BTS())
+        for idx in [5, _ebitda_row, _total_exp_row, _pat_row, _cash_acc_row]: pl_t.setStyle(TOT(idx))
+    story.append(pl_t)
+
+    H2("J2. Profitability & Return Analysis (Based on Year 3)", story)
+    NL(story, 3)
+    # "Capital Employed" (CA/ROCE convention) = Promoter Equity + Term Loan —
+    # the long-term funds actually deployed — defined ONCE here and reused
+    # for every return metric below and in the Assumptions & Methodology appendix's methodology table.
+    # NOTE: the "Term Loan" column below is deliberately NOT total business
+    # debt — Capital Employed (ROCE convention) = Promoter Equity + TERM
+    # LOAN only, excluding the WC bank facility (a short-term revolving
+    # facility, not part of long-term capital employed). See Section-H for
+    # actual Total Debt (Term Loan + WC Bank Loan).
+    # Header cells are Paragraph-wrapped, not plain strings — ReportLab does
+    # NOT auto-wrap plain strings, so this longer header text would
+    # otherwise overflow into the neighbouring column.
+    _ref_hdr_style = _s("ref_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
+    ref_t = Table([
+        [Paragraph(h, _ref_hdr_style) for h in
+         ["Reference Sales (Rs.)", "Total Project Investment (Rs.)", "Promoter Equity (Rs.)",
+          "Term Loan — Long-Term Debt (Rs.)", "Capital Employed (Rs.)"]],
+        [r(prof["sales"]), r(prof["total_investment"]), r(prof.get("promoter_equity", 0)),
+         r(prof.get("total_debt", 0)), r(prof["capital_employed"])],
+    ], colWidths=[34*mm,38*mm,34*mm,30*mm,34*mm])
+    ref_t.setStyle(BTS())
+    story.append(ref_t)
+    NL(story, 5)
+    _t_capital_employed = max(prof["capital_employed"], 1)
+    # Average Equity (for ROE) = average of Net Worth at the start and end of
+    # Year 3 — Net Worth = Equity + Promoter WC Margin + Reserves, taken from
+    # the projected Balance Sheet's own Year 2 (opening) and Year 3 (closing)
+    # rows, so ROE is never computed against a static, unchanging equity
+    # figure. Falls back to Promoter Equity only when Average Equity isn't
+    # meaningful (zero or negative, e.g. accumulated losses have eroded it).
+    # CA AUDIT: pb["equity"] is already Promoter Fixed Equity only — the
+    # Government/state capital subsidy is tracked SEPARATELY in
+    # pb["margin_money"] and is NEVER added in here, so this denominator
+    # already excludes it. The report previously didn't say so explicitly,
+    # leaving a reader to guess why ROE looked high relative to a Balance
+    # Sheet that also shows the subsidy inside Owners' Funds.
+    _net_worth = lambda pb: float(pb.get("equity", 0) or 0) + float(pb.get("promoter_wc_margin", 0) or 0) + float(pb.get("reserves", 0) or 0)
+    _avg_equity = None
+    if len(pbs) > 3:
+        _avg_equity_calc = R((_net_worth(pbs[2]) + _net_worth(pbs[3])) / 2, 2)
+        if _avg_equity_calc > 0:
+            _avg_equity = _avg_equity_calc
+    _roe_denom = _avg_equity if _avg_equity else max(prof.get("promoter_equity", 0), 1)
+    _roe_basis = "Average Promoter Equity (Year 2→3, excl. Govt. Subsidy)" if _avg_equity else "Promoter Equity (Average Equity not meaningful; excl. Govt. Subsidy)"
+    _pi_hdr_style = _s("pi_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
+    pi_t = Table([
+        [Paragraph(h, _pi_hdr_style) for h in
+         ["Metric", "Amount (Rs.)", "% of Sales", "ROCE = EBIT ÷ Capital Employed × 100",
+          "ROE = PAT ÷ Avg. Promoter Equity × 100 (excl. Subsidy)", "ROI = PAT ÷ Initial Investment × 100"]],
+        ["EBIT", rs(prof.get("ebit", 0)), rp2(R(prof.get("ebit", 0) / max(prof["sales"], 1) * 100, 2)),
+         pof(prof.get("ebit", 0), _t_capital_employed), "—", "—"],
+        ["PAT (Net Profit)", rs(prof["pat"]), rp2(prof["pat_pct_sales"]),
+         "—", pof(prof['pat'], _roe_denom), pof(prof['pat'], max(prof['total_investment'],1))],
+    ], colWidths=[24*mm,24*mm,18*mm,38*mm,30*mm,36*mm])
+    pi_t.setStyle(BTS())
+    story.append(pi_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        f"<b>ROCE</b> = EBIT ÷ Capital Employed (Promoter Equity + Term Loan) × 100 — return on all "
+        "long-term funds deployed, before financing structure is considered. "
+        f"<b>ROE</b> = PAT ÷ {_roe_basis} × 100 — return to the promoter specifically. "
+        "<b>ROI</b> = PAT ÷ Initial Project Investment × 100. "
+        "ROE/ROCE can legitimately run very high (or very negative) for a thinly-capitalised, "
+        "highly-leveraged project, since a small equity base amplifies both gains and losses — "
+        "a large magnitude is a leverage signal, not a calculation error.",
+        ST["small"]))
+    PB(story)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 6 / SECTION-G — CALCULATION OF DEPRECIATION
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # ════════════════════════════════════════════════════════════════
+    # SECTION 20 — DEPRECIATION (WDV)
+    # ════════════════════════════════════════════════════════════════
+    SEC("6 / SECTION-G: CALCULATION OF DEPRECIATION (WDV METHOD)", story)
+    story.append(Paragraph("<b>Selected Depreciation Method: Written Down Value (WDV)</b>", ST["bold"]))
+    NL(story, 3)
+    _dep_sched = dep.get("schedule") or []
+    _sched_opening = [r(row["opening_wdv"]) for row in _dep_sched] or [r(dep["gross_block"])] * 5
+    _sched_dep     = [r(row["depreciation"]) for row in _dep_sched] or [r(dep["total_per_year"])] * 5
+    _sched_closing = [r(row["closing_wdv"]) for row in _dep_sched] or [r(dep["gross_block"])] * 5
+    _accum = 0.0
+    _sched_accum = []
+    for row in (_dep_sched or []):
+        _accum += float(row["depreciation"])
+        _sched_accum.append(r(_accum))
+    if not _sched_accum:
+        _sched_accum = [r(dep["total_per_year"] * y) for y in range(1, 6)]
+    dep_t = Table([
+        ["Particulars",                "Year 1",       "Year 2",       "Year 3",       "Year 4",       "Year 5"],
+        ["Opening WDV"]                 + _sched_opening,
+        ["Depreciation (WDV × Rate)"]   + _sched_dep,
+        ["Accumulated Depreciation"]    + _sched_accum,
+        ["Closing WDV (Net Block)"]     + _sched_closing,
+    ], colWidths=[60*mm] + [22*mm] * 5)
+    dep_t.setStyle(BTS())
+    dep_t.setStyle(TOT(4))
+    story.append(dep_t)
+    story.append(Paragraph(
+        "WDV Method: each year's depreciation = Opening WDV × Rate; Closing WDV = Opening WDV − Depreciation, "
+        "carried forward as next year's Opening WDV.",
+        ST["small"]))
+    PB(story)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 7 / SECTION-L — PROJECTED CASH FLOW STATEMENT
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # ════════════════════════════════════════════════════════════════
+    # SECTION 23 — CASH FLOW STATEMENT
+    # ════════════════════════════════════════════════════════════════
+    SEC("7 / SECTION-L: PROJECTED CASH FLOW STATEMENT", story)
+    cf_t = Table([
+        ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
+        ["SOURCE OF FUNDS","","","","",""],
+        ["Cash Accruals"]           + [r(p["cash_accruals"])      for p in pcf],
+        ["Inc. in Bank Borrowings"] + [r(p["inc_wc_loan"])        for p in pcf],
+        ["Inc. in Promoter's WC Margin"] + [r(p.get("inc_wc_margin", 0)) for p in pcf],
+        ["Total Sources"]           + [r(p["total_sources"])       for p in pcf],
+        ["USE OF FUNDS","","","","",""],
+        ["Inc. in Current Assets"]  + [r(p["inc_current_assets"]) for p in pcf],
+        ["Term Loan Repayment"]     + [r(p["tl_repayment"])       for p in pcf],
+        ["Less: Promoter Drawings"] + [r(p.get("drawings", 0))    for p in pcf],
+        ["Total Uses"]             + [r(p["total_uses"])           for p in pcf],
+        ["Opening Cash Balance"]    + [r(p["opening_cash"])       for p in pcf],
+        ["Surplus / Deficit"]       + [r(p["surplus"])            for p in pcf],
+        ["Closing Cash Balance"]    + [r(p["closing_cash"])      for p in pcf],
+    ], colWidths=[60*mm]+[22*mm]*5)
+    cf_t.setStyle(BTS())
+    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
+    story.append(cf_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        # A funding shortfall is never dressed up as an arranged borrowing
+        # source — a negative Closing Cash Balance IS the shortfall.
+        "<b>Note:</b> Closing Cash Balance is allowed to go negative when the term loan, WC bank finance, "
+        "and promoter's WC margin already factored into this report don't cover the cash requirement — "
+        "that negative figure IS the unarranged funding shortfall. It is deliberately not dressed up as a "
+        "borrowing source above. If this figure is negative in any year, the applicant will need to "
+        "either arrange additional promoter funding, secure a CC/OD or unsecured-loan enhancement, or "
+        "revise the underlying revenue/cost assumptions before bank submission.",
+        ST["small"]))
+    PB(story)
+
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 8 / SECTION-H — TERM LOAN REPAYMENT & INTEREST SCHEDULE
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # ════════════════════════════════════════════════════════════════
+    # SECTION 21 — TERM LOAN SCHEDULE
+    # ════════════════════════════════════════════════════════════════
+    SEC("8 / SECTION-H: TERM LOAN REPAYMENT & INTEREST SCHEDULE", story)
+    tl_meta = Table([
+        ["Parameter","Value","Parameter","Value"],
+        ["Term Loan Amount",       rs(tl["amount"]),              "Interest Rate",    rp(tl["interest_rate"])],
+        ["Half-Yearly Instalment", rs(tl["half_yearly_instalment"]),"Moratorium",    _morat_str],
+        ["Total Interest Payable", rs(tl["total_interest"]),      "Loan Tenure",     f"{inp.get('loan_tenure_years',5)} Years"],
+    ], colWidths=[50*mm,35*mm,50*mm,35*mm])
+    tl_meta.setStyle(BTS())
+    story.append(tl_meta)
+    NL(story, 5)
+    tl_rows = [["Year","Opening Balance","Mid-Year Balance","Principal Repaid","Closing Balance","Interest H1","Interest H2","Total Interest"]]
+    for row in tl["schedule"]:
+        tl_rows.append([str(row["year"]),r(row["opening"]),r(row["mid"]),r(row["principal_repaid"]),r(row["closing"]),
+                         r(row["int_h1"]),r(row["int_h2"]),r(row["total_interest"])])
+    tl_t = Table(tl_rows, colWidths=[12*mm]+[22.5*mm]*7)
+    tl_t.setStyle(BTS())
+    story.append(tl_t)
+    NL(story, 3)
+    _morat_note_mo = int(inp.get("moratorium_months", inp.get("moratorium_years", 0) * 12) or 0)
+    if _morat_note_mo > 0:
+        story.append(Paragraph(
+            f"Note: First {_morat_note_mo} month(s) are moratorium period — interest accrues but no principal repayment.",
+            ST["small"]))
+
+    H2("H2. Total Debt Schedule", story)
+    NL(story, 3)
+    # BUG FIX: this platform's CMA projection (P&L, DSCR, Cash Flow, Balance
+    # Sheet, and the WC schedule itself) is always exactly 5 years — but a
+    # Term Loan can run longer (e.g. 7 years here), and this table used to
+    # keep listing TL years past Year 5 with WC Bank Loan silently shown as
+    # "0", implying the working capital facility had been repaid off by
+    # Year 6 — which is not true; WC simply isn't projected that far. Years
+    # beyond the 5-year WC projection show "—" (not projected) instead of a
+    # misleading zero, and Total Debt for those years is Term Loan only.
+    _has_beyond_5yr = len(cma["yr_schedule"]) > len(wc)
+    debt_rows = [["Year", "Term Loan Closing (Rs.)", "WC Bank Loan (Rs.)", "Total Debt (Rs.)"]]
+    for i, y in enumerate(cma["yr_schedule"]):
+        if i < len(wc):
+            _wc_bank_yr = float(wc[i]["bank_loan"])
+            debt_rows.append([str(y["year"]), r(y["closing_balance"]), r(_wc_bank_yr), r(y["closing_balance"] + _wc_bank_yr)])
+        else:
+            # CA AUDIT: showing "Rs.0*" here (Term Loan closing balance
+            # happens to be 0 once fully amortised) reads as "Total Debt
+            # is zero" — it isn't; the WC Bank Loan component is simply
+            # unknown, not zero. A total can't be asserted when one of its
+            # own components is unprojected, regardless of what the other
+            # component's value happens to be.
+            debt_rows.append([str(y["year"]), r(y["closing_balance"]), "— (not projected)", "Not Projected*"])
+    debt_t = Table(debt_rows, colWidths=[20*mm, 45*mm, 45*mm, 35*mm])
+    debt_t.setStyle(BTS())
+    story.append(debt_t)
+    NL(story, 3)
+    _debt_note = (
+        "Term Loan reduces to zero by the end of tenure (amortising facility); WC Bank Loan is a "
+        "revolving facility renewed annually and does not amortise."
+    )
+    if _has_beyond_5yr:
+        _debt_note += (
+            " This platform's detailed CMA projection (P&amp;L, Balance Sheet, Cash Flow) covers 5 years; "
+            "the Term Loan's own amortisation is shown beyond Year 5 for reference, but WC Bank Loan is "
+            "not separately projected that far — marked with * (Total Debt cannot be stated when one of "
+            "its two components, WC Bank Loan, is unprojected for that year)."
+        )
+    story.append(Paragraph(_debt_note, ST["small"]))
+    PB(story)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 9 / SECTION-M — BREAK EVEN POINT ANALYSIS
+    # ════════════════════════════════════════════════════════════════════════════
+
     # ════════════════════════════════════════════════════════════════
     # SECTION 25 — BREAK-EVEN ANALYSIS
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 25 — BREAK-EVEN ANALYSIS", story)
+    SEC("9 / SECTION-M: BREAK EVEN POINT ANALYSIS", story)
     def _bep_val(b, key, na_key="bep_not_achievable"):
         if b.get(na_key):
             return "N/A"
@@ -2227,71 +2233,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ST["small"]))
     PB(story)
 
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 26 — SENSITIVITY / STRESS ANALYSIS
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 26 — SENSITIVITY / STRESS ANALYSIS", story)
-    story.append(Paragraph(
-        "<b>Base Case</b> = Year 1 monthly values from the master financial engine. "
-        "Variable costs scale proportionally with revenue; fixed costs remain constant. "
-        "DSCR shown is the Term Loan DSCR: (PAT + Dep + Term Loan Interest) / (Term Loan Principal + Term Loan Interest).",
-        ST["small"]))
-    NL(story, 2)
-    # Reduced from 6 to 5 scenarios — the +20% "Best Case" extreme added a
-    # row without changing the reading; Optimistic/Base/Conservative/
-    # Pessimistic/Worst already span the meaningful range.
-    _sens_scenarios = [s for s in cma["sensitivity"] if s.get("scenario") != "Best Case"]
-    sens_rows = [["Scenario","Chg %","Revenue (Rs.)","COGS (Rs.)","EBITDA (Rs.)","PAT (Rs.)","TL DSCR","Status"]]
-    for s in _sens_scenarios:
-        _is_structural = s.get("type") == "structural"
-        _chg_display = "—" if (_is_structural and not s.get("change_pct")) else f"{s.get('change_pct',0)}%"
-        sens_rows.append([
-            Paragraph(s["scenario"], ST["table_cell"]), _chg_display,
-            r(s["monthly_revenue"]),
-            r(s.get("monthly_cogs", 0)),
-            r(s.get("monthly_ebitda", s.get("monthly_revenue",0) - s.get("monthly_variable",0) - s.get("monthly_fixed",0))),
-            r(s["monthly_profit"]),
-            str(s["dscr"]),
-            s["status"],
-        ])
-    sens_t = Table(sens_rows, colWidths=[30*mm,12*mm,23*mm,20*mm,23*mm,20*mm,17*mm,20*mm])
-    sens_t.setStyle(BTS())
-    story.append(sens_t)
-    NL(story, 3)
-    story.append(Paragraph(
-        "<b>Structural scenarios</b> (Raw Material Cost, Salary, Receivable Days, Interest Rate, Combined Downside) "
-        "re-run the full loan schedule / working capital / income statement engine with the stated single input "
-        "changed — e.g. \"Raw Material Cost +10%\" recomputes COGS, EBITDA, tax, PAT, and the resulting Term Loan "
-        "DSCR from an input where purchase/raw-material cost is 10% higher, holding revenue constant. "
-        "\"Combined Downside\" applies raw material +10%, salary +10%, receivable days +15, and interest rate +2pp "
-        "together with a 10% revenue decline — a single scenario stressing multiple levers at once, not just revenue.",
-        ST["small"]))
-    PB(story)
-
-    # ════════════════════════════════════════════════════════════════
-    # SECTION 27 — RISK ASSESSMENT
-    # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 27 — RISK ASSESSMENT", story)
-    _risk_cell_style = _s("risk_cell", fontSize=8, alignment=TA_LEFT, fontName="Helvetica", textColor=BLK, leading=10)
-    risk_rows = [["Category","Risk Description","Probability","Impact","Net Risk"]]
-    _risk_matrix_display = _display_risk_matrix(_industry)
-    for i,rm_ in enumerate(_risk_matrix_display):
-        risk_rows.append([Paragraph(str(rm_["category"]), _risk_cell_style),
-                           Paragraph(str(rm_["description"]), _risk_cell_style),
-                           rm_["probability"], rm_["impact"], rm_["net_risk"]])
-    risk_t = Table(risk_rows, colWidths=[32*mm,64*mm,24*mm,24*mm,26*mm])
-    risk_t.setStyle(BTS())
-    for i,rm_ in enumerate(_risk_matrix_display):
-        risk_t.setStyle(RISK_COLOR(i+1, rm_["net_risk"]))
-    story.append(risk_t)
-    NL(story, 4)
-    story.append(Paragraph(f"<b>Overall Risk Level: {cma['risk_level']}</b>", ST["bold"]))
-    PB(story)
+    # ════════════════════════════════════════════════════════════════════════════
+    # 10 / SECTION-N — DEBT SERVICE COVERAGE RATIO
+    # ════════════════════════════════════════════════════════════════════════════
 
     # ════════════════════════════════════════════════════════════════
     # SECTION 28 — DSCR & DEBT SERVICING
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 28 — TERM LOAN DEBT SERVICE COVERAGE (DSCR) & REPAYMENT CAPABILITY", story)
+    SEC("10 / SECTION-N: DEBT SERVICE COVERAGE RATIO", story)
     dr = dscr["years"]
     dscr_t = Table([
         ["Particulars","Year 1","Year 2","Year 3","Year 4","Year 5"],
@@ -2321,21 +2270,21 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(rep_t)
     NL(story, 4)
 
-    # CA AUDIT: existing_monthly_emi (Section 05, an existing-business loan)
-    # and promoter_net_worth.home_loan_emi (Section 09/personal net worth)
+    # CA AUDIT: existing_monthly_emi (Section-A, an existing-business loan)
+    # and promoter_net_worth.home_loan_emi (Section-B/personal net worth)
     # are pre-existing obligations that draw on the same cash accruals as
     # the new term loan above but were never deducted anywhere. Adjusted
     # DSCR below re-runs the SAME term_loan_dscr() formula with those
     # combined EMIs subtracted from cash accruals first — a genuine
     # after-all-obligations debt-service view, shown only when such EMIs
-    # exist so an unaffected report's Section 28 is unchanged.
+    # exist so an unaffected report's Section-N is unchanged.
     if dscr.get("has_existing_emi"):
         H2("Adjusted Term Loan DSCR (Including Existing EMI Obligations)", story)
         _existing_emi_mo = dscr["existing_annual_emi"] / 12
         story.append(Paragraph(
             f"<b>Combined existing EMI:</b> Rs.{_existing_emi_mo:,.0f}/month "
-            f"(Rs.{dscr['existing_annual_emi']:,.0f}/year) — existing business loan EMI (Section 05) "
-            "plus the promoter's personal home loan EMI (Section 09), both pre-existing obligations "
+            f"(Rs.{dscr['existing_annual_emi']:,.0f}/year) — existing business loan EMI (Section-A) "
+            "plus the promoter's personal home loan EMI (Section-B), both pre-existing obligations "
             "not related to the new term loan being appraised here.",
             ST["small"]))
         NL(story, 2)
@@ -2471,10 +2420,107 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         story.append(_trend_tbl)
     PB(story)
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # 11 / SECTION-S — RISK ANALYSIS
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # ════════════════════════════════════════════════════════════════
+    # SECTION 27 — RISK ASSESSMENT
+    # ════════════════════════════════════════════════════════════════
+    SEC("11 / SECTION-S: RISK ANALYSIS", story)
+    H2("S1. Risk Assessment", story)
+    _risk_cell_style = _s("risk_cell", fontSize=8, alignment=TA_LEFT, fontName="Helvetica", textColor=BLK, leading=10)
+    risk_rows = [["Category","Risk Description","Probability","Impact","Net Risk"]]
+    _risk_matrix_display = _display_risk_matrix(_industry)
+    for i,rm_ in enumerate(_risk_matrix_display):
+        risk_rows.append([Paragraph(str(rm_["category"]), _risk_cell_style),
+                           Paragraph(str(rm_["description"]), _risk_cell_style),
+                           rm_["probability"], rm_["impact"], rm_["net_risk"]])
+    risk_t = Table(risk_rows, colWidths=[32*mm,64*mm,24*mm,24*mm,26*mm])
+    risk_t.setStyle(BTS())
+    for i,rm_ in enumerate(_risk_matrix_display):
+        risk_t.setStyle(RISK_COLOR(i+1, rm_["net_risk"]))
+    story.append(risk_t)
+    NL(story, 4)
+    story.append(Paragraph(f"<b>Overall Risk Level: {cma['risk_level']}</b>", ST["bold"]))
+
+    H2("S2. Sensitivity Analysis", story)
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Base Case</b> = Year 1 monthly values from the master financial engine. "
+        "Variable costs scale proportionally with revenue; fixed costs remain constant. "
+        "DSCR shown is the Term Loan DSCR: (PAT + Dep + Term Loan Interest) / (Term Loan Principal + Term Loan Interest).",
+        ST["small"]))
+    NL(story, 2)
+    # Reduced from 6 to 5 scenarios — the +20% "Best Case" extreme added a
+    # row without changing the reading; Optimistic/Base/Conservative/
+    # Pessimistic/Worst already span the meaningful range.
+    _sens_scenarios = [s for s in cma["sensitivity"] if s.get("scenario") != "Best Case"]
+    sens_rows = [["Scenario","Chg %","Revenue (Rs.)","COGS (Rs.)","EBITDA (Rs.)","PAT (Rs.)","TL DSCR","Status"]]
+    for s in _sens_scenarios:
+        _is_structural = s.get("type") == "structural"
+        _chg_display = "—" if (_is_structural and not s.get("change_pct")) else f"{s.get('change_pct',0)}%"
+        sens_rows.append([
+            Paragraph(s["scenario"], ST["table_cell"]), _chg_display,
+            r(s["monthly_revenue"]),
+            r(s.get("monthly_cogs", 0)),
+            r(s.get("monthly_ebitda", s.get("monthly_revenue",0) - s.get("monthly_variable",0) - s.get("monthly_fixed",0))),
+            r(s["monthly_profit"]),
+            str(s["dscr"]),
+            s["status"],
+        ])
+    sens_t = Table(sens_rows, colWidths=[30*mm,12*mm,23*mm,20*mm,23*mm,20*mm,17*mm,20*mm])
+    sens_t.setStyle(BTS())
+    story.append(sens_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Structural scenarios</b> (Raw Material Cost, Salary, Receivable Days, Interest Rate, Combined Downside) "
+        "re-run the full loan schedule / working capital / income statement engine with the stated single input "
+        "changed — e.g. \"Raw Material Cost +10%\" recomputes COGS, EBITDA, tax, PAT, and the resulting Term Loan "
+        "DSCR from an input where purchase/raw-material cost is 10% higher, holding revenue constant. "
+        "\"Combined Downside\" applies raw material +10%, salary +10%, receivable days +15, and interest rate +2pp "
+        "together with a 10% revenue decline — a single scenario stressing multiple levers at once, not just revenue.",
+        ST["small"]))
+    PB(story)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 12 / EXECUTIVE SUMMARY — 5-YEAR FINANCIAL HIGHLIGHTS
+    # ════════════════════════════════════════════════════════════════════════════
+    SEC("12 / EXECUTIVE SUMMARY: 5-YEAR FINANCIAL HIGHLIGHTS", story)
+    # NEW SECTION: your outline places a dedicated 5-year highlights page
+    # here (distinct from the Executive Credit Summary at the front, which
+    # carries the credit recommendation) — pulled together from the same
+    # P&L/DSCR/Balance-Sheet rows already computed above, not recalculated.
+    _hl_rows = [
+        ["Metric", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"],
+        ["Revenue"]            + [r(cy["revenue"])              for cy in cop],
+        ["EBITDA"]             + [r(cy.get("ebitda", 0))         for cy in cop],
+        ["Net Profit (PAT)"]   + [r(cy["net_profit"])            for cy in cop],
+        ["Cash Accruals"]      + [r(cy["cash_accruals"])         for cy in cop],
+        ["Term Loan DSCR"]     + [str(dv["dscr"])                for dv in dscr["years"]],
+        ["Closing Cash Balance"] + [r(max(float(pbs[i+1].get("cash", 0) or 0), 0)) if i+1 < len(pbs) else "—" for i in range(5)],
+    ]
+    _hl_t = Table(_hl_rows, colWidths=[46*mm]+[24.8*mm]*5)
+    _hl_t.setStyle(BTS())
+    for idx in [1, 2, 3]: _hl_t.setStyle(TOT(idx))
+    story.append(_hl_t)
+    NL(story, 4)
+    _hl_pat_growth = R((cop[-1]["net_profit"] / cop[0]["net_profit"] - 1) * 100, 1) if cop and cop[0]["net_profit"] else 0
+    story.append(Paragraph(
+        f"<b>PAT growth, Year 1 → Year 5:</b> {_hl_pat_growth}%  |  "
+        f"<b>Average Term Loan DSCR:</b> {cma.get('avg_dscr_5yr', cma.get('avg_dscr', 0))}  |  "
+        f"<b>Payback Period:</b> {_fmt_payback(cma)}" + (" months" if _fmt_payback(cma) != "N/A" else ""),
+        ST["small"]))
+    PB(story)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # 13 / SECTION-U — KEY FINANCIAL RATIOS SUMMARY
+    # ════════════════════════════════════════════════════════════════════════════
+
     # ════════════════════════════════════════════════════════════════
     # SECTION 29 — FINANCIAL RATIO ANALYSIS
     # ════════════════════════════════════════════════════════════════
-    SEC("SECTION 29 — FINANCIAL RATIO ANALYSIS", story)
+    SEC("13 / SECTION-U: KEY FINANCIAL RATIOS SUMMARY", story)
     _q2_cash_accrual_less_tl_principal = R(cma.get("surplus_monthly", 0) * 12, 2)
     ratios = Table([
         ["Ratio","Value","Benchmark","Assessment"],
@@ -2498,7 +2544,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "ROI (EBITDA) = EBITDA / Initial Project Investment x 100  |  ROI (PAT) = PAT / Initial Project Investment x 100  |  "
         "Margins = Profit / Sales Revenue x 100  |  D:E: Term Loan D:E = TL / promoter fixed equity; "
         "Total leverage = total debt / total promoter contribution. Current Ratio (Balance Sheet Basis) is computed "
-        "directly from the projected Balance Sheet's own Year 1 Current Assets and Current Liabilities (Section 24) — "
+        "directly from the projected Balance Sheet's own Year 1 Current Assets and Current Liabilities (Section-K) — "
         "not a bank's own WC assessment methodology (e.g. Tandon Committee MPBF). WC Bank Finance Coverage is a "
         "separate figure — WC Requirement ÷ WC Bank Finance — showing how many times the assessed WC requirement "
         "is the arranged WC bank facility; it is not a Current Ratio. Cash Accrual Less Term Loan Principal = "
@@ -2528,12 +2574,16 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ST["small"]))
     PB(story)
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # APPENDIX — ASSUMPTIONS & METHODOLOGY
+    # ════════════════════════════════════════════════════════════════════════════
+
     # ════════════════════════════════════════════════════════════════
     # PART III — METHODOLOGY & AUDIT TRAIL  (Sections 30-32)
     # ════════════════════════════════════════════════════════════════
 
     # ── SECTION 30 — ASSUMPTIONS & METHODOLOGY ─────────────────────────
-    SEC("SECTION 30 — ASSUMPTIONS & METHODOLOGY", story)
+    SEC("ASSUMPTIONS & METHODOLOGY", story)
     story.append(Paragraph(
         "The following formulas and conventions are based on the financial modelling methodology "
         "selected for this report. The benchmarks shown below are this platform's configured/"
@@ -2570,13 +2620,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "= Annual EBITDA (or PAT) / Initial Project Investment × 100. "
             # CA AUDIT: previously described the denominator as "Fixed
             # Assets + Promoter WC Margin" — Fixed Assets (the depreciable
-            # block) is narrower than what Section 07/15 actually use as
+            # block) is narrower than what Section-B/15 actually use as
             # Initial Project Investment, which also includes preliminary/
             # pre-operative expenditure (not a depreciable fixed asset, but
             # still part of fixed project cost). That gap (e.g. Rs.20,000
             # of preliminary expenses on a live report) made the stated
             # denominator not add up to the Initial Project Investment
-            # figure Section 15 actually divides by.
+            # figure Section-J actually divides by.
             "Initial Project Investment comprises eligible fixed project cost, preliminary/pre-operative "
             "expenditure where applicable, and promoter-funded working-capital margin. "
             "Measures operational / net return on the initial investment.",
@@ -2584,7 +2634,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _fdef_row(
             "ROCE",
             "= EBIT ÷ Capital Employed (Promoter Equity + Term Loan) × 100. "
-            "One exact formula, used consistently everywhere in this report (Section 15). EBIT = EBITDA − Depreciation. "
+            "One exact formula, used consistently everywhere in this report (Section-J). EBIT = EBITDA − Depreciation. "
             "Return on all long-term funds deployed, before financing structure is considered.",
             "Illustrative"),
         _fdef_row(
@@ -2602,7 +2652,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _fdef_row(
             "Current Ratio (Balance Sheet basis)",
             "= Total Current Assets / Total Current Liabilities, taken directly from the Year 1 projected "
-            "Balance Sheet (Section 24) — not a bank's own WC assessment methodology (e.g. Tandon "
+            "Balance Sheet (Section-K) — not a bank's own WC assessment methodology (e.g. Tandon "
             "Committee MPBF), which each bank/scheme should apply separately.",
             "> 1.33x (illustrative)"),
         _fdef_row(
@@ -2668,9 +2718,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "<b>Sensitivity Analysis:</b> Variable costs scale proportionally with revenue; fixed costs remain "
         "constant. Five scenarios shown: Optimistic (+10%) / Base (0%) / Conservative (−10%) / "
         "Pessimistic (−20%) / Worst (−30%). Its DSCR uses the exact same Term Loan DSCR formula and "
-        "calculation function as the DSCR schedule in Section 28.",
+        "calculation function as the DSCR schedule in Section-N.",
         ST["small"]))
     PB(story)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # APPENDIX — FINANCIAL MODEL RECONCILIATION
+    # ════════════════════════════════════════════════════════════════════════════
 
     # ── SECTION 31 — FINANCIAL MODEL RECONCILIATION ────────────────────
     # Two DELIBERATELY separate concerns, previously conflated into one raw
@@ -2687,7 +2741,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     #      only; they are already shown to the reader in the Executive
     #      Credit Summary, DSCR, and Balance Sheet sections, so they inform
     #      "PASS WITH WARNINGS" here but are never re-listed.
-    SEC("SECTION 31 — FINANCIAL MODEL RECONCILIATION", story)
+    SEC("FINANCIAL MODEL RECONCILIATION", story)
     _structural_checks = structural_reconciliation(cma, dpr)
     _structural_all_pass = all(c["passed"] for c in _structural_checks)
     if not _structural_all_pass:
@@ -2746,8 +2800,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ST["small"]))
     PB(story)
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # APPENDIX — DECLARATION & DISCLAIMER
+    # ════════════════════════════════════════════════════════════════════════════
+
     # ── SECTION 32 — DECLARATION & DISCLAIMER ──────────────────────────
-    SEC("SECTION 32 — DECLARATION & DISCLAIMER", story)
+    SEC("DECLARATION & DISCLAIMER", story)
     NL(story, 8)
     story.append(Paragraph(
         "This Business Loan Feasibility Report (indicative financial assessment) has been prepared "

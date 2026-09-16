@@ -85,10 +85,10 @@ class TestCgtmseMoratoriumOverride:
         assert resp.status_code == 200, resp.text
         report_id = resp.json()["report_id"]
         text = _download_pdf_text(report_id)
-        # Section 03 must show a nonzero half-yearly instalment consistent
-        # with a moratorium actually being honoured (i.e. NOT computed as
-        # if there were 10 full repayment half-years).
-        assert "SECTION 21" in text
+        # The Term Loan Repayment section must show a nonzero half-yearly
+        # instalment consistent with a moratorium actually being honoured
+        # (i.e. NOT computed as if there were 10 full repayment half-years).
+        assert "SECTION-H: TERM LOAN REPAYMENT" in text
 
 
 class TestCgtmseGuaranteeFeeInReport:
@@ -140,8 +140,8 @@ class TestInterestCoverageMatchesEbitdaOverTotalInterest:
         report_id = resp.json()["report_id"]
         text = _download_pdf_text(report_id)
 
-        idx14 = text.find("SECTION 14")
-        idx29 = text.find("SECTION 29")
+        idx14 = text.find("SECTION-J: PROFIT & LOSS STATEMENT")
+        idx29 = text.find("SECTION-U: KEY FINANCIAL RATIOS SUMMARY")
         assert idx14 != -1 and idx29 != -1
 
         def _year1_value(label: str, section_text: str) -> float:
@@ -159,7 +159,7 @@ class TestInterestCoverageMatchesEbitdaOverTotalInterest:
 
         sec29 = text[idx29:]
         i = sec29.find("Interest Coverage")
-        assert i != -1, "Interest Coverage row not found in Section 29"
+        assert i != -1, "Interest Coverage row not found in Section-U"
         m = re.search(r"[\d.]+", sec29[i + len("Interest Coverage"):])
         displayed_coverage = float(m.group(0))
 
@@ -660,7 +660,7 @@ class TestServiceWorkingCapitalCycleConsistency:
         resp = client.post("/api/v1/report/generate", json=payload)
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
-        idx = text.find("SECTION 18")
+        idx = text.find("Working Capital Cycle")
         section18 = text[idx:idx + 800]
         assert "Creditor" not in section18
         assert "NET OPERATING CYCLE" not in section18
@@ -671,7 +671,7 @@ class TestServiceWorkingCapitalCycleConsistency:
         resp = client.post("/api/v1/report/generate", json=payload)
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
-        idx = text.find("SECTION 18")
+        idx = text.find("Working Capital Cycle")
         section18 = text[idx:idx + 800]
         assert "Creditor / Payable Days" in section18
         assert "NET OPERATING CYCLE" in section18
@@ -689,7 +689,7 @@ class TestTotalDebtSchedulePastFiveYears:
         resp = client.post("/api/v1/report/generate", json=payload)
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
-        idx = text.find("SECTION 22")
+        idx = text.find("H2. Total Debt Schedule")
         assert idx != -1
         section22 = text[idx:idx + 1200]
         assert "Not Projected" in section22
@@ -719,7 +719,7 @@ class TestOperatingVsFinancialBreakEven:
         report_id = resp.json()["report_id"]
         dl = client.get(f"/api/v1/report/{report_id}/download")
         text = _download_pdf_text(report_id)
-        idx = text.find("SECTION 25")
+        idx = text.find("SECTION-M: BREAK EVEN POINT ANALYSIS")
         section25 = text[idx:idx + 1600]
         op_idx = section25.find("Operating Break-Even Sales")
         fin_idx = section25.find("Financial Break-Even Sales")

@@ -132,12 +132,26 @@ def calculate_pmegp_finance(
     subsidy_pct   = engine.get_margin_money_subsidy_pct(category_type, area_key, scheme_id="pmegp")
     bank_loan_pct = 1.0 - promoter_pct - subsidy_pct
 
+    # CA AUDIT: Promoter Equity, Margin Money and Term Loan used to each be
+    # rounded independently (round(cost x pct) three times) — three
+    # independent roundings of the same fixed_project_cost do not
+    # necessarily sum back to it (e.g. Rs.1,596,751 vs the real
+    # Rs.1,596,750), a one-rupee mismatch between "Fixed Project Cost" and
+    # "Promoter + Subsidy + Term Loan" that a bank reviewer would read as an
+    # arithmetic error. Term Loan — the bank's own exposure, sized last in
+    # every scheme note on the cover page — now absorbs the residual instead
+    # of being independently rounded, so the three components always sum to
+    # fixed_project_cost EXACTLY, to the rupee.
+    promoter_amount = round(fixed_project_cost * promoter_pct)
+    margin_money    = round(fixed_project_cost * subsidy_pct)
+    term_loan       = round(fixed_project_cost) - promoter_amount - margin_money
+
     return {
-        "promoter_amount":  round(fixed_project_cost * promoter_pct),
+        "promoter_amount":  promoter_amount,
         "promoter_pct":     round(promoter_pct * 100, 1),
-        "margin_money":     round(fixed_project_cost * subsidy_pct),
+        "margin_money":     margin_money,
         "margin_money_pct": round(subsidy_pct * 100, 1),
-        "term_loan":        round(fixed_project_cost * bank_loan_pct),
+        "term_loan":        term_loan,
         "term_loan_pct":    round(bank_loan_pct * 100, 1),
         "category_type":    category_type,
         "area_type":        area_key,

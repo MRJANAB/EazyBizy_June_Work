@@ -19,6 +19,7 @@ moratorium override) are read from the Rules & Rates engine
 
 from models.input_schema import CMAReportInput, SchemeType, SocialCategory
 from rules            import get_default_engine, normalize_scheme_id
+from core.engine       import R
 from schemes.pmegp   import calculate_pmegp_finance, validate_pmegp
 from schemes.mudra   import calculate_mudra_finance, validate_mudra
 from schemes.cgtmse  import calculate_cgtmse_fee
@@ -166,7 +167,19 @@ def _compute_project_cost(data: CMAReportInput) -> tuple:
         for m in data.project.machinery_items
     ) + float(data.project.tools_installation or 0)
 
-    pm_with_contingency = machinery_base * (1 + contingency_pct)
+    # CA AUDIT: this used to stay an unrounded float, while
+    # calculations/depreciation.py's OWN pm_with_contingency (the exact
+    # figure the itemised Project Cost table displays as "Plant, Machinery &
+    # Equipment") rounds to the nearest whole rupee at this same step. The
+    # two are the same formula on the same inputs, so any contingency_pct
+    # that doesn't divide evenly (the normal case) left this function's
+    # fixed_project_cost a fraction of a rupee off the itemised table's own
+    # total — invisible until the PMEGP/CGTMSE/Mudra funding split rounded
+    # THAT whole total a second time, landing on a different whole rupee
+    # than "Building + Machinery + Computers + ... " actually sums to.
+    # Round once, identically, so every downstream consumer (funding split,
+    # itemised table, gross block) agrees on the same whole-rupee figure.
+    pm_with_contingency = R(machinery_base * (1 + contingency_pct))
 
     fixtures = (
         float(getattr(data.project, "computers_cost",       0) or 0)

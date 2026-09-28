@@ -1208,3 +1208,64 @@ class TestMarketingAssumptionLabelIsNotMisleading:
         text = _download_pdf_text(resp.json()["report_id"])
         assert "Marketing (Effective % of Y1 Rev)" in text
         assert "Marketing % of Rev" not in text
+
+
+class TestPmegpFundingSplitReconcilesExactlyToTheRupee:
+    """CA AUDIT: Promoter Equity, Margin Money Subsidy and Term Loan were
+    each rounded independently (round(fixed_project_cost x pct) three
+    times) — three independent roundings of the same total do not
+    necessarily sum back to it. A contingency_pct that doesn't divide
+    evenly (the normal case, e.g. 4%) also left schemes/router.py's own
+    fixed_project_cost a fraction of a rupee off the itemised Project Cost
+    table's total (which uses calculations/depreciation.py's ALREADY-
+    rounded pm_with_contingency) — invisible until PMEGP's three-way split
+    rounded that (slightly different) total a second time, landing on a
+    different whole rupee than "Building + Machinery + Computers + ..."
+    actually sums to. Pins the exact real-world figures that exposed this:
+    Building 250,000 + Machinery 1,191,750 (on a 4% contingency load) +
+    Computers 30,000 + Furniture 25,000 + Electrification 60,000 +
+    Preliminary 40,000 = 1,596,750."""
+
+    def _payload(self):
+        return {
+            "scheme": "pmegp",
+            "applicant": {"full_name": "Test Promoter", "mobile": "9999999999", "area_type": "Rural"},
+            "business": {"business_name": "Test Mfg", "industry_type": "manufacturing",
+                         "business_status": "New Business", "location": "Sikar", "district": "Sikar"},
+            "project": {
+                "building_cost": 250000,
+                "machinery_items": [{"name": "Machine A", "quantity": 1, "unit_price": 1145913}],
+                "computers_cost": 30000, "furniture_cost": 25000,
+                "electrification_cost": 60000, "preliminary_expenses": 40000,
+            },
+            "production": {"input_qty_per_day": 200, "working_days_per_year": 300,
+                            "selling_price_per_unit": 150, "raw_material_cost_per_unit": 60,
+                            "output_yield_pct": 95},
+            "assumptions": {"term_loan_pct": 75, "wc_loan_pct": 60, "interest_rate_pct": 10.5,
+                             "tenure_months": 60, "moratorium_months": 6,
+                             "revenue_growth_pct": 7, "expense_growth_pct": 5, "tax_rate_pct": 25,
+                             "depreciation_pct": 10, "building_dep_rate_pct": 5,
+                             "contingency_pct": 4.0,
+                             "capacity_y1_pct": 50, "capacity_y2_pct": 60, "capacity_y3_pct": 70,
+                             "capacity_y4_pct": 75, "capacity_y5_pct": 80},
+            "expenses": {"rent": 10000},
+            "manpower": {"skilled_count": 2, "skilled_salary": 12000},
+        }
+
+    def test_promoter_plus_subsidy_plus_term_loan_equals_fixed_project_cost_exactly(self):
+        resp = client.post("/api/v1/report/generate", json=self._payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "1,191,750" in text, "Machinery gross value must match the pinned fixture"
+        fixed_cost = _year1_row_value("TOTAL (Fixed Project Cost)", text)
+        assert fixed_cost == 1596750.0, f"Fixed Project Cost must be exactly Rs.1,596,750, got {fixed_cost}"
+        idx = text.find("A. Fixed Project Funding")
+        section = text[idx:idx + 600]
+        equity  = _year1_row_value("Equity Capital", section)
+        subsidy = _year1_row_value("Govt Subsidy", section)
+        term_loan = _year1_row_value("Term Loan from Bank", section)
+        assert equity + subsidy + term_loan == fixed_cost, (
+            f"Equity ({equity}) + Subsidy ({subsidy}) + Term Loan ({term_loan}) = "
+            f"{equity + subsidy + term_loan} must equal Fixed Project Cost ({fixed_cost}) exactly, "
+            f"to the rupee — no independent-rounding drift"
+        )

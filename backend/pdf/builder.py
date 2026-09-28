@@ -51,7 +51,7 @@ from reportlab.platypus import (
 )
 from datetime import datetime
 from core.engine import dscr_label, R, validate_cma_dpr
-from calculations.validator import structural_reconciliation, StructuralReconciliationError
+from calculations.validator import structural_reconciliation, StructuralReconciliationError, formula_validation
 
 # ── Scheme name resolver (for display in PDF) ─────────────────────────────────
 _SCHEME_DISPLAY: dict = {
@@ -1273,7 +1273,16 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Contingency Rate",         rp(inp.get("contingency_rate",0)),  "Term Loan % (of Fixed Cost)", rp(tl["amount"] / max(display_fixed_project_cost, 1))],
         ["WC Loan %",                rp(inp["wc_loan_pct"]),              "Term Loan Interest",   rp(inp["term_loan_interest"])],
         ["WC Interest Rate",         rp(inp["wc_interest_rate"]),         "Annual Salary Hike",   rp(inp["salary_increase_rate"])],
-        ["Admin Expense Increase",   rp(inp["admin_increase_rate"]),      "Marketing % of Rev",   rp(inp["marketing_expense_pct"])],
+        # CA AUDIT: "Marketing % of Rev" read as if it were the governing
+        # assumption driving the Marketing expense line — but when the
+        # applicant enters an actual Rs. marketing figure (the normal case;
+        # see Section-J), THAT figure escalates by Admin Expense Increase
+        # (to its left in this same row) each year, and this percentage is
+        # only a derived, backward-computed Year-1 ratio (Marketing ÷
+        # Revenue) — never itself an input to any calculation. The old label
+        # read as a contradiction next to Section-J's own escalating Rs.
+        # figures. Relabelled to say what it actually is.
+        ["Admin Expense Increase",   rp(inp["admin_increase_rate"]),      "Marketing (Effective % of Y1 Rev)",   rp(inp["marketing_expense_pct"])],
         ["Building Dep (WDV)",       rp(inp["building_dep_rate_wdv"]),    "Asset Dep (WDV)" if _is_service else "Machinery Dep (WDV)", rp(inp["machinery_dep_rate_wdv"])],
         ["Revenue Growth (Escalation)", rp2(inp["revenue_growth_pct"]),   "Salary Hike (Escalation)", rp2(inp["salary_increase_pct"])],
     ]
@@ -2653,7 +2662,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # SECTION 29 — FINANCIAL RATIO ANALYSIS
     # ════════════════════════════════════════════════════════════════
     SEC("13 / SECTION-U: KEY FINANCIAL RATIOS SUMMARY", story)
-    _q2_cash_accrual_less_tl_principal = R(cma.get("surplus_monthly", 0) * 12, 2)
+    # CA AUDIT: this used to be surplus_monthly (Year-1 monthly snapshot,
+    # from calculations/monthly_pnl.py's own independent calculation) x 12 —
+    # a second, separately-rounded formula for the same figure
+    # income_statement.py's Year-1 row already computes directly at annual
+    # precision ("net_surplus" = cash_accruals - principal_paid). The two
+    # disagreed by a couple of rupees purely from accumulated monthly
+    # rounding, not a real business difference — single source of truth.
+    _q2_cash_accrual_less_tl_principal = float(cop[0].get("net_surplus", 0)) if cop else 0.0
     ratios = Table([
         ["Ratio","Value","Benchmark","Assessment"],
         ["Current Ratio (Balance Sheet Basis)", r2(_true_current_ratio), "> 1.33 (illustrative)", "Good" if _true_current_ratio>1.33 else "Monitor"],
@@ -2892,13 +2908,23 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         _val_logger.warning(_w)
     _has_business_risk_warnings = len(_val_warnings) > 0
 
+    # LEVEL 2 (see below) is computed here, not raised/blocked like Level 1 —
+    # a formula-validation FAIL is a genuine calculation drift worth
+    # surfacing prominently, but this is this platform's first release of
+    # this independent-recomputation layer, so it is shown (in red, FAIL,
+    # with the exact expected/engine/difference) rather than blocking report
+    # generation outright.
+    _formula_checks = formula_validation(inp, cma, dpr)
+    _formula_all_pass = all(c["passed"] for c in _formula_checks)
+
     _recon_label = (
-        "✓ FINANCIAL MODEL VALIDATION: PASS" if not _has_business_risk_warnings else
+        "✓ FINANCIAL MODEL VALIDATION: PASS" if (not _has_business_risk_warnings and _formula_all_pass) else
+        "⚠ FINANCIAL MODEL VALIDATION: FORMULA CHECK FAILED — see Formula Validation Checks below" if not _formula_all_pass else
         "✓ FINANCIAL MODEL VALIDATION: PASS WITH WARNINGS (see Executive Credit Summary / DSCR / Balance Sheet for risk items)"
     )
     recon_tbl = Table([[Paragraph(_recon_label, ST["rec_box"])]], colWidths=[170*mm])
     recon_tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0,0),(-1,-1), GRN if not _has_business_risk_warnings else AMB),
+        ("BACKGROUND", (0,0),(-1,-1), GRN if (not _has_business_risk_warnings and _formula_all_pass) else (colors.HexColor("#F8D7DA") if not _formula_all_pass else AMB)),
         ("TOPPADDING",    (0,0),(-1,-1), 8),
         ("BOTTOMPADDING", (0,0),(-1,-1), 8),
     ]))
@@ -2931,6 +2957,49 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "profitable. A loss-making year, a DSCR below the benchmark, or a funding shortfall are valid, "
         "correctly-computed business outcomes, shown elsewhere in this report as risk warnings, not as "
         "reconciliation failures here.",
+        ST["small"]))
+    NL(story, 6)
+
+    # ── LEVEL 2 — FORMULA VALIDATION ────────────────────────────────────
+    # Structural checks above only prove every total equals the sum of its
+    # OWN displayed parts — that passes even if every part were computed by
+    # a wrong formula, as long as the total was built by consistently
+    # summing those same (wrong) parts. This independently RECOMPUTES each
+    # key metric from other already-computed component figures and compares
+    # it to the central engine's own value for that metric — a PASS here
+    # means the two agree from a genuinely independent angle, not just that
+    # the report agrees with itself.
+    H2("Formula Validation Checks (Level 2)", story)
+    _formula_hdr_style = _s("formula_hdr", fontSize=7.5, alignment=TA_CENTER, fontName="Helvetica-Bold", textColor=W, leading=9)
+    _formula_rows = [[Paragraph(h, _formula_hdr_style) for h in ["Check", "Section", "Status", "Detail"]]]
+    for c in _formula_checks:
+        _f_name_esc = c["name"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        _f_detail_esc = str(c.get("detail", "")).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        _formula_rows.append([
+            Paragraph(_f_name_esc, _recon_lbl_style),
+            Paragraph(str(c.get("section", "")), _recon_lbl_style),
+            "PASS" if c["passed"] else "FAIL",
+            Paragraph(_f_detail_esc, _recon_lbl_style),
+        ])
+    _formula_t = Table(_formula_rows, colWidths=[62*mm, 28*mm, 16*mm, 62*mm])
+    _formula_t.setStyle(BTS())
+    if not _formula_all_pass:
+        _fail_rows = [i for i, c in enumerate(_formula_checks, start=1) if not c["passed"]]
+        _formula_t.setStyle(TableStyle([
+            ("TEXTCOLOR", (0, r), (-1, r), colors.HexColor("#B71C1C")) for r in _fail_rows
+        ] + [
+            ("FONTNAME", (0, r), (-1, r), "Helvetica-Bold") for r in _fail_rows
+        ]))
+    story.append(_formula_t)
+    NL(story, 4)
+    story.append(Paragraph(
+        "Each row independently recomputes a metric from OTHER already-computed component figures already "
+        "shown elsewhere in this report (never by re-deriving business logic from raw inputs a second time) "
+        "and compares it to the central engine's own value for that same metric. Tolerance: Rs.2 for chained "
+        "annual money figures (this engine rounds every monetary figure to the nearest whole rupee at each "
+        "calculation step, by design, so a short chain of such roundings can legitimately differ by a rupee "
+        "or two without either figure being wrong) and 0.0005 for pure ratios (DSCR), which carry no monetary "
+        "rounding. A FAIL states the exact year, the expected value, the engine's value, and the difference.",
         ST["small"]))
     PB(story)
 

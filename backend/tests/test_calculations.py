@@ -862,6 +862,29 @@ class TestBreakEven:
             "products-list-based 100%-capacity revenue and a positive contribution margin"
         )
 
+    def test_contribution_margin_ratio_carries_full_precision_not_rounded_before_reuse(self):
+        """CA AUDIT: contribution_pct used to be rounded to 4 decimal places
+        BEFORE bep_sales/bep_pct divided by it — "never feed a rounded
+        display value back into another calculation" applies even to a
+        4-decimal rounding, however fine. Confirms the stored ratio is the
+        raw float division, not a pre-rounded value, and that BEP sales ties
+        to fixed_expenses / THAT exact unrounded ratio."""
+        bep = self._get_bep()
+        for yr in bep:
+            if yr["revenue"] <= 0:
+                continue
+            exact_ratio = yr["contribution"] / yr["revenue"]
+            # The stored ratio must be the full-precision division, not a
+            # value that was rounded to 4dp and then stored (which would
+            # itself be indistinguishable near round numbers — so also
+            # verify BEP sales was computed from the unrounded ratio).
+            if yr["contribution_pct"] > 0:
+                expected_bep_from_exact_ratio = yr["fixed_expenses"] / exact_ratio
+                assert abs(yr["bep_sales"] - expected_bep_from_exact_ratio) < 0.5, (
+                    f"Year {yr['year']}: BEP Sales must divide by the exact, unrounded "
+                    f"Contribution Margin Ratio, not a value pre-rounded before this division"
+                )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. ROI Consistency

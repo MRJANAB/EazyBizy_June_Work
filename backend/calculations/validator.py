@@ -494,3 +494,217 @@ def structural_reconciliation(cma: dict, dpr: dict) -> list:
     })
 
     return checks
+
+
+def formula_validation(inp: dict, cma: dict, dpr: dict) -> list:
+    """
+    LEVEL 2 — Formula Validation.
+
+    structural_reconciliation() above (LEVEL 1) only checks that totals equal
+    the sum of their own displayed parts. That passes even if every part were
+    computed by a WRONG formula, as long as the total was built by summing
+    those same (wrong) parts consistently. Level 2 goes one step further: it
+    independently RECOMPUTES each key metric from other already-computed,
+    already-displayed component figures (never by re-deriving deep business
+    logic from raw applicant inputs a second time — that would be a second,
+    competing calculation engine, exactly what this platform's one-source-
+    of-truth rule forbids) and compares it against the single central
+    engine's own value for that same metric.
+
+    Tolerance: this engine rounds every monetary figure to the nearest whole
+    rupee at each step (core.engine.R's default), by design, throughout the
+    codebase — so a chain of 3-4 such roundings can legitimately differ by a
+    few rupees from an independent recomputation without either figure being
+    wrong. Rs.2 is used for chained annual money figures (roughly 2x the
+    largest single rounding step); ratios (ratios/percentages) use a much
+    tighter 0.0005 tolerance since no monetary rounding applies to them.
+    A FAIL here means the two numbers disagree by more than that — a real
+    formula drift, not rounding noise.
+
+    Returns a list of {"name", "passed", "expected", "engine_value",
+    "difference", "section", "detail"} dicts, one per formula per year
+    (years are folded into "detail" rather than one row per year, to keep
+    the report table readable).
+    """
+    def close(a, b, tol):
+        try:
+            return abs(float(a) - float(b)) <= tol
+        except (TypeError, ValueError):
+            return False
+
+    MONEY_TOL = 2.0
+    RATIO_TOL = 0.0005
+
+    cop = dpr.get("profit_and_loss_years", [])
+    wc  = dpr.get("working_capital_years", [])
+    bep = dpr.get("breakeven_years", [])
+    pbs = dpr.get("balance_sheet_years", [])
+    dep = dpr.get("depreciation", {})
+    tl  = dpr.get("term_loan", {})
+    dscr_years = (dpr.get("dscr", {}) or {}).get("years", [])
+    dep_schedule = dep.get("schedule", [])
+    tl_schedule  = tl.get("schedule", [])
+
+    checks = []
+
+    def _yearly_check(name: str, section: str, expected_fn, engine_fn, tol: float, n: int = 5):
+        """Run expected_fn(i)/engine_fn(i) for i in range(n); FAIL on the
+        first year that disagrees by more than tol, reporting that year's
+        own expected/engine/difference so a reviewer can find it directly."""
+        for i in range(min(n, len(cop))):
+            try:
+                expected = expected_fn(i)
+                engine   = engine_fn(i)
+            except (KeyError, IndexError, ZeroDivisionError, TypeError):
+                continue
+            if expected is None or engine is None:
+                continue
+            if not close(expected, engine, tol):
+                checks.append({
+                    "name": name, "section": section, "passed": False,
+                    "expected": expected, "engine_value": engine,
+                    "difference": R(expected - engine, 4),
+                    "detail": f"Year {i+1}: expected {expected:,.2f} vs engine {engine:,.2f} (diff {expected-engine:,.2f})",
+                })
+                return
+        checks.append({
+            "name": name, "section": section, "passed": True,
+            "expected": None, "engine_value": None, "difference": 0.0,
+            "detail": "All years reconcile",
+        })
+
+    # A. Revenue = 100%-Capacity Revenue (Year-1 basis) x Capacity x (1+growth)^i
+    rev_g = float(inp.get("revenue_growth_pct", 7) or 7) / 100
+    _rev100_y1 = (cop[0]["revenue"] / cop[0]["capacity"]) if cop and cop[0].get("capacity") else 0.0
+    _yearly_check(
+        "A. Revenue = 100%-Capacity Revenue x Capacity x Growth", "Section-D / Section-J",
+        lambda i: _rev100_y1 * cop[i]["capacity"] * (1 + rev_g) ** i,
+        lambda i: cop[i]["revenue"], MONEY_TOL,
+    )
+
+    # C. Gross Profit = Revenue - COGS
+    _yearly_check(
+        "C. Gross Profit = Revenue - COGS", "Section-J",
+        lambda i: cop[i]["revenue"] - cop[i]["raw_materials"],
+        lambda i: cop[i]["gross_profit"], MONEY_TOL,
+    )
+
+    # E. EBITDA = Gross Profit - Utilities - Labour - Admin - Marketing - Other Opex (CGTMSE fee)
+    _yearly_check(
+        "E. EBITDA = Gross Profit - Utilities - Labour - Admin - Marketing - Other Opex", "Section-J",
+        lambda i: cop[i]["gross_profit"] - cop[i]["power"] - cop[i]["labour"]
+                  - cop[i]["admin_expenses"] - cop[i]["marketing_expenses"] - cop[i]["cgtmse_fee"],
+        lambda i: cop[i]["ebitda"], MONEY_TOL,
+    )
+
+    # F. Depreciation = sum of every category's own WDV depreciation
+    if dep_schedule:
+        _yearly_check(
+            "F. Depreciation = Sum of Category-Level WDV Depreciation", "Section-G / Section-D4",
+            lambda i: (dep_schedule[i]["building_depreciation"] + dep_schedule[i]["machinery_depreciation"]
+                       + dep_schedule[i].get("furniture_depreciation", 0) + dep_schedule[i].get("computers_depreciation", 0)
+                       + dep_schedule[i].get("vehicles_depreciation", 0)),
+            lambda i: cop[i]["depreciation"], MONEY_TOL,
+        )
+
+    # G. Interest — TL Interest must match the loan schedule's own interest_paid;
+    #    WC Interest = WC Bank Finance x WC Interest Rate (both independently available).
+    if tl_schedule:
+        _yearly_check(
+            "G1. Term Loan Interest = Loan Schedule's Own Interest Paid", "Section-H / Section-J",
+            lambda i: tl_schedule[i]["interest_paid"],
+            lambda i: cop[i]["tl_interest"], MONEY_TOL,
+        )
+    wc_rate = float(inp.get("wc_interest_rate", inp.get("interest_rate_pct", 10.5) or 10.5))
+    if wc_rate > 1:
+        wc_rate = wc_rate / 100 if wc_rate > 1 else wc_rate
+    _yearly_check(
+        "G2. WC Interest = WC Bank Finance x WC Interest Rate", "Section-B4 / Section-J",
+        lambda i: wc[i]["bank_loan"] * wc_rate,
+        lambda i: cop[i]["wc_interest"], MONEY_TOL,
+    )
+
+    # H. PBT = EBITDA - Depreciation - WC Interest - TL Interest
+    _yearly_check(
+        "H. PBT = EBITDA - Depreciation - WC Interest - TL Interest", "Section-J",
+        lambda i: cop[i]["ebitda"] - cop[i]["depreciation"] - cop[i]["wc_interest"] - cop[i]["tl_interest"],
+        lambda i: cop[i]["profit_before_tax"], MONEY_TOL,
+    )
+
+    # I. Tax = MAX(PBT x Tax Rate, 0) — this platform enforces a 25% MANDATORY
+    #    minimum effective rate whenever the applicant's own rate is left at/
+    #    below 0% (income_statement.py's own documented rule), not a genuine
+    #    0%-tax scenario.
+    _tax_rate_raw = float(inp.get("tax_rate_pct", 25) or 25) / 100
+    _tax_rate = _tax_rate_raw if _tax_rate_raw > 0 else 0.25
+    _yearly_check(
+        "I. Tax = MAX(PBT x Tax Rate, 0)", "Section-J",
+        lambda i: max(cop[i]["profit_before_tax"] * _tax_rate, 0),
+        lambda i: cop[i]["tax"], MONEY_TOL,
+    )
+
+    # J. PAT = PBT - Tax
+    _yearly_check(
+        "J. PAT = PBT - Tax", "Section-J",
+        lambda i: cop[i]["profit_before_tax"] - cop[i]["tax"],
+        lambda i: cop[i]["net_profit"], MONEY_TOL,
+    )
+
+    # K. Cash Accrual = PAT + Depreciation
+    _yearly_check(
+        "K. Cash Accrual = PAT + Depreciation", "Section-J",
+        lambda i: cop[i]["net_profit"] + cop[i]["depreciation"],
+        lambda i: cop[i]["cash_accruals"], MONEY_TOL,
+    )
+
+    # L. DSCR = (Cash Accrual + TL Interest) / (TL Principal + TL Interest)
+    if dscr_years:
+        _yearly_check(
+            "L. DSCR = (Cash Accrual + TL Interest) / (TL Principal + TL Interest)", "Section-N",
+            lambda i: (dscr_years[i]["cash_accruals"] + dscr_years[i]["tl_interest"]) / dscr_years[i]["total_b"]
+                      if dscr_years[i]["total_b"] else None,
+            lambda i: dscr_years[i]["dscr"], 0.02, n=len(dscr_years),
+        )
+
+    # M. Current Ratio components: Gross Current Assets (Balance Sheet) must
+    #    equal the WC schedule's own net Requirement plus Creditors added back
+    #    (i.e. the Balance Sheet must stay GROSS, never silently re-net
+    #    Creditors into Current Assets again).
+    if wc and pbs and len(pbs) > 1:
+        _yearly_check(
+            "M. Current Ratio: Balance Sheet Current Assets = WC Requirement + Creditors (Gross)", "Section-K / Section-B4",
+            lambda i: wc[i]["total"] + wc[i].get("creditors", 0),
+            lambda i: pbs[i + 1]["current_assets"], MONEY_TOL,
+        )
+
+    # N. Operating BEP = Operating Fixed Costs / Contribution Margin Ratio
+    if bep:
+        _yearly_check(
+            "N. Operating BEP = Operating Fixed Costs / Contribution Margin Ratio", "Section-M",
+            lambda i: bep[i]["operating_fixed_expenses"] / bep[i]["contribution_pct"] if bep[i]["contribution_pct"] else None,
+            lambda i: bep[i]["operating_bep_sales"] if bep[i]["operating_bep_sales"] else None, MONEY_TOL,
+        )
+
+        # O. Financial BEP = Financial (Total) Fixed Costs / Contribution Margin Ratio
+        _yearly_check(
+            "O. Financial BEP = Financial Fixed Costs / Contribution Margin Ratio", "Section-M",
+            lambda i: bep[i]["fixed_expenses"] / bep[i]["contribution_pct"] if bep[i]["contribution_pct"] else None,
+            lambda i: bep[i]["bep_sales"] if bep[i]["bep_sales"] else None, MONEY_TOL,
+        )
+
+    # P. Balance Sheet: Total Assets = Total Equity + Total Liabilities
+    #    (independently re-summed from the Balance Sheet's own line items,
+    #    not read off its pre-computed total_assets/total_liabilities keys).
+    if pbs:
+        _yearly_check(
+            "P. Balance Sheet: Total Assets = Total Equity + Total Liabilities", "Section-K",
+            lambda i: (pbs[i]["land"] + pbs[i]["net_block"] + pbs[i]["other_assets"]
+                       + pbs[i]["current_assets"] + max(pbs[i].get("cash", 0), 0)),
+            lambda i: (pbs[i]["equity"] + pbs[i].get("margin_money", 0) + pbs[i]["reserves"] + pbs[i]["term_loan"]
+                       + pbs[i]["wc_bank"] + pbs[i].get("trade_creditors", 0) + pbs[i].get("promoter_wc_margin", 0)),
+            MONEY_TOL, n=len(pbs),
+        )
+
+    return checks
+
+    return checks

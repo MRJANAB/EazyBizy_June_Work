@@ -1118,6 +1118,10 @@ def _build_dpr_from_report(
             "net_profit":         float(yr.get("pat", yr.get("net_profit", 0)) or 0),
             "reserves_surplus":   float(yr.get("reserves_surplus", 0) or 0),
             "cash_accruals":      float(yr.get("cash_accruals", 0) or 0),
+            # = Cash Accruals - TL Principal Repaid, already computed once by
+            # income_statement.py at full annual precision — read directly
+            # rather than re-deriving from a separate monthly module.
+            "net_surplus":        float(yr.get("net_surplus", 0) or 0),
         })
 
     # WC years — Fix #3: include creditors so the "Less: Creditors" row in Section I renders correctly

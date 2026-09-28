@@ -119,7 +119,14 @@ def calculate_break_even(income: list, data, scheme_data: dict = None) -> list:
         op_fix_costs = R(fixed_exp + dep)
 
         contrib   = R(rev - var_costs)
-        cm_ratio  = R(contrib / rev, 4) if rev else 0
+        # CA AUDIT: this used to round the Contribution Margin ratio to 4
+        # decimal places BEFORE dividing Fixed Costs by it below — a rounded
+        # ratio fed back into another division, however fine the rounding,
+        # is still "using the displayed value as an input" (never full
+        # internal precision). BEP Sales/% now divide by the exact,
+        # unrounded ratio; only the final BEP figures are rounded, at their
+        # own display step below.
+        cm_ratio  = (contrib / rev) if rev else 0
 
         # BUG FIX: annual_rev_100 used to come only from annual_revenue_from_prod(),
         # which derives 100%-capacity revenue from production.input_qty_per_day /

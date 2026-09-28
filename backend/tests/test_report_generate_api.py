@@ -1133,3 +1133,78 @@ class TestBalanceSheetShowsGrossCurrentAssetsAndTradeCreditors:
         assert "Inc. in Trade Creditors" in text
         flat = " ".join(text.split())
         assert "FINANCIAL MODEL VALIDATION: PASS" in flat
+
+
+class TestCashAccrualLessPrincipalUsesSingleSourceOfTruth:
+    """CA AUDIT: this figure used to be Year-1 MONTHLY surplus (from
+    calculations/monthly_pnl.py, an independent calculation) x 12 — a
+    second, separately-rounded formula for PAT + Depreciation - TL Principal
+    that income_statement.py's Year-1 row already computes directly at
+    annual precision ("net_surplus"). The two disagreed by a couple of
+    rupees purely from accumulated monthly rounding (e.g. Rs.262,591 shown
+    vs the correct Rs.262,593), not a real business difference."""
+
+    def test_cash_accrual_less_principal_ties_exactly_to_pat_plus_dep_minus_principal(self):
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        displayed = _year1_row_value("Cash Accrual Less Term Loan Principal", text)
+        pat = _year1_row_value("NET PROFIT (PAT)", text)
+        dep = _year1_row_value("Less: Depreciation", text)
+        principal = _year1_row_value("(B) TL Principal Repayment", text)
+        expected = pat + dep - principal
+        assert abs(displayed - expected) < 1, (
+            f"Cash Accrual Less Term Loan Principal ({displayed}) must equal "
+            f"PAT ({pat}) + Depreciation ({dep}) - TL Principal ({principal}) = {expected} exactly, "
+            f"not a separately-rounded monthly-derived approximation"
+        )
+
+
+class TestFormulaValidationLevel2:
+    """The new Level-2 independent-recomputation layer: each row recomputes
+    a metric from OTHER already-computed component figures and compares it
+    to the central engine's own value. For a standard, unmodified report
+    every check must PASS — a spurious FAIL here would mean the checking
+    logic itself (not the engine) is miscalibrated."""
+
+    def test_all_formula_validation_checks_pass_for_a_standard_report(self):
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Formula Validation Checks (Level 2)" in text
+        flat = " ".join(text.split())
+        assert "FINANCIAL MODEL VALIDATION: PASS" in flat
+        idx = text.find("Formula Validation Checks (Level 2)")
+        end = text.find("Each row independently recomputes", idx)
+        section = " ".join(text[idx:end if end != -1 else idx + 4000].split())
+        assert "FAIL" not in section, (
+            "A standard, unmodified report must not trip any Level-2 formula check"
+        )
+        for letter_check in (
+            "Revenue = 100%-Capacity Revenue", "Gross Profit = Revenue - COGS",
+            "EBITDA = Gross Profit", "Depreciation = Sum of Category-Level WDV Depreciation",
+            "Term Loan Interest = Loan Schedule's Own Interest Paid",
+            "WC Interest = WC Bank Finance x WC Interest Rate",
+            "PBT = EBITDA - Depreciation", "Tax = MAX(PBT x Tax Rate, 0)", "PAT = PBT - Tax",
+            "Cash Accrual = PAT + Depreciation", "DSCR = (Cash Accrual + TL Interest)",
+            "Current Ratio: Balance Sheet Current Assets", "Operating BEP = Operating Fixed Costs",
+            "Financial BEP = Financial Fixed Costs", "Balance Sheet: Total Assets = Total Equity",
+        ):
+            assert letter_check in section, f"Missing Level-2 check: {letter_check!r}"
+
+
+class TestMarketingAssumptionLabelIsNotMisleading:
+    """CA AUDIT: "Marketing % of Rev" read as if it were the governing
+    assumption driving the Marketing expense line — but when the applicant
+    enters an actual Rs. marketing figure (the normal case), that figure
+    escalates by Admin Expense Increase each year, and the percentage shown
+    is only a derived, backward-computed Year-1 ratio, never itself an
+    input. The old label read as a direct contradiction next to the P&L's
+    own escalating Rs. marketing figures."""
+
+    def test_marketing_row_label_says_effective_not_governing(self):
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Marketing (Effective % of Y1 Rev)" in text
+        assert "Marketing % of Rev" not in text

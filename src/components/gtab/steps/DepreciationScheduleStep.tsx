@@ -40,7 +40,11 @@ const DepreciationScheduleStep = ({ formData }: DepreciationScheduleStepProps) =
         </p>
         <p>• WDV (reducing balance) is used exclusively — Income Tax Act depreciation is computed this way, never Straight Line.</p>
         <p>• Each year: Depreciation = Opening WDV × Rate; Closing WDV = Opening WDV − Depreciation, carried forward as next year's opening.</p>
-        <p>• Building depreciates at {dep.buildingRatePct}% p.a. · Plant &amp; Machinery + Fixtures at {dep.machineryRatePct}% p.a.</p>
+        <p>
+          • Building {dep.buildingRatePct}% · Plant &amp; Machinery {dep.machineryRatePct}% · Furniture &amp; Fixtures{" "}
+          {dep.furnitureRatePct}% · Computers &amp; IT Equipment {dep.computersRatePct}% · Vehicles {dep.vehicleRatePct}%
+          p.a. — each asset category has its own Income Tax Act WDV block rate, not one shared rate.
+        </p>
       </div>
 
       {!hasAssets ? (
@@ -55,19 +59,33 @@ const DepreciationScheduleStep = ({ formData }: DepreciationScheduleStepProps) =
           <Card>
             <CardContent className="p-4 sm:p-6 space-y-3">
               <h4 className="text-sm font-semibold">Gross Block (Year 0)</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Building</p>
+                  <p className="text-xs text-muted-foreground">Building ({dep.buildingRatePct}%)</p>
                   <p className="font-semibold">{fmt(dep.buildingGross)}</p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Plant &amp; Machinery (incl. contingency)</p>
+                  <p className="text-xs text-muted-foreground">Plant &amp; Machinery (incl. contingency, {dep.machineryRatePct}%)</p>
                   <p className="font-semibold">{fmt(dep.pmWithContingency)}</p>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Fixtures &amp; Other Assets</p>
-                  <p className="font-semibold">{fmt(dep.fixturesGross)}</p>
-                </div>
+                {dep.furnitureGross > 0 && (
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Furniture, Fixtures &amp; Electrification ({dep.furnitureRatePct}%)</p>
+                    <p className="font-semibold">{fmt(dep.furnitureGross)}</p>
+                  </div>
+                )}
+                {dep.computersGross > 0 && (
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Computers &amp; IT Equipment ({dep.computersRatePct}%)</p>
+                    <p className="font-semibold">{fmt(dep.computersGross)}</p>
+                  </div>
+                )}
+                {dep.vehicleGross > 0 && (
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground">Vehicles &amp; Transportation ({dep.vehicleRatePct}%)</p>
+                    <p className="font-semibold">{fmt(dep.vehicleGross)}</p>
+                  </div>
+                )}
                 <div className="rounded-lg border p-3 bg-primary/5">
                   <p className="text-xs text-muted-foreground">Total Gross Block</p>
                   <p className="font-semibold">{fmt(dep.grossBlock)}</p>
@@ -117,7 +135,7 @@ const DepreciationScheduleStep = ({ formData }: DepreciationScheduleStepProps) =
 
           <Card>
             <CardContent className="p-4 sm:p-6 space-y-3 overflow-x-auto">
-              <h4 className="text-sm font-semibold">Building vs. Machinery + Fixtures — Break-up</h4>
+              <h4 className="text-sm font-semibold">Depreciation by Asset Category — Break-up</h4>
               <table className="w-full text-xs sm:text-sm border-collapse min-w-[640px]">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -141,17 +159,65 @@ const DepreciationScheduleStep = ({ formData }: DepreciationScheduleStepProps) =
                     ))}
                   </tr>
                   <tr className="border-b">
-                    <td className="py-2 px-2 text-muted-foreground">Machinery + Fixtures — Depreciation</td>
+                    <td className="py-2 px-2 text-muted-foreground">Plant &amp; Machinery — Depreciation</td>
                     {dep.schedule.map((row) => (
                       <td key={row.year} className="text-right py-2 px-2">{fmt(row.machineryDepreciation)}</td>
                     ))}
                   </tr>
                   <tr className="border-b">
-                    <td className="py-2 px-2 text-muted-foreground">Machinery + Fixtures — Closing WDV</td>
+                    <td className="py-2 px-2 text-muted-foreground">Plant &amp; Machinery — Closing WDV</td>
                     {dep.schedule.map((row) => (
                       <td key={row.year} className="text-right py-2 px-2">{fmt(row.machineryClosingWdv)}</td>
                     ))}
                   </tr>
+                  {dep.furnitureGross > 0 && (
+                    <>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 text-muted-foreground">Furniture, Fixtures &amp; Electrification — Depreciation</td>
+                        {dep.schedule.map((row) => (
+                          <td key={row.year} className="text-right py-2 px-2">{fmt(row.furnitureDepreciation)}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 text-muted-foreground">Furniture, Fixtures &amp; Electrification — Closing WDV</td>
+                        {dep.schedule.map((row) => (
+                          <td key={row.year} className="text-right py-2 px-2">{fmt(row.furnitureClosingWdv)}</td>
+                        ))}
+                      </tr>
+                    </>
+                  )}
+                  {dep.computersGross > 0 && (
+                    <>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 text-muted-foreground">Computers &amp; IT Equipment — Depreciation</td>
+                        {dep.schedule.map((row) => (
+                          <td key={row.year} className="text-right py-2 px-2">{fmt(row.computersDepreciation)}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 text-muted-foreground">Computers &amp; IT Equipment — Closing WDV</td>
+                        {dep.schedule.map((row) => (
+                          <td key={row.year} className="text-right py-2 px-2">{fmt(row.computersClosingWdv)}</td>
+                        ))}
+                      </tr>
+                    </>
+                  )}
+                  {dep.vehicleGross > 0 && (
+                    <>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 text-muted-foreground">Vehicles &amp; Transportation — Depreciation</td>
+                        {dep.schedule.map((row) => (
+                          <td key={row.year} className="text-right py-2 px-2">{fmt(row.vehiclesDepreciation)}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 px-2 text-muted-foreground">Vehicles &amp; Transportation — Closing WDV</td>
+                        {dep.schedule.map((row) => (
+                          <td key={row.year} className="text-right py-2 px-2">{fmt(row.vehiclesClosingWdv)}</td>
+                        ))}
+                      </tr>
+                    </>
+                  )}
                 </tbody>
               </table>
             </CardContent>

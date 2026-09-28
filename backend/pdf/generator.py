@@ -480,6 +480,11 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         ),
         "building_dep_rate_wdv":  float(assum.get("building_dep_rate_pct", 5) or 5) / 100,
         "machinery_dep_rate_wdv": float(assum.get("depreciation_pct", 10) or 10) / 100,
+        # CA AUDIT: computers/furniture+racks/vehicles each get their own
+        # Income-Tax-Act-block WDV rate now — see calculations/depreciation.py
+        "furniture_dep_rate_wdv": float(assum.get("furniture_dep_rate_pct", 10) or 10) / 100,
+        "computers_dep_rate_wdv": float(assum.get("computers_dep_rate_pct", 40) or 40) / 100,
+        "vehicle_dep_rate_wdv":   float(assum.get("vehicle_dep_rate_pct",   15) or 15) / 100,
         "revenue_growth_pct":  float(assum.get("revenue_growth_pct", 7) or 7),
         "salary_increase_pct": float(assum.get("salary_increase_pct", 10) or 10),
         "admin_increase_pct":  float(assum.get("expense_growth_pct", 5) or 5),

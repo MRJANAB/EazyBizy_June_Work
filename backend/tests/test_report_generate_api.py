@@ -275,27 +275,46 @@ class TestTradingSectionsWithItemizedProductsList:
     fill in this form for a wholesale trader — and exposed four distinct
     display bugs in one live report generation."""
 
-    def test_section19_gross_value_matches_its_own_displayed_depreciation(self):
-        """BUG FIX: the combined P&M+fixtures row's "Gross Value" used to
-        show pm_with_contingency alone, omitting fixtures_gross — even
-        though its own "Year 1 Dep" was computed off pm_with_contingency +
-        fixtures_gross combined. That made the row self-contradictory
-        (e.g. Rs.52,500 shown at a 15% rate next to a Rs.127,875 depreciation
-        figure)."""
+    def test_gross_block_rows_each_tie_gross_value_to_their_own_dep_rate(self):
+        """CA AUDIT: computers, furniture/racks and vehicles used to be
+        pooled into the P&M/"Shop Equipment" row and depreciated at ITS
+        rate — a combined "Gross Value" that used to omit the fixtures
+        portion while "Year 1 Dep" silently included it (self-contradictory:
+        e.g. Rs.52,500 shown at a 15% rate next to a Rs.127,875 depreciation
+        figure). Each asset category is now its own row with its own rate —
+        every row's own Gross Value x its own Dep Rate must equal its own
+        Year 1 Dep, independently."""
         resp = client.post("/api/v1/report/generate", json=_pmegp_trading_payload())
         assert resp.status_code == 200, resp.text
-        text = _download_pdf_text(resp.json()["report_id"])
-        idx = text.find("Shop Equipment, Fixtures & Interiors (incl. fitting)")
-        assert idx != -1
-        row = text[idx:idx + 200]
-        # Row cells, in order: Gross Value, Dep Rate ("15.0%"), Year 1 Dep.
-        cells = re.findall(r"Rs\. ([\d,]+)|(\d+\.\d)%", row)
-        gross_value = float(cells[0][0].replace(",", ""))
-        year1_dep   = float(cells[2][0].replace(",", ""))
-        dep_rate    = 0.15
-        assert abs(gross_value * dep_rate - year1_dep) < 1, (
-            f"Gross Value ({gross_value}) x Dep Rate must equal the row's own "
-            f"Year 1 Dep ({year1_dep}) — they must not be computed off different bases"
+        full_text = _download_pdf_text(resp.json()["report_id"])
+        # Scope to the Gross Block table itself — "Computers & IT Equipment"
+        # etc. also appear as line items in Section-B2's cost table earlier.
+        gb_idx = full_text.find("Gross Block")
+        assert gb_idx != -1
+        text = full_text[gb_idx:gb_idx + 1000]
+        rates = {}
+        for label in (
+            "Shop Equipment & Fittings (incl. fitting)",
+            "Furniture, Fixtures & Electrification",
+            "Computers & IT Equipment",
+            "Vehicles & Transportation",
+        ):
+            idx = text.find(label)
+            assert idx != -1, f"Gross Block row {label!r} not found"
+            row = text[idx:idx + 200]
+            cells = re.findall(r"Rs\. ([\d,]+)|(\d+\.\d)%", row)
+            gross_value = float(cells[0][0].replace(",", ""))
+            dep_rate    = float(cells[1][1]) / 100
+            year1_dep   = float(cells[2][0].replace(",", ""))
+            rates[label] = dep_rate
+            assert abs(gross_value * dep_rate - year1_dep) < 1, (
+                f"{label}: Gross Value ({gross_value}) x Dep Rate ({dep_rate:.0%}) must equal "
+                f"the row's own Year 1 Dep ({year1_dep})"
+            )
+        # And each row's own rate must genuinely differ — proving they are
+        # NOT silently pooled back into one blanket machinery rate.
+        assert rates["Furniture, Fixtures & Electrification"] != rates["Computers & IT Equipment"], (
+            "Furniture and Computers must depreciate at their own distinct rates, not one shared rate"
         )
 
     def test_section19_items_total_does_not_double_count_tools_installation(self):

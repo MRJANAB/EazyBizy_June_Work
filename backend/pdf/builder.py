@@ -1675,30 +1675,40 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "Building / Factory Shed"
     )
     _dep_machinery_label = (
-        "Shop Equipment, Fixtures & Interiors (incl. fitting)" if _is_trading else
-        "Service Equipment & Tools"                             if _is_service else
-        "Agricultural Equipment & Implements"                   if _is_agri   else
+        "Shop Equipment & Fittings (incl. fitting)" if _is_trading else
+        "Service Equipment & Tools"                  if _is_service else
+        "Agricultural Equipment & Implements"        if _is_agri   else
         "Plant, Machinery & Equipment (incl. contingency)"
     )
-    # BUG FIX: this row's "Year 1 Dep" is computed off pm_with_contingency +
-    # fixtures_gross combined (calculations/depreciation.py pools P&M and
-    # fixtures — computers/furniture/electrification/racks/transportation —
-    # into one depreciation base at the same rate) — but the "Gross Value"
-    # shown here used to be pm_with_contingency ALONE, silently omitting
-    # fixtures_gross. That made the row self-contradictory (e.g. Rs.52,500
-    # x 15% was displayed as Rs.127,875) even though "Total Gross Block"
-    # below it already included fixtures_gross correctly.
-    _dep_machinery_gross_display = R(
-        dep.get("pm_with_contingency", dep["machinery_gross"]) + dep.get("fixtures_gross", 0), 2
-    )
-    gb_t = Table([
+    # CA AUDIT: computers, furniture/racks and vehicles used to be pooled
+    # into the Plant & Machinery row above and depreciated at ITS rate — a
+    # single combined "Gross Value" that silently disagreed with Section-B2's
+    # own itemised cost table (which always kept these separate), and charged
+    # e.g. a laptop the same 15% rate as a concrete mixer. Each now gets its
+    # own row, its own Income-Tax-Act-block WDV rate, and depreciates on its
+    # own schedule (calculations/depreciation.py) — shown only when the
+    # applicant actually entered a nonzero cost for that category.
+    gb_rows = [
         ["Asset", "Gross Value (Rs.)", "Dep Rate", "Year 1 Dep (Rs.)"],
         [_dep_building_label, rs(dep["building_gross"]), rp(inp["building_dep_rate_wdv"]), rs(dep["dep_building_wdv"])],
-        [_dep_machinery_label, rs(_dep_machinery_gross_display), rp(inp["machinery_dep_rate_wdv"]), rs(dep["dep_machinery_wdv"])],
-        ["Total Gross Block", rs(dep["gross_block"]), "", rs(dep["total_per_year"])],
-    ], colWidths=[70*mm, 40*mm, 28*mm, 32*mm])
-    gb_t.setStyle(BTS()); gb_t.setStyle(TOT(3))
+        [_dep_machinery_label, rs(dep.get("pm_with_contingency", dep["machinery_gross"])), rp(inp["machinery_dep_rate_wdv"]), rs(dep["dep_machinery_wdv"])],
+    ]
+    if float(dep.get("furniture_gross", 0) or 0) > 0:
+        gb_rows.append(["Furniture, Fixtures & Electrification", rs(dep["furniture_gross"]), rp(inp["furniture_dep_rate_wdv"]), rs(dep["dep_furniture_wdv"])])
+    if float(dep.get("computers_gross", 0) or 0) > 0:
+        gb_rows.append(["Computers & IT Equipment", rs(dep["computers_gross"]), rp(inp["computers_dep_rate_wdv"]), rs(dep["dep_computers_wdv"])])
+    if float(dep.get("vehicle_gross", 0) or 0) > 0:
+        gb_rows.append(["Vehicles & Transportation", rs(dep["vehicle_gross"]), rp(inp["vehicle_dep_rate_wdv"]), rs(dep["dep_vehicle_wdv"])])
+    gb_rows.append(["Total Gross Block", rs(dep["gross_block"]), "", rs(dep["total_per_year"])])
+    gb_t = Table(gb_rows, colWidths=[70*mm, 40*mm, 28*mm, 32*mm])
+    gb_t.setStyle(BTS()); gb_t.setStyle(TOT(len(gb_rows) - 1))
     story.append(gb_t)
+    NL(story, 3)
+    story.append(Paragraph(
+        "<b>Note:</b> Electrification is grouped with Furniture & Fixtures (fixed wiring/fittings serving the "
+        "premises) rather than with Plant & Machinery, so contingency loading — applied to Plant & Machinery "
+        "only — is never diluted across unrelated asset categories.",
+        ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════════════════

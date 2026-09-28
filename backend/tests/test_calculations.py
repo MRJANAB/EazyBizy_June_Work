@@ -327,7 +327,15 @@ class TestDepreciation:
         """Pins the EXACT same fixture as src/lib/wdvDepreciation.test.ts's
         rounding-regression test, so backend and frontend can never silently
         drift apart again. Building=600000, machinery=1,200,000+80,000
-        installation, fixtures=125,000, contingency=5%, rates 10%/5%."""
+        installation, contingency=5%, building rate=5%, machinery rate=10%.
+        Furniture+racks+electrification=95,000 at 10% (furniture_dep_rate_pct
+        default), Computers=30,000 at 40% (computers_dep_rate_pct default),
+        Vehicles=0. CA AUDIT: these three used to be pooled into Plant &
+        Machinery and depreciated at ITS 10% rate — Gross Block is
+        unaffected (assets just moved between buckets), but total Year-1
+        depreciation is now HIGHER (Rs.185,900 vs the old Rs.176,900)
+        because Computers correctly depreciates faster (40%) than the
+        blanket machinery rate it used to silently borrow."""
         from calculations.depreciation import calculate_depreciation
         data = _make_data(project=types.SimpleNamespace(
             building_cost=600000, land_cost=0, preliminary_expenses=0,
@@ -341,17 +349,24 @@ class TestDepreciation:
         ), assumptions=_make_assumptions(contingency_pct=5, depreciation_pct=10, building_dep_rate_pct=5))
         dep = calculate_depreciation(data, SCHEME_PMEGP)
         assert dep["gross_block"] == 2069000
+        assert dep["pm_with_contingency"] == 1344000
+        assert dep["furniture_gross"] == 95000
+        assert dep["computers_gross"] == 30000
+        assert dep["vehicle_gross"] == 0
         expected = [
-            {"bld": 30000, "mach": 146900, "closing": 1892100},
-            {"bld": 28500, "mach": 132210, "closing": 1731390},
-            {"bld": 27075, "mach": 118989, "closing": 1585326},
-            {"bld": 25721, "mach": 107090, "closing": 1452515},
-            {"bld": 24435, "mach": 96381,  "closing": 1331699},
+            {"bld": 30000, "mach": 134400, "furn": 9500, "comp": 12000, "veh": 0, "closing": 1883100},
+            {"bld": 28500, "mach": 120960, "furn": 8550, "comp": 7200,  "veh": 0, "closing": 1717890},
+            {"bld": 27075, "mach": 108864, "furn": 7695, "comp": 4320,  "veh": 0, "closing": 1569936},
+            {"bld": 25721, "mach": 97978,  "furn": 6926, "comp": 2592,  "veh": 0, "closing": 1436719},
+            {"bld": 24435, "mach": 88180,  "furn": 6233, "comp": 1555,  "veh": 0, "closing": 1316316},
         ]
         for i, exp in enumerate(expected):
             row = dep["schedule"][i]
-            assert row["building_depreciation"] == exp["bld"], f"Year {i+1} building dep"
-            assert row["machinery_depreciation"] == exp["mach"], f"Year {i+1} machinery dep"
+            assert row["building_depreciation"]  == exp["bld"],  f"Year {i+1} building dep"
+            assert row["machinery_depreciation"] == exp["mach"], f"Year {i+1} machinery (P&M-only) dep"
+            assert row["furniture_depreciation"] == exp["furn"], f"Year {i+1} furniture dep"
+            assert row["computers_depreciation"] == exp["comp"], f"Year {i+1} computers dep"
+            assert row["vehicles_depreciation"]  == exp["veh"],  f"Year {i+1} vehicles dep"
             assert row["closing_wdv"] == exp["closing"], f"Year {i+1} closing WDV"
 
 

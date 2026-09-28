@@ -180,8 +180,16 @@ class AssumptionsInfo(BaseModel):
     revenue_growth_pct:    float = Field(default=7.0)
     expense_growth_pct:    float = Field(default=5.0,  description="Fixed expense growth % p.a. (admin inflation)")
     tax_rate_pct:          float = Field(default=0.0)
-    depreciation_pct:      float = Field(default=10.0, description="Machinery WDV depreciation %")
+    depreciation_pct:      float = Field(default=10.0, description="Plant & Machinery (incl. electrification) WDV depreciation %")
     building_dep_rate_pct: float = Field(default=5.0,  description="Building WDV depreciation % (CA: half of machinery rate)")
+    # CA AUDIT: computers, furniture/racks and vehicles used to be pooled into
+    # the Plant & Machinery depreciation base and charged the SAME machinery
+    # rate — but each is its own Income-Tax-Act WDV block with a materially
+    # different statutory rate. Never hardcoded; each is its own assumption,
+    # same pattern as building_dep_rate_pct alongside depreciation_pct.
+    furniture_dep_rate_pct: float = Field(default=10.0, description="Furniture & Fixtures (incl. racks/storage) WDV depreciation % (Income Tax Act block rate)")
+    computers_dep_rate_pct: float = Field(default=40.0, description="Computers & IT Equipment WDV depreciation % (Income Tax Act block rate)")
+    vehicle_dep_rate_pct:   float = Field(default=15.0, description="Vehicles & Transportation WDV depreciation % (Income Tax Act block rate, non-commercial-hire)")
     stock_holding_days:    int   = Field(default=0,    description="0 = use industry default (Mfg:30d, Service:0d, Trading:45d)")
     debtor_days:           int   = Field(default=0,    description="0 = use industry default (30d for most)")
     creditor_days:         int   = Field(default=0,    description="0 = use industry default (15d Mfg/Svc, 30d Trading)")

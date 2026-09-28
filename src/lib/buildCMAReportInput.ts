@@ -290,6 +290,9 @@ export function buildCMAReportInput(formData: GTABFormData): object {
       tax_rate_pct:           Number(ri.revenue.tax_rate_pct         || 25),
       depreciation_pct:       Number(ri.revenue.depreciation_pct     || 10),
       building_dep_rate_pct:  Number(dpr.building_dep_rate_pct       || 5),
+      furniture_dep_rate_pct: Number(dpr.furniture_dep_rate_pct      || 10),
+      computers_dep_rate_pct: Number(dpr.computers_dep_rate_pct      || 40),
+      vehicle_dep_rate_pct:   Number(dpr.vehicle_dep_rate_pct        || 15),
       contingency_pct:        Number(dpr.contingency_pct             || 0),
       // ── Working capital norms ────────────────────────────────────────────
       stock_holding_days:     Number(ri.working_capital.stock_days   || 30),

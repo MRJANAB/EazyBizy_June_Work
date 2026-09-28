@@ -203,6 +203,13 @@ export interface ProjectReportInputs {
     moratorium_years:           number;
     // ── Financial assumptions (all sent to backend as-is) ────────────────
     building_dep_rate_pct:      number;   // building WDV depreciation %
+    // CA AUDIT: computers, furniture/racks and vehicles used to be pooled
+    // into Plant & Machinery and depreciated at ITS rate — each is its own
+    // Income-Tax-Act WDV block with a materially different statutory rate.
+    // Defaults match backend/models/input_schema.py exactly.
+    furniture_dep_rate_pct:     number;   // furniture & fixtures (incl. racks/storage, electrification) WDV %
+    computers_dep_rate_pct:     number;   // computers & IT equipment WDV %
+    vehicle_dep_rate_pct:       number;   // vehicles & transportation WDV %
     salary_increase_pct:        number;   // annual salary hike % (CA standard: 8-10%)
     admin_increase_rate_pct:    number;   // admin expense growth %
     marketing_expense_pct:      number;   // marketing as % of revenue
@@ -363,6 +370,9 @@ export const createInitialProjectReportInputs = (): ProjectReportInputs => ({
     moratorium_years:           0,
     // Financial assumptions
     building_dep_rate_pct:      5,
+    furniture_dep_rate_pct:     10,
+    computers_dep_rate_pct:     40,
+    vehicle_dep_rate_pct:       15,
     machinery_dep_rate_pct:     10,
     salary_increase_pct:        10,
     salary_increase_rate_pct:   10,

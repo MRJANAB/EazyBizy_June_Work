@@ -1404,7 +1404,7 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
                 of-assets rates); the 25% tax rate is an illustrative effective-tax
                 assumption — a Proprietorship is taxed at the proprietor's own
                 individual income-tax slab rates, not a flat rate. */}
-            <p>• Machinery Dep 10% WDV · Building Dep 5% WDV — generic CMA-projection rates only, distinct from Companies Act / Income Tax Act depreciation</p>
+            <p>• Machinery Dep 10% · Building Dep 5% · Furniture/Fixtures Dep 10% · Computers Dep 40% · Vehicles Dep 15% (all WDV) — generic CMA-projection rates only, distinct from Companies Act / Income Tax Act depreciation</p>
             <p>• Tax Rate 25% — illustrative effective-tax assumption; actual tax depends on the applicant's business constitution (a Proprietorship is taxed at the proprietor's individual slab rates) and must be confirmed by a CA</p>
             <p>• Revenue Growth 7% p.a. · Fixed Expense Growth 5% p.a. · Salary Hike 10% p.a. · DSCR benchmark ≥ 1.25</p>
             <p>• Contingency on P&amp;M 5–10% — a cost-overrun buffer banks expect on new machinery purchases</p>
@@ -1423,6 +1423,24 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
               value={report.dpr.building_dep_rate_pct || 5}
               onChange={(value) => updateSection("dpr", { building_dep_rate_pct: value })}
               placeholder="5"
+            />
+            <NumberField
+              label="Furniture, Fixtures & Electrification Depreciation % (WDV)"
+              value={report.dpr.furniture_dep_rate_pct || 10}
+              onChange={(value) => updateSection("dpr", { furniture_dep_rate_pct: value })}
+              placeholder="10"
+            />
+            <NumberField
+              label="Computers & IT Equipment Depreciation % (WDV)"
+              value={report.dpr.computers_dep_rate_pct || 40}
+              onChange={(value) => updateSection("dpr", { computers_dep_rate_pct: value })}
+              placeholder="40"
+            />
+            <NumberField
+              label="Vehicles & Transportation Depreciation % (WDV)"
+              value={report.dpr.vehicle_dep_rate_pct || 15}
+              onChange={(value) => updateSection("dpr", { vehicle_dep_rate_pct: value })}
+              placeholder="15"
             />
             <NumberField
               label="Income Tax Rate % (CA Mandatory — 25%) *"

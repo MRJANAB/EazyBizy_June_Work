@@ -37,8 +37,27 @@ describe("buildWdvDepreciationSchedule", () => {
     // machinery base = 500000 + 20000 = 520000; +5% contingency = 546000
     expect(dep.pmWithContingency).toBeCloseTo(546_000, 2);
     expect(dep.fixturesGross).toBeCloseTo(80_000, 2); // computers + furniture
+    expect(dep.furnitureGross).toBeCloseTo(30_000, 2);
+    expect(dep.computersGross).toBeCloseTo(50_000, 2);
+    expect(dep.vehicleGross).toBeCloseTo(0, 2);
     expect(dep.buildingGross).toBe(1_000_000);
     expect(dep.grossBlock).toBeCloseTo(1_000_000 + 546_000 + 80_000, 2);
+  });
+
+  it("depreciates computers, furniture and vehicles at their own distinct rates, not the machinery rate", () => {
+    // CA AUDIT: these three used to be pooled into Plant & Machinery and
+    // charged its rate — a laptop is not the same Income-Tax-Act block as a
+    // concrete mixer.
+    const dep = buildWdvDepreciationSchedule(makeFormData());
+    const year1 = dep.schedule[0];
+    expect(dep.furnitureRatePct).toBe(10);
+    expect(dep.computersRatePct).toBe(40);
+    expect(dep.vehicleRatePct).toBe(15);
+    // furniture (30000) at 10%, computers (50000) at 40% — NOT both at the
+    // machinery rate (10%), and NOT pooled into one combined "fixtures" figure.
+    expect(year1.furnitureDepreciation).toBeCloseTo(30_000 * 0.10, 2);
+    expect(year1.computersDepreciation).toBeCloseTo(50_000 * 0.40, 2);
+    expect(year1.machineryDepreciation).toBeCloseTo(546_000 * 0.10, 2);
   });
 
   it("produces a 5-year schedule that declines every year (WDV, never flat)", () => {
@@ -63,7 +82,10 @@ describe("buildWdvDepreciationSchedule", () => {
     const dep = buildWdvDepreciationSchedule(makeFormData());
     const year1 = dep.schedule[0];
     expect(year1.buildingDepreciation).toBeCloseTo(1_000_000 * 0.05, 2);
-    expect(year1.machineryDepreciation).toBeCloseTo((546_000 + 80_000) * 0.10, 2);
+    // Plant & Machinery depreciates alone now — fixtures (computers/
+    // furniture/racks/vehicles) each have their own pool and rate (see the
+    // "own distinct rates" test above), not pooled into this figure.
+    expect(year1.machineryDepreciation).toBeCloseTo(546_000 * 0.10, 2);
   });
 
   it(
@@ -94,17 +116,28 @@ describe("buildWdvDepreciationSchedule", () => {
           },
         }),
       );
+      // Gross Block is unaffected (assets just moved between buckets), but
+      // Year-1 total depreciation is now HIGHER (Rs.185,900 vs the old
+      // Rs.176,900) because Computers correctly depreciates at 40%, not the
+      // blanket 10% machinery rate it used to silently borrow.
       expect(dep.grossBlock).toBe(2_069_000);
+      expect(dep.pmWithContingency).toBe(1_344_000);
+      expect(dep.furnitureGross).toBe(95_000); // furniture 20000 + racks 25000 + electrification 50000
+      expect(dep.computersGross).toBe(30_000);
+      expect(dep.vehicleGross).toBe(0);
       const expected = [
-        { bldDep: 30000, machDep: 146900, closing: 1892100 },
-        { bldDep: 28500, machDep: 132210, closing: 1731390 },
-        { bldDep: 27075, machDep: 118989, closing: 1585326 },
-        { bldDep: 25721, machDep: 107090, closing: 1452515 },
-        { bldDep: 24435, machDep: 96381,  closing: 1331699 },
+        { bldDep: 30000, machDep: 134400, furnDep: 9500, compDep: 12000, vehDep: 0, closing: 1883100 },
+        { bldDep: 28500, machDep: 120960, furnDep: 8550, compDep: 7200,  vehDep: 0, closing: 1717890 },
+        { bldDep: 27075, machDep: 108864, furnDep: 7695, compDep: 4320,  vehDep: 0, closing: 1569936 },
+        { bldDep: 25721, machDep: 97978,  furnDep: 6926, compDep: 2592,  vehDep: 0, closing: 1436719 },
+        { bldDep: 24435, machDep: 88180,  furnDep: 6233, compDep: 1555,  vehDep: 0, closing: 1316316 },
       ];
       expected.forEach((exp, i) => {
         expect(dep.schedule[i].buildingDepreciation).toBe(exp.bldDep);
         expect(dep.schedule[i].machineryDepreciation).toBe(exp.machDep);
+        expect(dep.schedule[i].furnitureDepreciation).toBe(exp.furnDep);
+        expect(dep.schedule[i].computersDepreciation).toBe(exp.compDep);
+        expect(dep.schedule[i].vehiclesDepreciation).toBe(exp.vehDep);
         expect(dep.schedule[i].closingWdv).toBe(exp.closing);
       });
     },

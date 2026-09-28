@@ -1133,6 +1133,16 @@ def _build_dpr_from_report(
             "bank_loan":  b_loan,
             "margin":     R(w["total"] - b_loan, 2),
             "wc_interest": w["wc_interest"],
+            # Day-counts the engine actually used to compute the Rs. figures
+            # above (industry-aware — e.g. Trading defaults to 45 stock / 30
+            # creditor days, not the manufacturing 30/15) — propagated so
+            # builder.py's display labels can never disagree with its own
+            # numbers (see calculations/working_capital.py's per-year dict).
+            "stock_days":    w.get("stock_days", 0),
+            "wip_days":      w.get("wip_days", 0),
+            "fg_days":       w.get("fg_days", 0),
+            "debtor_days":   w.get("debtor_days", 0),
+            "creditor_days": w.get("creditor_days", 0),
         })
 
     # DSCR years

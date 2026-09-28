@@ -948,3 +948,36 @@ class TestViabilityGradeDisclaimerPresent:
         text = _download_pdf_text(resp.json()["report_id"])
         flat = " ".join(text.split())
         assert "not a bank sanction rating" in flat
+
+
+class TestWcDayLabelsMatchIndustryAwareFigures:
+    """CA AUDIT: Section-B4's "Stock of Goods (N days)" / "Less: Creditor /
+    Payable Days" labels used to be re-derived from the raw input with
+    hardcoded manufacturing-shaped fallbacks (30/15 days) whenever the
+    applicant left stock_holding_days/creditor_days at 0 ("use industry
+    default") — but calculate_wc_by_year() had already resolved the REAL
+    industry-aware days (Trading: 45 stock / 30 creditor, per
+    core.engine.INDUSTRY_DEFAULTS) and used THOSE to compute every Rs.
+    figure in the same table. A trading business's report showed correct
+    Rs. amounts next to a lying "(30 days)" / "-15" label. Only a
+    trading/service profile with 0-as-"use default" exposes this — a
+    manufacturing payload with explicit 30/15 days matches by coincidence."""
+
+    def _trading_payload_using_industry_default_days(self):
+        payload = _pmegp_trading_payload()
+        payload["scheme"] = "cgtmse"
+        payload["assumptions"]["stock_holding_days"] = 0
+        payload["assumptions"]["creditor_days"] = 0
+        return payload
+
+    def test_stock_and_creditor_day_labels_use_trading_industry_defaults(self):
+        resp = client.post("/api/v1/report/generate", json=self._trading_payload_using_industry_default_days())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Stock of Goods (45 days)" in text, (
+            "Trading industry default is 45 stock days — the label must not fall back to "
+            "the manufacturing default of 30 just because the applicant left it at 0"
+        )
+        assert "Stock of Goods (30 days)" not in text
+        assert "Less: Creditor / Payable Days\n-30" in text or "-30" in text
+        assert "-15" not in text.split("Working Capital Cycle")[-1].split("B5.")[0]

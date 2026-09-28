@@ -1012,11 +1012,20 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
 
     H2("B4. Working Capital Requirement — Assessment", story)
     NL(story, 3)
-    _stock_days   = inp.get("stock_holding_days", inp.get("wc_raw_material_days", 30))
-    _wip_days     = inp.get("wip_days",           inp.get("wc_wip_days", 15))
-    _fg_days      = inp.get("fg_days",            inp.get("wc_finished_goods_days", 30))
-    _debtor_days  = inp.get("debtor_days",        30)
-    _creditor_days= inp.get("creditor_days",      15)
+    # CA AUDIT: these day-counts used to be re-derived from the raw input
+    # with hardcoded manufacturing-shaped fallbacks (30/15/30/15), regardless
+    # of industry — but calculate_wc_by_year() already resolved the REAL
+    # industry-aware days (e.g. Trading: 45 stock / 30 creditor, per
+    # core.engine.INDUSTRY_DEFAULTS) and used THAT to compute every Rs.
+    # figure in the table below. A trading business showed "(30 days)" /
+    # "-15" labels next to Rs. amounts actually computed off 45/30 days —
+    # correct numbers, lying labels. Read the days the engine actually used
+    # (wc[0], stamped by calculate_wc_by_year) instead of re-guessing them.
+    _stock_days   = int(wc[0].get("stock_days",    inp.get("stock_holding_days", 30)))
+    _wip_days     = int(wc[0].get("wip_days",      inp.get("wip_days", 15)))
+    _fg_days      = int(wc[0].get("fg_days",       inp.get("fg_days", 30)))
+    _debtor_days  = int(wc[0].get("debtor_days",   inp.get("debtor_days", 30)))
+    _creditor_days= int(wc[0].get("creditor_days", inp.get("creditor_days", 15)))
 
     def _wc(w, *keys):
         """Return first non-None numeric value found for the given key sequence."""

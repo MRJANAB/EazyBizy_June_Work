@@ -1109,16 +1109,21 @@ class TestBalanceSheetShowsGrossCurrentAssetsAndTradeCreditors:
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
         assert "Trade Creditors" in text
-        # Gross current assets (Stock/Debtors) minus Trade Creditors must
-        # equal the WC schedule's own net "Total WC Required" (Section-B4) —
-        # i.e. the balance sheet must be gross, not pre-netted.
-        gross_ca  = _year1_row_value("Stock / Debtors (Gross)", text)
-        creditors = _year1_row_value("Trade Creditors", text)
+        # Gross current assets (now shown as separate Stock-of-Goods and
+        # Trade Receivables lines, per the disaggregated Balance Sheet)
+        # minus Trade Creditors must equal the WC schedule's own net
+        # "Total WC Required" (Section-B4) — i.e. the balance sheet must be
+        # gross, not pre-netted.
+        idx = text.find("4 / SECTION-K")
+        bs_section = text[idx:idx + 2500]
+        stock     = _year1_row_value("Stock of Goods", bs_section)
+        debtors   = _year1_row_value("Trade Receivables", bs_section)
+        creditors = _year1_row_value("Trade Creditors", bs_section)
         net_wc    = _year1_row_value("Total WC Required", text)
-        assert abs((gross_ca - creditors) - net_wc) < 1, (
-            f"Gross Current Assets ({gross_ca}) minus Trade Creditors ({creditors}) must equal "
-            f"the net WC Requirement ({net_wc}) shown in Section-B4 — same underlying figures, "
-            f"gross on the balance sheet, net in the financing-assessment table"
+        assert abs((stock + debtors - creditors) - net_wc) < 1, (
+            f"Stock ({stock}) + Trade Receivables ({debtors}) minus Trade Creditors ({creditors}) "
+            f"must equal the net WC Requirement ({net_wc}) shown in Section-B4 — same underlying "
+            f"figures, gross (disaggregated) on the balance sheet, net in the financing-assessment table"
         )
 
     def test_cash_flow_still_reconciles_opening_plus_surplus_equals_closing(self):

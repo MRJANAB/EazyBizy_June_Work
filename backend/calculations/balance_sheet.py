@@ -26,10 +26,47 @@ def calculate_balance_sheet(
     fixed_proj    = float(scheme_data.get("fixed_project_cost", scheme_data.get("project_cost", gross_block)) or 0)
     land          = float(getattr(getattr(data, "project", None), "land_cost", 0) or 0)
 
-    wc_y1_total     = float(wc_schedule[0]["total"])      if wc_schedule else wc_loan_0
-    wc_y1_bank      = float(wc_schedule[0]["bank_loan"])  if wc_schedule else wc_loan_0
-    wc_y1_margin    = float(wc_schedule[0].get("margin", 0)) if wc_schedule else 0.0
-    wc_y1_creditors = float(wc_schedule[0].get("creditors", 0)) if wc_schedule else 0.0
+    def _ca_components(w: dict) -> dict:
+        """Gross current-asset components straight from the WC schedule's own
+        per-year dict.
+
+        CA AUDIT: the Balance Sheet used to collapse Raw Material Inventory,
+        WIP, Finished Goods and Trade Receivables into one blended
+        "current_assets"/"Stock / Debtors" figure (and, before an earlier
+        fix, netted Trade Creditors into it too). A bank-standard Balance
+        Sheet shows each of these as its own line — they are already
+        computed separately by calculate_wc_by_year()
+        (calculations/working_capital.py); this just stops discarding that
+        breakdown before it reaches the Balance Sheet. A service business
+        uses a different WC model entirely (receivables/salary float/
+        expense float/cash reserve, no inventory) — its non-debtor
+        components are folded into "other_current_assets" rather than
+        invented as fake inventory lines that don't exist for a service
+        business.
+        """
+        rm_stock = float(w.get("rm_stock", w.get("stock", 0)) or 0)
+        wip      = float(w.get("wip", 0) or 0)
+        fg       = float(w.get("fg", 0) or 0)
+        debtors  = float(w.get("debtors", 0) or 0)
+        other_ca = (
+            float(w.get("cash_reserve", 0) or 0)
+            + float(w.get("salary_float", 0) or 0)
+            + float(w.get("expense_float", 0) or 0)
+        )
+        return {
+            "rm_inventory":        R(rm_stock),
+            "wip":                 R(wip),
+            "finished_goods":      R(fg),
+            "trade_receivables":   R(debtors),
+            "other_current_assets": R(other_ca),
+        }
+
+    wc_y1           = wc_schedule[0] if wc_schedule else {}
+    wc_y1_bank      = float(wc_y1.get("bank_loan", 0)) if wc_schedule else wc_loan_0
+    wc_y1_margin    = float(wc_y1.get("margin", 0)) if wc_schedule else 0.0
+    wc_y1_creditors = float(wc_y1.get("creditors", 0)) if wc_schedule else 0.0
+    wc_y1_ca        = _ca_components(wc_y1)
+    _y1_gross_ca    = R(sum(wc_y1_ca.values()))
     # CA AUDIT: "current_assets" used to be wc_schedule[i]["total"] — the NET
     # WC requirement (stock + debtors − creditors), with Trade Creditors never
     # appearing anywhere on the liability side. A real balance sheet must show
@@ -39,6 +76,10 @@ def calculate_balance_sheet(
     # and hid a real payable from the liability side entirely. Gross CA = the
     # net WC figure plus back the creditors that were subtracted from it.
     other_assets    = R(max(fixed_proj - gross_block - land, 0))
+    # Other Current Liabilities — no such input exists on this platform yet;
+    # shown at Rs.0 for bank-format completeness (same convention as Land /
+    # Other Assets when the applicant entered none), never invented.
+    other_cl        = 0.0
 
     rows = [{
         "year":               0,
@@ -48,6 +89,7 @@ def calculate_balance_sheet(
         "reserves":           0.0,
         "wc_bank":            wc_y1_bank,
         "trade_creditors":    wc_y1_creditors,
+        "other_current_liabilities": other_cl,
         # Promoter's own working-capital margin — funds part of current_assets
         # on the asset side, so it must appear as owners' funds here too.
         "promoter_wc_margin": wc_y1_margin,
@@ -56,7 +98,8 @@ def calculate_balance_sheet(
         "other_assets":       other_assets,
         "accum_dep":          0.0,
         "net_block":          gross_block,
-        "current_assets":     R(wc_y1_total + wc_y1_creditors),
+        **wc_y1_ca,
+        "current_assets":     _y1_gross_ca,
         "cash":               0.0,
     }]
 
@@ -64,23 +107,26 @@ def calculate_balance_sheet(
     for i, yr in enumerate(income):
         dep_yr      = float(yr.get("depreciation", annual_dep) or annual_dep)
         accum_dep   = R(accum_dep + dep_yr)
-        wc_total_i  = float(wc_schedule[i]["total"])      if i < len(wc_schedule) else wc_y1_total
-        creditors_i = float(wc_schedule[i].get("creditors", 0)) if i < len(wc_schedule) else wc_y1_creditors
+        w_i         = wc_schedule[i] if i < len(wc_schedule) else {}
+        ca_i        = _ca_components(w_i) if i < len(wc_schedule) else wc_y1_ca
+        creditors_i = float(w_i.get("creditors", 0)) if i < len(wc_schedule) else wc_y1_creditors
         rows.append({
             "year":               yr["year"],
             "equity":             promoter,
             "margin_money":       margin_money,   # PMEGP: TDR released after 3 years
             "term_loan":          R(float(loan_schedule[i]["closing_balance"])),
             "reserves":           R(float(yr.get("reserves_surplus", 0) or 0)),
-            "wc_bank":            R(float(wc_schedule[i]["bank_loan"])) if i < len(wc_schedule) else wc_y1_bank,
+            "wc_bank":            R(float(w_i.get("bank_loan", 0))) if i < len(wc_schedule) else wc_y1_bank,
             "trade_creditors":    R(creditors_i),
-            "promoter_wc_margin": R(float(wc_schedule[i].get("margin", 0))) if i < len(wc_schedule) else wc_y1_margin,
+            "other_current_liabilities": 0.0,
+            "promoter_wc_margin": R(float(w_i.get("margin", 0))) if i < len(wc_schedule) else wc_y1_margin,
             "land":               land,
             "gross_block":        gross_block,
             "other_assets":       other_assets,
             "accum_dep":          R(accum_dep),
             "net_block":          R(max(gross_block - accum_dep, 0)),
-            "current_assets":     R(wc_total_i + creditors_i),
+            **ca_i,
+            "current_assets":     R(sum(ca_i.values())),
             "cash":               0.0,
         })
 

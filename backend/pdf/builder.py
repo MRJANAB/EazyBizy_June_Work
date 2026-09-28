@@ -420,7 +420,12 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # the liability side at all, understating both sides of this ratio by
     # the same amount and giving a Current Ratio no bank would recognise as
     # "Total CA / Total CL" (see Section-K's own "Trade Creditors" row).
-    _bs_current_liabilities = max(float(_bs_y1.get("wc_bank", 0) or 0) + float(_bs_y1.get("trade_creditors", 0) or 0), 1)
+    _bs_current_liabilities = max(
+        float(_bs_y1.get("wc_bank", 0) or 0)
+        + float(_bs_y1.get("trade_creditors", 0) or 0)
+        + float(_bs_y1.get("other_current_liabilities", 0) or 0),
+        1,
+    )
     _true_current_ratio = R(_bs_current_assets / _bs_current_liabilities, 2)
 
     # ════════════════════════════════════════════════════════════════
@@ -1861,6 +1866,10 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  (c) Current Liabilities","","","","","",""],
         ["  Bank Borrowings — WC (CC/OD)"]+ [r(pb["wc_bank"])             for pb in pbs],
         ["  Trade Creditors"]           + [r(pb.get("trade_creditors", 0)) for pb in pbs],
+        *(
+            [["  Other Current Liabilities"] + [r(pb.get("other_current_liabilities", 0)) for pb in pbs]]
+            if any(pb.get("other_current_liabilities", 0) for pb in pbs) else []
+        ),
         ["TOTAL EQUITY & LIABILITIES"]  + [r(pb["total_liabilities"])      for pb in pbs],
         ["II. ASSETS","","","","","",""],
         ["  (a) Non-Current Assets","","","","","",""],
@@ -1870,7 +1879,33 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Net Block (NBV — WDV)"]      + [r(pb["net_block"])             for pb in pbs],
         ["  Other Long-Term Assets"]     + [r(pb["other_assets"])          for pb in pbs],
         ["  (b) Current Assets","","","","","",""],
-        ["  Stock / Debtors (Gross)"]    + [r(pb["current_assets"])        for pb in pbs],
+        # CA AUDIT: this used to be one blended "Stock / Debtors (Gross)"
+        # figure — a bank-standard Balance Sheet shows Raw Material
+        # Inventory, WIP, Finished Goods and Trade Receivables as separate
+        # lines (each already computed distinctly by calculate_wc_by_year()
+        # and now carried through by calculate_balance_sheet() instead of
+        # being summed before this table ever sees them). Each row is shown
+        # only when at least one year actually has a nonzero value for it —
+        # a service business (no inventory) simply never shows the
+        # inventory/WIP/finished-goods rows, the same "only show what's
+        # real" convention used throughout this table.
+        *(
+            [[f"  {_stock_label}"] + [r(pb.get("rm_inventory", 0)) for pb in pbs]]
+            if any(pb.get("rm_inventory", 0) for pb in pbs) else []
+        ),
+        *(
+            [["  Work-in-Progress"] + [r(pb.get("wip", 0)) for pb in pbs]]
+            if any(pb.get("wip", 0) for pb in pbs) else []
+        ),
+        *(
+            [["  Finished Goods"] + [r(pb.get("finished_goods", 0)) for pb in pbs]]
+            if any(pb.get("finished_goods", 0) for pb in pbs) else []
+        ),
+        ["  Trade Receivables"]         + [r(pb.get("trade_receivables", 0)) for pb in pbs],
+        *(
+            [["  Other Current Assets"] + [r(pb.get("other_current_assets", 0)) for pb in pbs]]
+            if any(pb.get("other_current_assets", 0) for pb in pbs) else []
+        ),
         ["  Cash & Bank Balance"]        + [r(v) for v in [max(float(pb.get("cash", 0) or 0), 0) for pb in pbs]],
         ["TOTAL ASSETS"]                 + [r(v) for v in _display_total_assets],
     ]

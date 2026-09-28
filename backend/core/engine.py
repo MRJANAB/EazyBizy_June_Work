@@ -489,8 +489,9 @@ def _tally_projected_balance_sheet(rows):
         wc_bank    = row.get("wc_bank",             0)
         wc_margin  = row.get("promoter_wc_margin",  0)
         creditors  = row.get("trade_creditors",     0)
+        other_cl   = row.get("other_current_liabilities", 0)
 
-        base_equity_liabilities = R(equity + mm + reserves + tl + wc_bank + wc_margin + creditors, 2)
+        base_equity_liabilities = R(equity + mm + reserves + tl + wc_bank + wc_margin + creditors + other_cl, 2)
 
         non_cash_assets = R(
             row.get("land",           0)

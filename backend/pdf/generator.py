@@ -484,14 +484,26 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "salary_increase_pct": float(assum.get("salary_increase_pct", 10) or 10),
         "admin_increase_pct":  float(assum.get("expense_growth_pct", 5) or 5),
         "tax_rate_pct":        float(assum.get("tax_rate_pct", 25) or 25),
-        "stock_holding_days":  int(assum.get("stock_holding_days", 30) or 30),
-        "debtor_days":         (int(assum["debtor_days"]) if assum.get("debtor_days") is not None else 30),
-        "creditor_days":       int(assum.get("creditor_days", 15) or 15),
-        "wip_days":            int(assum.get("wip_days", 15) or 15),
-        "fg_days":             int(assum.get("fg_days", 30) or 30),
-        "wc_raw_material_days": int(assum.get("stock_holding_days", 30) or 30),
-        "wc_wip_days":         int(assum.get("wip_days", 15) or 15),
-        "wc_finished_goods_days": int(assum.get("fg_days", 30) or 30),
+        # CA AUDIT: these five day-counts and the five capacity_yN fields below
+        # used to be re-derived from the raw assumptions with hardcoded,
+        # non-industry-aware fallbacks (30/15/15/30 days; 50/60/70/75/80%
+        # capacity) — but calculate_wc_by_year()/calculate_income_statement()
+        # already resolved the REAL industry-aware values (e.g. Trading: 45
+        # stock/0 wip/0 fg/30 creditor days; 60/70/80/85/90% capacity) and used
+        # THOSE, not these fallbacks, to compute every Rs. figure in the
+        # report. Every display table that read these flat inp[...] fields
+        # (Section-B Overview, Section-B4, "B7. Key Financial Assumptions")
+        # showed a stale/wrong assumption next to Rs. figures actually
+        # computed off a different one. Read the values the engine actually
+        # used instead of re-guessing them.
+        "stock_holding_days":  int((wc_sched[0] if wc_sched else {}).get("stock_days",    assum.get("stock_holding_days", 30) or 30)),
+        "debtor_days":         int((wc_sched[0] if wc_sched else {}).get("debtor_days",   assum.get("debtor_days", 30) if assum.get("debtor_days") is not None else 30)),
+        "creditor_days":       int((wc_sched[0] if wc_sched else {}).get("creditor_days", assum.get("creditor_days", 15) or 15)),
+        "wip_days":            int((wc_sched[0] if wc_sched else {}).get("wip_days",      assum.get("wip_days", 15) or 15)),
+        "fg_days":             int((wc_sched[0] if wc_sched else {}).get("fg_days",       assum.get("fg_days", 30) or 30)),
+        "wc_raw_material_days": int((wc_sched[0] if wc_sched else {}).get("stock_days",   assum.get("stock_holding_days", 30) or 30)),
+        "wc_wip_days":         int((wc_sched[0] if wc_sched else {}).get("wip_days",      assum.get("wip_days", 15) or 15)),
+        "wc_finished_goods_days": int((wc_sched[0] if wc_sched else {}).get("fg_days",    assum.get("fg_days", 30) or 30)),
         "wc_working_expenses_days": 30,
         "loan_tenure_years":   max(int(float(assum.get("tenure_months", 60) or 60) / 12), 1),
         # CA AUDIT: display the moratorium the loan schedule ACTUALLY
@@ -535,12 +547,16 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "transport_conveyance": float(expenses.get("transport_conveyance", 0) or 0),
         "telephone_internet":  float(expenses.get("telephone_internet", 0) or 0),
         "miscellaneous":       float(expenses.get("miscellaneous", 0) or 0),
-        # Capacity — read from user assumptions (frontend sends capacity_y*_pct)
-        "capacity_y1": float(assum.get("capacity_y1_pct", 50) or 50) / 100,
-        "capacity_y2": float(assum.get("capacity_y2_pct", 60) or 60) / 100,
-        "capacity_y3": float(assum.get("capacity_y3_pct", 70) or 70) / 100,
-        "capacity_y4": float(assum.get("capacity_y4_pct", 75) or 75) / 100,
-        "capacity_y5": float(assum.get("capacity_y5_pct", 80) or 80) / 100,
+        # Capacity — read the ACTUAL per-year capacity calculate_income_statement()
+        # used (income[i]["capacity"], industry-aware when the applicant left
+        # capacity_yN_pct at 0) rather than re-deriving from raw assumptions
+        # with a generic 50/60/70/75/80 fallback that disagreed with e.g.
+        # Trading's real 60/70/80/85/90 schedule.
+        "capacity_y1": float(income[0]["capacity"]) if len(income) > 0 else float(assum.get("capacity_y1_pct", 50) or 50) / 100,
+        "capacity_y2": float(income[1]["capacity"]) if len(income) > 1 else float(assum.get("capacity_y2_pct", 60) or 60) / 100,
+        "capacity_y3": float(income[2]["capacity"]) if len(income) > 2 else float(assum.get("capacity_y3_pct", 70) or 70) / 100,
+        "capacity_y4": float(income[3]["capacity"]) if len(income) > 3 else float(assum.get("capacity_y4_pct", 75) or 75) / 100,
+        "capacity_y5": float(income[4]["capacity"]) if len(income) > 4 else float(assum.get("capacity_y5_pct", 80) or 80) / 100,
         # Step 4 narrative texts (appear verbatim in PDF sections A4+)
         "business_description":    narrative.get("business_description", ""),
         "products_services":       narrative.get("products_services", ""),
@@ -1270,10 +1286,22 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         wc_prev = float(yr_bs_prev.get("wc_bank", 0) or 0)
         inc_wc_loan = R(wc_cur - wc_prev)
 
-        # Operating current assets change (stock + debtors − creditors, no cash)
+        # Operating current assets change (GROSS stock + debtors, no cash —
+        # current_assets no longer nets out creditors; see balance_sheet.py)
         ca_cur  = float(yr_bs_cur.get("current_assets",  0) or 0)
         ca_prev = float(yr_bs_prev.get("current_assets", 0) or 0)
         inc_ca  = R(ca_cur - ca_prev)
+
+        # CA AUDIT: an increase in Trade Creditors is a cash SOURCE (supplier
+        # credit funding part of the stock increase above), exactly like an
+        # increase in WC bank borrowing — it must be added back here now that
+        # current_assets (above) is gross of creditors, or this statement's
+        # own Sources/Uses total would under-state Surplus by the creditor
+        # movement every year and stop tying to the balance sheet's own
+        # (unchanged) closing cash.
+        cred_cur  = float(yr_bs_cur.get("trade_creditors",  0) or 0)
+        cred_prev = float(yr_bs_prev.get("trade_creditors", 0) or 0)
+        inc_creditors = R(cred_cur - cred_prev)
 
         # BUG FIX: the balance sheet's promoter_wc_margin liability (the
         # promoter injecting more WC margin as WC requirement grows each
@@ -1290,8 +1318,8 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
         # shortfall now shows up directly as negative cash — so no separate
         # funding term is needed at all; Sources - Uses already equals the
         # true change in cash (which can be negative) without it.
-        total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_wc_margin, 0))
-        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_wc_margin, 0))
+        total_sources = R(cash_acc + max(inc_wc_loan, 0) + max(inc_wc_margin, 0) + max(inc_creditors, 0))
+        total_uses    = R(tl_principal + drawings + max(-inc_wc_loan, 0) + max(inc_ca, 0) + max(-inc_wc_margin, 0) + max(-inc_creditors, 0))
         surplus       = R(total_sources - total_uses)
         # Balance sheet is the single source of truth for closing cash,
         # which may legitimately be negative (an unfunded shortfall).
@@ -1303,6 +1331,7 @@ def _build_cash_flow(income: list, loan_sched: list, wc_sched: list, bs: list) -
             "cash_accruals":      cash_acc,
             "inc_wc_loan":        R(inc_wc_loan),
             "inc_wc_margin":      R(inc_wc_margin),
+            "inc_creditors":      R(inc_creditors),
             "total_sources":      total_sources,
             "inc_current_assets": R(inc_ca),
             "tl_repayment":       R(tl_principal),

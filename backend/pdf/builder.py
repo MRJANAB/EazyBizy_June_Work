@@ -414,7 +414,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # carried entirely as a long-term liability).
     _bs_y1 = pbs[1] if len(pbs) > 1 else {}
     _bs_current_assets = float(_bs_y1.get("current_assets", 0) or 0) + max(float(_bs_y1.get("cash", 0) or 0), 0)
-    _bs_current_liabilities = max(float(_bs_y1.get("wc_bank", 0) or 0), 1)
+    # CA AUDIT: Trade Creditors is a real current liability (money owed to
+    # suppliers) and must be included alongside the WC bank facility — it
+    # used to be silently netted INTO current_assets instead of appearing on
+    # the liability side at all, understating both sides of this ratio by
+    # the same amount and giving a Current Ratio no bank would recognise as
+    # "Total CA / Total CL" (see Section-K's own "Trade Creditors" row).
+    _bs_current_liabilities = max(float(_bs_y1.get("wc_bank", 0) or 0) + float(_bs_y1.get("trade_creditors", 0) or 0), 1)
     _true_current_ratio = R(_bs_current_assets / _bs_current_liabilities, 2)
 
     # ════════════════════════════════════════════════════════════════
@@ -1389,7 +1395,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
                 gp = rev - cogs
                 tot_rev += rev
                 tot_cogs += cogs
-                sales_rows.append([Paragraph(p.get("category", "Product"), ST["table_cell"]), r(pp), r(sp), r(qty_100), r(rev), r(cogs), r(gp)])
+                # CA AUDIT: qty_100 must keep 2-decimal precision — Annual
+                # Revenue is computed from the exact (unrounded) qty_100, so
+                # a reader manually checking qty x price x 12 against a
+                # whole-number-rounded "417" got 1,000,800, not the 1,000,000
+                # actually shown, making an internally-correct figure look
+                # wrong under a plausible manual spot-check.
+                sales_rows.append([Paragraph(p.get("category", "Product"), ST["table_cell"]), r(pp), r(sp), r2(qty_100), r(rev), r(cogs), r(gp)])
             sales_rows.append(["Total at 100% Capacity", "", "", "", r(tot_rev), r(tot_cogs), r(tot_rev - tot_cogs)])
             sales_t = Table(sales_rows, colWidths=[32*mm, 20*mm, 20*mm, 18*mm, 28*mm, 26*mm, 26*mm])
             sales_t.setStyle(BTS()); sales_t.setStyle(TOT(len(sales_rows)-1))
@@ -1829,6 +1841,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Term Loan (Bank)"]           + [r(pb["term_loan"])             for pb in pbs],
         ["  (c) Current Liabilities","","","","","",""],
         ["  Bank Borrowings — WC (CC/OD)"]+ [r(pb["wc_bank"])             for pb in pbs],
+        ["  Trade Creditors"]           + [r(pb.get("trade_creditors", 0)) for pb in pbs],
         ["TOTAL EQUITY & LIABILITIES"]  + [r(pb["total_liabilities"])      for pb in pbs],
         ["II. ASSETS","","","","","",""],
         ["  (a) Non-Current Assets","","","","","",""],
@@ -1838,7 +1851,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["  Net Block (NBV — WDV)"]      + [r(pb["net_block"])             for pb in pbs],
         ["  Other Long-Term Assets"]     + [r(pb["other_assets"])          for pb in pbs],
         ["  (b) Current Assets","","","","","",""],
-        ["  Stock / Debtors / WC Assets"]+ [r(pb["current_assets"])        for pb in pbs],
+        ["  Stock / Debtors (Gross)"]    + [r(pb["current_assets"])        for pb in pbs],
         ["  Cash & Bank Balance"]        + [r(v) for v in [max(float(pb.get("cash", 0) or 0), 0) for pb in pbs]],
         ["TOTAL ASSETS"]                 + [r(v) for v in _display_total_assets],
     ]
@@ -2152,9 +2165,10 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Cash Accruals"]           + [r(p["cash_accruals"])      for p in pcf],
         ["Inc. in Bank Borrowings"] + [r(p["inc_wc_loan"])        for p in pcf],
         ["Inc. in Promoter's WC Margin"] + [r(p.get("inc_wc_margin", 0)) for p in pcf],
+        ["Inc. in Trade Creditors"] + [r(p.get("inc_creditors", 0)) for p in pcf],
         ["Total Sources"]           + [r(p["total_sources"])       for p in pcf],
         ["USE OF FUNDS","","","","",""],
-        ["Inc. in Current Assets"]  + [r(p["inc_current_assets"]) for p in pcf],
+        ["Inc. in Current Assets (Gross)"] + [r(p["inc_current_assets"]) for p in pcf],
         ["Term Loan Repayment"]     + [r(p["tl_repayment"])       for p in pcf],
         ["Less: Promoter Drawings"] + [r(p.get("drawings", 0))    for p in pcf],
         ["Total Uses"]             + [r(p["total_uses"])           for p in pcf],
@@ -2163,7 +2177,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Closing Cash Balance"]    + [r(p["closing_cash"])      for p in pcf],
     ], colWidths=[60*mm]+[22*mm]*5)
     cf_t.setStyle(BTS())
-    cf_t.setStyle(TOT(5)); cf_t.setStyle(TOT(10)); cf_t.setStyle(TOT(13))
+    cf_t.setStyle(TOT(6)); cf_t.setStyle(TOT(11)); cf_t.setStyle(TOT(14))
     story.append(cf_t)
     NL(story, 3)
     story.append(Paragraph(

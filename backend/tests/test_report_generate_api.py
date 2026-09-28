@@ -981,3 +981,136 @@ class TestWcDayLabelsMatchIndustryAwareFigures:
         assert "Stock of Goods (30 days)" not in text
         assert "Less: Creditor / Payable Days\n-30" in text or "-30" in text
         assert "-15" not in text.split("Working Capital Cycle")[-1].split("B5.")[0]
+
+
+class TestTradingWcExcludesPhantomFinishedGoods:
+    """CA AUDIT: a trader/reseller has no production stage, so — like the
+    Work-in-Progress line, already correctly zeroed for trading — there is
+    no separate "Finished Goods" stock either (the stock IS the goods for
+    sale, already counted once as Stock of Goods). fg_days used to stay at
+    its manufacturing default (30) for trading too, silently adding a second,
+    undisclosed stock charge that only went unnoticed because it happened to
+    numerically cancel against Creditors whenever creditor_days == fg_days
+    (both 30 by default) — Total WC Required must be exactly
+    Stock of Goods − Creditors, never Stock of Goods alone."""
+
+    def test_total_wc_required_equals_stock_minus_creditors_exactly(self):
+        resp = client.post("/api/v1/report/generate", json=_pmegp_trading_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        # "Stock of Goods (N days)" — skip past the "(N days)" suffix so the
+        # match lands on the Rs. value column, not the day-count in the label.
+        stock_label_end = text.find(")", text.find("Stock of Goods")) + 1
+        stock = _year1_row_value("", text[stock_label_end:])
+        debtor_label_end = text.find(")", text.find("Debtors (")) + 1
+        debtors = _year1_row_value("", text[debtor_label_end:])
+        creditors = _year1_row_value("Less: Creditors", text)
+        total_wc = _year1_row_value("Total WC Required", text)
+        assert abs(total_wc - (stock + debtors - creditors)) < 1, (
+            f"Total WC Required ({total_wc}) must equal Stock of Goods ({stock}) plus "
+            f"Debtors ({debtors}) minus Creditors ({creditors}) — a trading business has no "
+            f"hidden Finished-Goods charge sitting in between"
+        )
+        assert total_wc != stock + debtors, (
+            "Total WC Required coincidentally equalling Stock+Debtors alone (i.e. Creditors "
+            "never actually subtracted) is exactly the symptom of the phantom "
+            "Finished-Goods bug this test guards against"
+        )
+
+
+class TestWcCogsBasisMatchesPnlCogsBasis:
+    """CA AUDIT: income_statement.py escalates COGS by
+    (1+expense_growth_pct)**i every year, but working_capital.py's own stock/
+    creditors calculation used to scale by capacity only — dropping that same
+    cost-inflation compounding — so Year 2+ Stock/Creditors were computed off
+    a LOWER Rs. COGS base than the P&L's own COGS for the identical year. One
+    COGS figure per year, used everywhere, per the single-source-of-truth
+    rule."""
+
+    def test_year2_wc_creditor_basis_matches_year2_pnl_cogs_ratio(self):
+        payload = _pmegp_trading_payload()
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        # Year 2 creditors = (Year 2 COGS basis / 360) * creditor_days(30).
+        # Year 1 creditors = (Year 1 COGS basis / 360) * 30. If both COGS
+        # bases scaled identically to the P&L's own COGS (capacity AND cost
+        # escalation), Year2/Year1 creditors ratio must equal the P&L's own
+        # Year2/Year1 "Less: Direct Cost" (COGS) ratio.
+        idx = text.find("Less: Creditors")
+        row = re.findall(r"[\d,]+", text[idx:idx + 200])[:5]
+        cred_y1, cred_y2 = float(row[0].replace(",", "")), float(row[1].replace(",", ""))
+        idx2 = text.find("Less: Direct Cost")
+        row2 = re.findall(r"[\d,]+", text[idx2:idx2 + 200])[:5]
+        cogs_y1, cogs_y2 = float(row2[0].replace(",", "")), float(row2[1].replace(",", ""))
+        wc_ratio  = cred_y2 / cred_y1
+        pnl_ratio = cogs_y2 / cogs_y1
+        assert abs(wc_ratio - pnl_ratio) < 0.01, (
+            f"WC Creditors Year2/Year1 growth ({wc_ratio:.4f}) must match the P&L's own "
+            f"COGS Year2/Year1 growth ({pnl_ratio:.4f}) — both are the same COGS figure, "
+            f"scaled by capacity AND cost-escalation identically"
+        )
+
+
+class TestCapacityScheduleDisplayMatchesActualCapacityUsed:
+    """CA AUDIT: the displayed "Capacity Schedule (Y1-Y5)" (Section-B Overview
+    and "B7. Key Financial Assumptions") used to be re-derived from raw
+    assumptions with a hardcoded 50/60/70/75/80 fallback whenever the
+    applicant left capacity_yN_pct at 0 ("use industry default") — but
+    calculate_income_statement() already resolved the REAL industry-aware
+    schedule (Trading: 60/70/80/85/90) and used THAT to compute every year's
+    revenue. The display disagreed with the number driving the report."""
+
+    def test_trading_capacity_schedule_shows_industry_default_not_generic_fallback(self):
+        payload = _pmegp_trading_payload()
+        payload["scheme"] = "cgtmse"
+        for k in ("capacity_y1_pct", "capacity_y2_pct", "capacity_y3_pct", "capacity_y4_pct", "capacity_y5_pct"):
+            payload["assumptions"][k] = 0
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "60.0% / 70.0% / 80.0% / 85.0% / 90.0%" in text, (
+            "Trading's industry-default capacity schedule (60/70/80/85/90) must be shown, "
+            "not the generic 50/60/70/75/80 fallback"
+        )
+        assert "50.0% / 60.0% / 70.0% / 75.0% / 80.0%" not in text
+
+
+class TestBalanceSheetShowsGrossCurrentAssetsAndTradeCreditors:
+    """CA AUDIT: the projected Balance Sheet's "current_assets" used to be
+    the NET working-capital requirement (stock + debtors − creditors), with
+    Trade Creditors never appearing anywhere on the liability side — a real
+    payable owed to suppliers was silently netted into the asset side instead
+    of shown as its own current liability, understating both Total Assets
+    and Total Liabilities by the same amount and making "Current Ratio
+    (Balance Sheet Basis)" not a true Total-CA/Total-CL ratio."""
+
+    def test_trade_creditors_is_its_own_balance_sheet_liability_line(self):
+        resp = client.post("/api/v1/report/generate", json=_pmegp_trading_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Trade Creditors" in text
+        # Gross current assets (Stock/Debtors) minus Trade Creditors must
+        # equal the WC schedule's own net "Total WC Required" (Section-B4) —
+        # i.e. the balance sheet must be gross, not pre-netted.
+        gross_ca  = _year1_row_value("Stock / Debtors (Gross)", text)
+        creditors = _year1_row_value("Trade Creditors", text)
+        net_wc    = _year1_row_value("Total WC Required", text)
+        assert abs((gross_ca - creditors) - net_wc) < 1, (
+            f"Gross Current Assets ({gross_ca}) minus Trade Creditors ({creditors}) must equal "
+            f"the net WC Requirement ({net_wc}) shown in Section-B4 — same underlying figures, "
+            f"gross on the balance sheet, net in the financing-assessment table"
+        )
+
+    def test_cash_flow_still_reconciles_opening_plus_surplus_equals_closing(self):
+        """Guards the corollary fix: once current_assets became gross, an
+        increase in Trade Creditors had to be added as its own cash SOURCE
+        (supplier credit funding part of the stock increase) or this
+        statement's own Sources/Uses total would silently drift from the
+        balance sheet's own (unchanged) closing cash every year."""
+        resp = client.post("/api/v1/report/generate", json=_pmegp_trading_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Inc. in Trade Creditors" in text
+        flat = " ".join(text.split())
+        assert "FINANCIAL MODEL VALIDATION: PASS" in flat

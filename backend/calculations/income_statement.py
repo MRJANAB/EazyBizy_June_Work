@@ -208,7 +208,14 @@ def calculate_income_statement(
             marketing = R(_actual_monthly_marketing * 12 * (1 + exp_g) ** i)
         else:
             marketing = R(rev * mktg_ratio)
-        other_var = R(_actual_monthly_var * 12 * (1 + rev_g) ** i) if _actual_monthly_var > 0 else 0.0
+        # CA AUDIT: this used to compound on rev_g (revenue/price growth) — but
+        # electricity/repair/transport/telephone/stationery/misc are operating
+        # cost-inflation items, not a revenue-linked figure; the schema's own
+        # field description for expense_growth_pct is literally "admin
+        # inflation". Using rev_g here silently escalated this bucket at the
+        # wrong assumption's rate (e.g. an 8% revenue-growth input inflating a
+        # cost line that should track the 6% expense-growth input instead).
+        other_var = R(_actual_monthly_var * 12 * (1 + exp_g) ** i) if _actual_monthly_var > 0 else 0.0
 
         # BUG 2 FIX: Fixed costs do NOT scale with capacity — only compound by hike/growth rate
         if _actual_fixed_base > 0:

@@ -88,6 +88,13 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
     int_rate  = float(getattr(assum, "interest_rate_pct", 10.5) or 10.5) / 100
     rev_growth = float(getattr(assum, "revenue_growth_pct", 7.0) or 7.0) / 100
     salary_hike = float(getattr(assum, "salary_increase_pct", 10.0) or 10.0) / 100
+    # CA AUDIT: must be the exact same cost-escalation rate income_statement.py
+    # applies to its own COGS ("cogs = rm_at_100pct * cap * (1+exp_g)**i") — WC's
+    # stock/creditors used to scale by capacity only, silently dropping this
+    # compounding, so Year 2+ Stock/Creditors were computed off a LOWER COGS
+    # base than the P&L's own COGS for the same year (two disagreeing formulas
+    # for the same figure). Single source of truth: same rate, same formula.
+    exp_growth = float(getattr(assum, "expense_growth_pct", 5.0) or 5.0) / 100
 
     annual_rev_base = annual_revenue_from_prod(data.production, industry)
     cogs_ratio      = ind["cogs_ratio"]
@@ -140,7 +147,18 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
         wip_days   = 0
         fg_days    = 0
     elif industry in ("trading", "agriculture"):
+        # CA AUDIT: a trader/reseller buys and sells the same goods — there is
+        # no production stage, so neither Work-in-Progress NOR a separate
+        # "Finished Goods" stock exists (the stock IS the goods for sale,
+        # already counted once as rm_stock/"Stock of Goods" above). fg_days
+        # used to stay at its manufacturing default (30) for trading too,
+        # silently adding a second, undisclosed stock charge on top of
+        # rm_stock — it only went unnoticed because it happened to numerically
+        # cancel against Creditors whenever creditor_days == fg_days (both 30
+        # by default), making Total WC Required equal rm_stock by coincidence
+        # rather than by a correct formula.
         wip_days   = 0   # trading/agriculture: no work-in-progress
+        fg_days    = 0   # trading/agriculture: no separate finished-goods stage
 
     result       = []
     prev_rev     = None
@@ -156,8 +174,11 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
             annual_rev = R(prev_rev * (1 + rev_growth))
         prev_rev = annual_rev
 
-        # 3-priority RM at this year's capacity (consistent with income_statement)
-        annual_rm   = R(rm_at_100pct * cap)
+        # RM at this year's capacity AND cost inflation — must match
+        # income_statement.py's "cogs = rm_at_100pct * cap * (1+exp_g)**i"
+        # exactly, so Stock/Creditors and the P&L's own COGS are always
+        # computed off the identical Rs. base for the same year.
+        annual_rm   = R(rm_at_100pct * cap * (1 + exp_growth) ** i)
         # Use actual RM as production-cost proxy for WIP/FG (matches P&L COGS)
         annual_cogs = annual_rm
 

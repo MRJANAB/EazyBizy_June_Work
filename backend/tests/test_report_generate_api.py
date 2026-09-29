@@ -437,26 +437,14 @@ class TestProjectCostSingleSourceOfTruth:
             f"Section 07's own Total Project Cost ({section07_total}) — both describe the same project"
         )
 
-    def test_promoter_share_of_total_funding_uses_subsidy_inclusive_fixed_cost(self):
-        """Section 09's "Total Funding Requirement Promoter Share %" used to
-        exclude the capital subsidy from its own Fixed Cost component
-        (the same bug already fixed for Section 02's "Fixed Project Cost"),
-        understating the true funding-requirement base."""
-        resp = client.post("/api/v1/report/generate", json=_msme_psu_subsidy_payload())
-        assert resp.status_code == 200, resp.text
-        text = _download_pdf_text(resp.json()["report_id"])
-        fixed_cost = _year1_row_value("Fixed Project Cost", text)
-        wc_total = _year1_row_value("Working Capital Requirement", text)
-        promoter_total = _year1_row_value("Total Promoter Contribution", text)
-        idx = text.find("Total Funding Requirement Promoter Share")
-        assert idx != -1
-        m = re.search(r"[\d.]+", text[idx + len("Total Funding Requirement Promoter Share"):])
-        displayed_pct = float(m.group(0))
-        expected_pct = round(promoter_total / (fixed_cost + wc_total) * 100, 1)
-        assert displayed_pct == expected_pct, (
-            f"Displayed {displayed_pct}% must equal Promoter Contribution / (Fixed Cost + WC Requirement) "
-            f"= {expected_pct}%, both using the subsidy-inclusive Fixed Cost"
-        )
+    # NOTE: test_promoter_share_of_total_funding_uses_subsidy_inclusive_fixed_cost
+    # was removed — it tested "B5. Promoter Contribution" (and its "Total
+    # Funding Requirement Promoter Share %" row specifically), which was
+    # removed from the report per CA guidance. The underlying promoter-
+    # contribution figures it exercised are still covered by
+    # test_term_loan_pct_shows_actual_effective_rate_not_the_raw_assumption
+    # below and by the Executive Summary / Section-U ratio tests elsewhere
+    # in this file.
 
     def test_term_loan_pct_shows_actual_effective_rate_not_the_raw_assumption(self):
         """Section 10 used to show the raw term_loan_pct assumption (e.g.

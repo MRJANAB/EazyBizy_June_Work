@@ -1148,42 +1148,20 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "stock purchased on supplier credit to net against).",
             ST["small"]))
 
-    H2("B5. Promoter Contribution", story)
-    NL(story, 3)
-    # Three different % figures, each on a different denominator, were
-    # previously all labelled "Promoter Contribution %" — labelled distinctly
-    # here so a banker never has to guess which base a given % is measured against.
-    # BUG FIX: this used to independently recompute "term_loan + promoter_
-    # fixed_equity", the exact same bug already fixed for the Executive Credit Summary's
-    # "Fixed Project Cost" — silently excluding the scheme's margin-money/
-    # capital subsidy. Reuse display_fixed_project_cost (which already
-    # includes it) instead of re-deriving a second, disagreeing figure.
-    _pc_fixed_project_cost   = display_fixed_project_cost
-    _pc_wc_requirement_total = float(wc[0].get("total", 0)) if wc else 0.0
-    _pc_total_funding_reqd   = R(_pc_fixed_project_cost + _pc_wc_requirement_total, 2)
-    _pc_promoter_share_total_funding = round(display_promoter_contribution / _pc_total_funding_reqd * 100, 1) if _pc_total_funding_reqd else 0
-    pcontrib = Table([
-        ["Particular", "Amount / %"],
-        ["Fixed Project Promoter Contribution",  rs(display_promoter_fixed_equity)],
-        ["Promoter WC Margin",                    rs(display_promoter_wc_margin)],
-        ["Total Promoter Contribution",           rs(display_promoter_contribution)],
-        ["Fixed Project Promoter Contribution % (÷ Fixed Project Cost)", rp2(cma["promoter_pct"])],
-        ["Total Initial Investment Promoter Contribution % (÷ Initial Project Investment)", pof(display_promoter_contribution, display_total_project_cost)],
-        ["Total Funding Requirement Promoter Share % (÷ Fixed Cost + Total WC Requirement)", rp2(_pc_promoter_share_total_funding)],
-    ], colWidths=[130*mm, 40*mm])
-    pcontrib.setStyle(BTS()); pcontrib.setStyle(TOT(3))
-    story.append(pcontrib)
-    NL(story, 5)
-
-    # NOTE: the "Promoter Net Worth Statement" table (residential property,
-    # FDs, savings, mutual funds, less home loan outstanding -> net worth)
-    # was removed from the report by explicit request — this section no
-    # longer displays the promoter's personal asset/liability statement.
+    # NOTE: "B5. Promoter Contribution" (Fixed Project Promoter Contribution /
+    # Promoter WC Margin / Total Promoter Contribution and its three % ratios)
+    # and the "Promoter Net Worth Statement" table that used to follow it
+    # were both removed from the report per CA guidance — the underlying
+    # figures (promoter_pct, promoter_amount, total promoter contribution)
+    # still appear in Section-B's own Means of Finance tables, the Executive
+    # Credit Summary, and Section-U's ratios; this was a redundant standalone
+    # summary of numbers shown elsewhere. Subsequent B-subsections renumbered
+    # (old B6/B7 -> B5/B6) so there is no gap in the sequence.
     # promoter_net_worth.home_loan_emi still flows into the Adjusted Term
     # Loan DSCR (Section-N) and the Executive Summary's existing-EMI risk
-    # bullet — those are unaffected; only this display table is gone.
+    # bullet — those are unaffected by this section's removal.
 
-    H2("B6. Loan Proposal / Credit Structure", story)
+    H2("B5. Loan Proposal / Credit Structure", story)
     NL(story, 3)
     _morat_mo = inp.get("moratorium_months", inp.get("moratorium_years", 0) * 12)
     _morat_str = f"{_morat_mo} Month(s)" if _morat_mo > 0 else "None"
@@ -1233,7 +1211,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "utilisation, and is not part of the fixed project cost.",
         ST["small"]))
 
-    H2("B7. Key Financial Assumptions", story)
+    H2("B6. Key Financial Assumptions", story)
     NL(story, 3)
     _marketing_method_label = inp.get("marketing_method_label", "—")
     _assump_rows = [

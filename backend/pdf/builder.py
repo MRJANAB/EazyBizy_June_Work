@@ -1148,7 +1148,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             "stock purchased on supplier credit to net against).",
             ST["small"]))
 
-    H2("B5. Promoter Contribution & Net Worth", story)
+    H2("B5. Promoter Contribution", story)
     NL(story, 3)
     # Three different % figures, each on a different denominator, were
     # previously all labelled "Promoter Contribution %" — labelled distinctly
@@ -1175,35 +1175,13 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(pcontrib)
     NL(story, 5)
 
-    pnw = cma.get("promoter_net_worth", {})
-    if pnw and any(float(v or 0) > 0 for v in pnw.values()):
-        H2("Promoter Net Worth Statement", story)
-        _res_prop  = float(pnw.get("residential_property", 0) or 0)
-        _fd        = float(pnw.get("fixed_deposits", 0) or 0)
-        _savings   = float(pnw.get("savings_account", 0) or 0)
-        _mf        = float(pnw.get("mutual_funds", 0) or 0)
-        _hl_out    = float(pnw.get("home_loan_outstanding", 0) or 0)
-        _hl_emi    = float(pnw.get("home_loan_emi", 0) or 0)
-        _gross_nw  = _res_prop + _fd + _savings + _mf
-        _net_nw    = _gross_nw - _hl_out
-        nw_t = Table([
-            ["Asset / Liability", "Amount (Rs.)", "Remarks"],
-            ["Residential Property",      rs(_res_prop),  "Market value"],
-            ["Fixed Deposits / NSC",      rs(_fd),        "Bank / Post Office"],
-            ["Savings Account Balance",   rs(_savings),   "Current balance"],
-            ["Mutual Funds / Investments",rs(_mf),        "At current NAV"],
-            ["GROSS ASSETS",              rs(_gross_nw),  ""],
-            ["Less: Home Loan Outstanding",rs(_hl_out),   f"EMI: Rs.{_hl_emi:,.0f}/month" if _hl_emi else ""],
-            ["NET WORTH",                 rs(_net_nw),    "Available as additional security"],
-        ], colWidths=[80*mm, 50*mm, 40*mm])
-        nw_t.setStyle(BTS())
-        nw_t.setStyle(TOT(5))
-        nw_t.setStyle(TOT(7))
-        story.append(nw_t)
-        NL(story, 3)
-        story.append(Paragraph(
-            f"Promoter's net worth of Rs.{_net_nw:,.0f} provides additional comfort to the lending institution.",
-            ST["small"]))
+    # NOTE: the "Promoter Net Worth Statement" table (residential property,
+    # FDs, savings, mutual funds, less home loan outstanding -> net worth)
+    # was removed from the report by explicit request — this section no
+    # longer displays the promoter's personal asset/liability statement.
+    # promoter_net_worth.home_loan_emi still flows into the Adjusted Term
+    # Loan DSCR (Section-N) and the Executive Summary's existing-EMI risk
+    # bullet — those are unaffected; only this display table is gone.
 
     H2("B6. Loan Proposal / Credit Structure", story)
     NL(story, 3)

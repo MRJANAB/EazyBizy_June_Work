@@ -1200,20 +1200,70 @@ class TestFormulaValidationLevel2:
 
 
 class TestMarketingAssumptionLabelIsNotMisleading:
-    """CA AUDIT: "Marketing % of Rev" read as if it were the governing
-    assumption driving the Marketing expense line — but when the applicant
-    enters an actual Rs. marketing figure (the normal case), that figure
-    escalates by Admin Expense Increase each year, and the percentage shown
-    is only a derived, backward-computed Year-1 ratio, never itself an
-    input. The old label read as a direct contradiction next to the P&L's
-    own escalating Rs. marketing figures."""
+    """CA AUDIT: "Marketing % of Rev" (and its later "Marketing (Effective %
+    of Y1 Rev)" relabel) always showed a percentage, even in the normal case
+    where the applicant enters an absolute Rs. marketing figure that
+    escalates at Admin Expense Increase each year — a percentage-shaped
+    cell inevitably reads as one more input rate, not a derived figure. The
+    report must now declare the ACTUAL mechanism: the real Rs. amount and
+    escalation rate when that's what drives it, a genuine % only when the
+    applicant opted into marketing_pct_of_revenue."""
 
-    def test_marketing_row_label_says_effective_not_governing(self):
+    def test_absolute_amount_case_declares_the_rs_figure_and_escalation_rate(self):
+        payload = _cgtmse_payload()
+        payload["expenses"] = {"rent": 20000, "marketing": 6000}
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Marketing Method" in text
+        assert "Rs.72,000 (Y1) + 5.0% p.a." in text, (
+            "Marketing Method must state the real Y1 Rs. amount (6000/month x 12) "
+            "and the real escalation rate (expense_growth_pct), not a percentage"
+        )
+        assert "Marketing (Effective % of Y1 Rev)" not in text
+        assert "Marketing % of Rev" not in text
+
+    def test_opt_in_pct_of_revenue_case_shows_a_genuine_percentage(self):
+        payload = _cgtmse_payload()
+        payload["assumptions"]["marketing_pct_of_revenue"] = 3.0
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Marketing Method" in text
+        assert "3.0% of Revenue" in text
+
+
+class TestEscalationRatesAreExplicitlyDeclaredInKeyAssumptions:
+    """CA AUDIT: the calculation engine already applies a genuine,
+    explicit rate to Raw Material and Utilities escalation (falling back
+    to Admin Expense Increase when not separately set), but the report
+    never DECLARED what that resolved rate actually was — a reviewer had
+    no way to confirm "Raw Material Escalation = 6%" without re-deriving
+    it from two years' COGS figures by hand. Now shown explicitly in
+    "B7. Key Financial Assumptions"."""
+
+    def test_falls_back_to_admin_increase_rate_when_not_separately_set(self):
         resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
-        assert "Marketing (Effective % of Y1 Rev)" in text
-        assert "Marketing % of Rev" not in text
+        assert "Raw Material Escalation" in text
+        assert "Utilities Escalation" in text
+        # _cgtmse_payload sets expense_growth_pct=5 and never sets the new
+        # dedicated fields, so both must fall back to 5.0%.
+        rm_val  = _year1_row_value("Raw Material Escalation", text)
+        util_val = _year1_row_value("Utilities Escalation", text)
+        assert rm_val == 5.0
+        assert util_val == 5.0
+
+    def test_shows_its_own_distinct_rate_when_explicitly_set(self):
+        payload = _cgtmse_payload()
+        payload["assumptions"]["raw_material_escalation_pct"] = 12.0
+        payload["assumptions"]["utilities_escalation_pct"] = 9.0
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert _year1_row_value("Raw Material Escalation", text) == 12.0
+        assert _year1_row_value("Utilities Escalation", text) == 9.0
 
 
 class TestPmegpFundingSplitReconcilesExactlyToTheRupee:

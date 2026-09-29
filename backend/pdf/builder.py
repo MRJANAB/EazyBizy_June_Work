@@ -1257,6 +1257,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
 
     H2("B7. Key Financial Assumptions", story)
     NL(story, 3)
+    _marketing_method_label = inp.get("marketing_method_label", "—")
     _assump_rows = [
         ["Assumption","Value","Assumption","Value"],
         # BUG FIX: this showed the raw term_loan_pct ASSUMPTION (e.g. 75%)
@@ -1269,16 +1270,14 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         ["Contingency Rate",         rp(inp.get("contingency_rate",0)),  "Term Loan % (of Fixed Cost)", rp(tl["amount"] / max(display_fixed_project_cost, 1))],
         ["WC Loan %",                rp(inp["wc_loan_pct"]),              "Term Loan Interest",   rp(inp["term_loan_interest"])],
         ["WC Interest Rate",         rp(inp["wc_interest_rate"]),         "Annual Salary Hike",   rp(inp["salary_increase_rate"])],
-        # CA AUDIT: "Marketing % of Rev" read as if it were the governing
-        # assumption driving the Marketing expense line — but when the
-        # applicant enters an actual Rs. marketing figure (the normal case;
-        # see Section-J), THAT figure escalates by Admin Expense Increase
-        # (to its left in this same row) each year, and this percentage is
-        # only a derived, backward-computed Year-1 ratio (Marketing ÷
-        # Revenue) — never itself an input to any calculation. The old label
-        # read as a contradiction next to Section-J's own escalating Rs.
-        # figures. Relabelled to say what it actually is.
-        ["Admin Expense Increase",   rp(inp["admin_increase_rate"]),      "Marketing (Effective % of Y1 Rev)",   rp(inp["marketing_expense_pct"])],
+        # CA AUDIT: Raw Material and Utilities escalation are genuine,
+        # independently-settable assumptions (raw_material_escalation_pct /
+        # utilities_escalation_pct, falling back to Admin Expense Increase
+        # when left at 0) — declared explicitly here instead of leaving a
+        # reader to re-derive "what rate is my COGS/Utilities actually
+        # escalating at" by hand from two years' figures.
+        ["Admin Expense Increase",   rp(inp["admin_increase_rate"]),      "Raw Material Escalation",   rp(inp.get("raw_material_escalation_rate", inp["admin_increase_rate"]))],
+        ["Utilities Escalation",     rp(inp.get("utilities_escalation_rate", inp["admin_increase_rate"])), "Marketing Method", _marketing_method_label],
         ["Building Dep (WDV)",       rp(inp["building_dep_rate_wdv"]),    "Asset Dep (WDV)" if _is_service else "Machinery Dep (WDV)", rp(inp["machinery_dep_rate_wdv"])],
         ["Revenue Growth (Escalation)", rp2(inp["revenue_growth_pct"]),   "Salary Hike (Escalation)", rp2(inp["salary_increase_pct"])],
     ]
@@ -1714,6 +1713,28 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         "premises) rather than with Plant & Machinery, so contingency loading — applied to Plant & Machinery "
         "only — is never diluted across unrelated asset categories.",
         ST["small"]))
+    NL(story, 2)
+    # CA AUDIT: contingency treatment made explicit — this projection
+    # assumes the ENTIRE contingency provision on Plant & Machinery is
+    # actually spent and capitalised (i.e. becomes real machinery value,
+    # added to the depreciable block from Year 1). That is the standard
+    # convention for a projected/budgeted CMA at appraisal stage, where
+    # there is no "actual vs budget" distinction yet — but it is an
+    # assumption, not a certainty: if the applicant does not draw on the
+    # full contingency in practice, the true depreciable base (and
+    # therefore annual depreciation, PAT, and DSCR) would be correspondingly
+    # lower than shown. Only actual capitalised contingency expenditure
+    # should ever be depreciated — never budgeted-but-unspent provision.
+    if float(inp.get("contingency_rate", 0) or 0) > 0:
+        story.append(Paragraph(
+            f"<b>Contingency Treatment:</b> the {rp(inp['contingency_rate'])} contingency loading on Plant "
+            "&amp; Machinery is assumed FULLY CAPITALISED — i.e. actually spent and added to the depreciable "
+            "asset block from Year 1, not held as an unspent budgetary provision. This is the standard "
+            "assumption for a projected CMA (there being no actual-vs-budget data at appraisal stage), but it "
+            "should be confirmed at implementation: if the contingency is not fully utilised, the real "
+            "depreciable base — and hence depreciation, PAT and DSCR — would be correspondingly lower than "
+            "projected here.",
+            ST["small"]))
     PB(story)
 
     # ════════════════════════════════════════════════════════════════════════════

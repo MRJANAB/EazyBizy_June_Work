@@ -471,13 +471,60 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
         "wc_interest_rate":   float(assum.get("interest_rate_pct", 10.5) or 10.5) / 100,
         "salary_increase_rate": float(assum.get("salary_increase_pct", 10) or 10) / 100,
         "admin_increase_rate":  float(assum.get("expense_growth_pct", 5) or 5) / 100,
-        # marketing_expense_pct: derive from income Year 1 (marketing / revenue) so it
-        # reflects whatever the user actually entered (absolute amount or industry default).
+        # CA AUDIT: Raw Material and Utilities escalation used to be
+        # implicit — this platform DOES apply its own genuine, explicit
+        # rate to each (see calculations/income_statement.py /
+        # calculations/working_capital.py), but the report never DECLARED
+        # what that resolved rate actually was, so a reader had no way to
+        # confirm "Raw Material Escalation = 6%" beyond re-deriving it from
+        # two years' COGS figures by hand. Same effective-rate resolution
+        # as the calculation engine: explicit field if set, else fall back
+        # to expense_growth_pct — declared here, once, for display.
+        "raw_material_escalation_rate": (
+            float(assum.get("raw_material_escalation_pct", 0) or 0)
+            or float(assum.get("expense_growth_pct", 5) or 5)
+        ) / 100,
+        "utilities_escalation_rate": (
+            float(assum.get("utilities_escalation_pct", 0) or 0)
+            or float(assum.get("expense_growth_pct", 5) or 5)
+        ) / 100,
+        # CA AUDIT: this used to show a derived, backward-computed ratio
+        # (actual Year-1 Marketing / actual Year-1 Revenue) labelled
+        # "Marketing (Effective % of Y1 Rev)" — correctly disclosed as
+        # derived rather than an input, but still a percentage next to
+        # percentages, reading like one more input rate. When the
+        # applicant has NOT opted into %-of-revenue marketing (the normal
+        # case — marketing_pct_of_revenue=0), there is no percentage to
+        # declare at all: the actual method is an absolute Rs./month
+        # amount escalating at expense_growth_pct, and that is what gets
+        # declared instead (see "marketing_method_label" below, used by
+        # pdf/builder.py in place of a percentage in that case).
+        "marketing_pct_of_revenue": float(assum.get("marketing_pct_of_revenue", 0) or 0) / 100,
         "marketing_expense_pct": (
             R(float(income[0].get("marketing", income[0].get("marketing_expenses", 0)) or 0) /
               max(float(income[0].get("revenue", 1) or 1), 1), 4)
             if income else 0.0
         ),
+        # CA AUDIT: three genuinely different mechanisms can drive Marketing
+        # (calculations/income_statement.py's own priority order) — declare
+        # whichever one actually applies, in words, instead of a bare
+        # percentage that only correctly describes one of the three:
+        #   1. marketing_pct_of_revenue > 0 (opt-in): a real % of Revenue.
+        #   2. expenses.marketing > 0 (the normal case): an absolute
+        #      Rs./month amount, escalating at expense_growth_pct.
+        #   3. Neither set: the industry-default ratio of Revenue — a
+        #      genuine %, just not one the applicant chose.
+        "marketing_method_label": (
+            f"{round(float(assum.get('marketing_pct_of_revenue', 0) or 0), 1)}% of Revenue"
+            if float(assum.get("marketing_pct_of_revenue", 0) or 0) > 0 else
+            f"Rs.{float(income[0].get('marketing', income[0].get('marketing_expenses', 0)) or 0):,.0f} (Y1) + "
+            f"{round(float(assum.get('expense_growth_pct', 5) or 5), 1)}% p.a."
+            if float(expenses.get("marketing", 0) or 0) > 0 else
+            (
+                f"{round(float(income[0].get('marketing', income[0].get('marketing_expenses', 0)) or 0) / max(float(income[0].get('revenue', 1) or 1), 1) * 100, 1)}% "
+                "of Revenue (industry default)"
+            )
+        ) if income else "—",
         "building_dep_rate_wdv":  float(assum.get("building_dep_rate_pct", 5) or 5) / 100,
         "machinery_dep_rate_wdv": float(assum.get("depreciation_pct", 10) or 10) / 100,
         # CA AUDIT: computers/furniture+racks/vehicles each get their own
@@ -623,11 +670,6 @@ def generate_pdf(report_data: dict, output_path: str) -> None:
     _promoter_fixed_equity = float(scheme.get("promoter_amount", 0) or 0)
     _total_promoter_contribution = R(_promoter_fixed_equity + _wc_margin, 2)
     _total_bank_exp = R(_term_loan + _wc_bank_loan, 2)
-
-    # Marketing expense % from user assumptions (not hardcoded)
-    _mktg_pct_raw = float(assum.get("marketing_pct", assum.get("marketing_expense_pct", 0)) or 0)
-    if _mktg_pct_raw > 0:
-        inp["marketing_expense_pct"] = _mktg_pct_raw / 100 if _mktg_pct_raw > 1 else _mktg_pct_raw
 
     # ── Product table: single source of truth for revenue display ────────────
     # Compute mix_pct from each product's actual monthly_revenue share.

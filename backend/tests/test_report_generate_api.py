@@ -1409,3 +1409,42 @@ class TestPreliminaryRelabelledPreOperativeExpenses:
         idx = text.find("Pre-operative Expenses")
         amount = _year1_row_value("", text[idx:])
         assert amount == 40000.0, f"Pre-operative Expenses amount must still be Rs.40,000, got {amount}"
+
+
+class TestLeverageRatioSingleSourceOfTruth:
+    """CA AUDIT: D:E / Total Leverage used to be independently recomputed
+    in at least four places (Executive Summary banner, B3's Means of
+    Finance footer, Section-N's leverage warning box, Section-U's ratios
+    table) — one of them (Section-N) even judged "high leverage" against
+    its own separately-invented >3:1/>4:1 thresholds instead of
+    calculations/scorecard.py's canonical <2:1/<3:1 benchmarks, so a report
+    could show "High" in one place and no warning in another for the
+    identical numbers. All display locations now read
+    cma["scorecard_de_ratio"]/["scorecard_total_leverage"]/["is_high_leverage"],
+    computed once by scorecard.py — removed the B3 restatement entirely as
+    duplication rather than moving it."""
+
+    def test_de_and_leverage_are_identical_everywhere_they_appear(self):
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        # B3's old standalone D:E/Leverage restatement must be gone.
+        assert "D:E (TL ÷ Promoter Fixed Equity): " not in text.split("B4. Working Capital")[0]
+        # Every remaining occurrence of "Term Loan D:E" must cite the exact
+        # same ratio value.
+        de_values = set(re.findall(r"Term Loan D:E[^0-9]*?(\d+\.\d+)", text))
+        assert len(de_values) == 1, f"Term Loan D:E must be numerically identical everywhere it appears, found {de_values}"
+        leverage_values = set(re.findall(r"Total Leverage[^0-9]*?(\d+\.\d+)", text))
+        assert len(leverage_values) == 1, f"Total Leverage must be numerically identical everywhere it appears, found {leverage_values}"
+
+    def test_section_n_warning_uses_same_two_and_three_benchmark_as_scorecard(self):
+        """The old Section-N warning used >3:1/>4:1 — different from
+        scorecard.py's <2:1/<3:1. Now must use the identical benchmarks."""
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "exceeds 3:1" not in text or "exceeds 4:1" not in text
+        idx = text.find("High Leverage:")
+        assert idx != -1, "fixture must trigger the high-leverage warning"
+        warning_section = text[idx:idx + 200]
+        assert "exceeds 2:1" in warning_section or "exceeds 3:1" in warning_section

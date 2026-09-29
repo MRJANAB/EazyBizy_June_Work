@@ -626,7 +626,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         f"<b>Average Term Loan DSCR:</b> {cma.get('avg_dscr', dscr['average'])}  |  "
         f"<b>Current Ratio (Balance Sheet Basis):</b> {r2(_true_current_ratio)}  |  "
         f"<b>WC Bank Finance Coverage:</b> {r2(_wc_bank_coverage)}x  |  "
-        f"<b>Term Loan D:E:</b> {round(pc['term_loan'] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0} : 1  |  "
+        f"<b>Term Loan D:E:</b> {cma.get('scorecard_de_ratio') or 0} : 1  |  "
         f"<b>Promoter % of Initial Investment:</b> {pof(display_promoter_contribution, display_total_project_cost)}  |  "
         f"<b>Payback Period (cumulative cash-flow, Section-N):</b> " + ("Not achievable under current projections" if (cma.get("payback_not_achievable") or str(cma.get("breakeven_months","")).upper()=="N/A" or float(cma.get("breakeven_months",0) if isinstance(cma.get("breakeven_months"),(int,float)) else 0)==0) else f"within {round(float(cma.get('breakeven_months',0)),1)} months"),
         ST["small"]))
@@ -669,7 +669,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
         weaknesses.append(f"Average Term Loan DSCR of {round(_obs_avg_dscr,2)}x is below the {_obs_dscr_bench}x illustrative benchmark.")
     if _obs_annual_pat < 0:
         weaknesses.append(f"Annual PAT is negative (Rs.{_obs_annual_pat:,.0f}) — the project is loss-making under stated assumptions.")
-    if display_promoter_contribution > 0 and display_loan_amount / max(display_promoter_contribution, 1) > 3:
+    # CA AUDIT: this used to recompute Total Leverage a second time inline
+    # (display_loan_amount / display_promoter_contribution > 3) — the exact
+    # same formula and threshold calculations/scorecard.py's
+    # is_high_leverage already judges once, canonically. Single source.
+    if (cma.get("scorecard_total_leverage") or 0) > 3:
         weaknesses.append("Leverage is high relative to promoter contribution.")
     # CA AUDIT: existing_monthly_emi (Section-A, existing business loan) and
     # promoter_net_worth.home_loan_emi (personal home loan) are both
@@ -896,15 +900,7 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
 
     H2("B3. Means of Finance", story)
     NL(story, 3)
-    # _b2_wc_loan/_b2_wc_margin are still needed below for the Total
-    # Leverage ratio (TL + WC Bank / Total Promoter) even though the WC
-    # Funding table itself is no longer shown here — Working Capital
-    # figures live fully in B4 (Working Capital Requirement — Assessment),
-    # not repeated in this section.
     _b2_margin_money = pc.get("margin_money", 0) or cma.get("margin_money", 0)
-    _b2_wc_loan      = R(cma.get("working_capital_loan", pc.get("wc_loan", 0)) or 0, 2)
-    _b2_wc_margin    = R(float(wc[0].get("margin", 0) if wc else 0), 2)
-    _b2_wc_total     = R(_b2_wc_margin + _b2_wc_loan, 2)
 
     if _b2_margin_money:
         _b2_promoter_cash = R(display_promoter_fixed_equity, 2)
@@ -940,18 +936,16 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # lost, it is simply not repeated here. B3 now states only the Fixed
     # Project Funding sources (Equity / Subsidy / Term Loan), matching
     # standard bank DPR format.
+    #
+    # CA AUDIT: the D:E / Total Leverage ratio pair that used to sit here
+    # was a THIRD independent recomputation of the exact same formula
+    # already shown in the Executive Credit Summary banner and in
+    # Section-U's own Key Financial Ratios table (which is the canonical,
+    # single-source-of-truth location — both now read
+    # cma["scorecard_de_ratio"]/cma["scorecard_total_leverage"], computed
+    # once by calculations/scorecard.py). Ratio analysis does not belong in
+    # a "Means of Finance" statement; removed as duplication, not moved.
     NL(story, 3)
-    _tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
-    _tot_de = round((pc["term_loan"] + _b2_wc_loan) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
-    story.append(Paragraph(
-        f"<b>D:E (TL ÷ Promoter Fixed Equity): {_tl_de} : 1</b>"
-        f" &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Total Leverage ((TL + WC Bank) ÷ Total Promoter): {_tot_de} : 1</b>",
-        ST["bold"]))
-    story.append(Paragraph(
-        "Formula: Term Loan D:E = TL / promoter fixed equity. "
-        "Total leverage = total debt / total promoter contribution.",
-        ST["small"]))
     if _b2_margin_money and _is_pmegp:
         NL(story, 3)
         story.append(Paragraph(
@@ -2484,14 +2478,25 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     NL(story, 3)
     # D:E leverage warning (moved here from the old Q2) — flag aggressive
     # leverage without blocking generation.
-    _r_tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
-    _r_tot_de = round((pc["term_loan"] + pc.get("wc_loan", 0)) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
-    if _r_tl_de > 3 or _r_tot_de > 4:
+    # CA AUDIT: this used to recompute D:E/Total Leverage a THIRD time
+    # (after the Executive Summary banner and Section-U's ratio table),
+    # AND judge them against its own separately-invented >3/>4 thresholds
+    # — different from the <2/<3 benchmarks scorecard.py's
+    # is_high_leverage (and Section-U's own table) already use for the
+    # identical ratios, so a report could show "High" in one place and no
+    # warning in another for the same numbers. Single source of truth:
+    # reads cma["scorecard_de_ratio"]/["scorecard_total_leverage"] (the
+    # same values Section-U displays) and cma["is_high_leverage"] (the
+    # same <2:1/<3:1 judgement scorecard.py already made — this platform's
+    # one leverage threshold, not a second one).
+    _r_tl_de  = cma.get("scorecard_de_ratio") or 0
+    _r_tot_de = cma.get("scorecard_total_leverage") or 0
+    if cma.get("is_high_leverage"):
         _de_warn_parts = []
-        if _r_tl_de > 3:
-            _de_warn_parts.append(f"Term Loan D:E of {_r_tl_de}:1 exceeds 3:1")
-        if _r_tot_de > 4:
-            _de_warn_parts.append(f"Total Debt D:E of {_r_tot_de}:1 exceeds 4:1")
+        if _r_tl_de > 2:
+            _de_warn_parts.append(f"Term Loan D:E of {_r_tl_de}:1 exceeds 2:1")
+        if _r_tot_de > 3:
+            _de_warn_parts.append(f"Total Leverage of {_r_tot_de}:1 exceeds 3:1")
         _de_warn_tbl = Table(
             [[Paragraph(
                 "⚠ High Leverage: " + " | ".join(_de_warn_parts) + ". "

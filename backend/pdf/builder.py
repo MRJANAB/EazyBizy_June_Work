@@ -870,13 +870,26 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     ov_t.setStyle(BTS())
     story.append(ov_t)
 
-    H2("B2. Initial Project Investment", story)
+    H2("B2. Fixed Project Cost", story)
     NL(story, 3)
+    # CA AUDIT: this table used to include "Working Capital Margin
+    # (Promoter's Share)" as its own numbered line item alongside Land /
+    # Building / Machinery — but WC Margin is a FINANCING source, not a
+    # fixed-asset cost item; standard bank DPR format keeps "Cost of
+    # Project" (fixed assets only) and "Means of Finance" (incl. WC
+    # margin, shown in B3/B4) as separate statements. Filtered out here —
+    # display only; cma["total_project_cost"] (still Fixed + WC Margin,
+    # used for ROI/Payback/Asset Turnover/Executive Summary) and the
+    # Level-1 "Project Cost Items Sum = Total Project Cost" reconciliation
+    # check are both unaffected, since they read cma["project_cost_items"]
+    # directly, not this filtered display list.
+    _b2_fixed_items = [item for item in cma["project_cost_items"] if item["particulars"] != "Working Capital Margin (Promoter's Share)"]
+    _b2_fixed_total = R(sum(item["amount"] for item in _b2_fixed_items), 2)
     cost_rows = [["Sl.","Particulars","Amount (Rs.)","% of Total"]]
-    for item in cma["project_cost_items"]:
+    for item in _b2_fixed_items:
         cost_rows.append([str(item["code"]), item["particulars"],
-                          r(item["amount"]), pof(item["amount"], cma["total_project_cost"])])
-    cost_rows.append(["","TOTAL (Initial Project Investment)", r(cma["total_project_cost"]), "100.0%"])
+                          r(item["amount"]), pof(item["amount"], _b2_fixed_total)])
+    cost_rows.append(["","TOTAL (Fixed Project Cost)", r(_b2_fixed_total), "100.0%"])
     cost_t = Table(cost_rows, colWidths=[10*mm,90*mm,38*mm,28*mm])
     cost_t.setStyle(BTS()); cost_t.setStyle(TOT(len(cost_rows)-1))
     story.append(cost_t)
@@ -932,36 +945,11 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
             ST["small"]))
         NL(story, 5)
 
-        _box("C. Overall Funding", story)
-        _total_bank_exp = pc["term_loan"] + _b2_wc_loan
-        _total_funding  = display_promoter_contribution + _total_bank_exp + _b2_margin_money
-        exp_rows = [
-            ["Source",                              "Amount (Rs.)"],
-            ["Total Promoter Funding",              rs(display_promoter_contribution)],
-            ["Total Bank Funding",                  rs(_total_bank_exp)],
-            ["Other Funding (Subsidy/TDR)",         rs(_b2_margin_money)],
-            ["TOTAL FUNDING (Fixed Cost + Total WC Requirement)", rs(_total_funding)],
-            ["Funding Gap (Arranged Sources)",       rs(0)],
-        ]
-        exp_t = Table(exp_rows, colWidths=[100*mm,70*mm])
-        exp_t.setStyle(BTS()); exp_t.setStyle(TOT(4))
-        story.append(exp_t)
-        NL(story, 3)
-        story.append(Paragraph(
-            f"\"Funding Gap (Arranged Sources)\" is Rs.0 by construction — every rupee of Fixed Cost and "
-            "WC Requirement above is funded by the sources listed. If the business subsequently runs a "
-            "cash deficit from operating losses, that shows up as \"Additional Funding Required\" in the "
-            "Balance Sheet (Section-K) and as a negative Closing Cash Balance in the Cash Flow Statement "
-            "(Section-L) — it is a separate, operational shortfall, not a gap in the initial funding plan.",
-            ST["small"]))
-        NL(story, 2)
-        story.append(Paragraph(
-            f"<b>Note:</b> TOTAL FUNDING here (Rs.{_total_funding:,.0f}) is larger than \"Total Project Cost\" "
-            f"shown on the cover page and in Section-B (Rs.{display_total_project_cost:,.0f}) by exactly the "
-            f"WC Bank Finance amount (Rs.{_b2_wc_loan:,.0f}) — \"Total Project Cost\" deliberately excludes the "
-            "WC bank loan (a revolving facility, not part of fixed project cost), while this total includes it "
-            "since it covers the full WC Requirement, bank-funded portion included.",
-            ST["small"]))
+    # NOTE: "C. Overall Funding" (a blended Fixed + WC total, needing a long
+    # footnote to explain why it differed from "Total Project Cost") was
+    # removed as redundant/non-standard — "A. Fixed Project Funding" and
+    # "B. Working Capital Funding" above already state each funding
+    # statement cleanly and separately, matching standard bank DPR format.
     NL(story, 5)
     _tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
     _tot_de = round((pc["term_loan"] + _b2_wc_loan) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0

@@ -336,17 +336,24 @@ class TestTradingSectionsWithItemizedProductsList:
         """BUG FIX: Section 02's "Fixed Project Cost" was computed as just
         term_loan + promoter_fixed_equity, silently dropping the scheme's
         margin-money/capital subsidy (PMEGP here) — money that IS part of
-        the fixed capital outlay. It must match Section 07/08's own total."""
+        the fixed capital outlay. It must match Section 07/08's own total.
+
+        CA AUDIT: Section 07 (B2) no longer includes Working Capital Margin
+        as a line item — WC Margin is a financing source, not a fixed-asset
+        cost, and now lives only in B3/B4 where it belongs. Section 07's own
+        "TOTAL (Fixed Project Cost)" is therefore already directly
+        comparable, with no WC margin to subtract back out."""
         resp = client.post("/api/v1/report/generate", json=_pmegp_trading_payload())
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
+        assert "Working Capital Margin (Promoter's Share)" not in text[:text.find("B3. Means of Finance")], (
+            "WC Margin must not appear as a line item inside the Fixed Project Cost table"
+        )
         exec_summary_value = _year1_row_value("Fixed Project Cost", text)
-        section07_total = _year1_row_value("TOTAL (Initial Project Investment)", text)
-        # Section 07's total also includes the WC margin — subtract it back out.
-        wc_margin = _year1_row_value("Working Capital Margin (Promoter's Share)", text)
-        assert abs(exec_summary_value - (section07_total - wc_margin)) < 1, (
+        section07_total = _year1_row_value("TOTAL (Fixed Project Cost)", text)
+        assert abs(exec_summary_value - section07_total) < 1, (
             f"Section 02 Fixed Project Cost ({exec_summary_value}) must equal Section 07's "
-            f"own fixed-cost total ({section07_total - wc_margin})"
+            f"own fixed-cost total ({section07_total})"
         )
 
     def test_location_and_district_shown_once_when_identical(self):
@@ -425,10 +432,15 @@ class TestProjectCostSingleSourceOfTruth:
     Total Project Cost."""
 
     def test_payback_initial_investment_matches_section07_total_project_cost(self):
+        """CA AUDIT: Section 07 (B2) now shows fixed-asset cost only (WC
+        Margin moved to B3/B4 — see TestFixedProjectCostExcludesWcMargin),
+        so "Total Project Cost" (Fixed + WC Margin, still used for Payback/
+        ROI/Asset Turnover, unchanged) is compared against the Executive
+        Credit Summary's own "Total Project Cost" row instead."""
         resp = client.post("/api/v1/report/generate", json=_msme_psu_subsidy_payload())
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
-        section07_total = _year1_row_value("TOTAL (Initial Project Investment)", text)
+        section07_total = _year1_row_value("Total Project Cost", text)
         idx = text.find("Initial Investment (Total Project Cost)")
         assert idx != -1
         payback_initial_investment = _year1_row_value("Initial Investment (Total Project Cost)", text[idx:])
@@ -1313,3 +1325,59 @@ class TestPmegpFundingSplitReconcilesExactlyToTheRupee:
             f"{equity + subsidy + term_loan} must equal Fixed Project Cost ({fixed_cost}) exactly, "
             f"to the rupee — no independent-rounding drift"
         )
+
+
+class TestFixedProjectCostExcludesWcMargin:
+    """CA AUDIT: "B2. Initial Project Investment" used to list "Working
+    Capital Margin (Promoter's Share)" as its own numbered line item
+    alongside Land/Building/Machinery — but WC Margin is a FINANCING
+    source, not a fixed-asset cost item. Standard bank DPR format keeps
+    "Cost of Project" (fixed assets only) and "Means of Finance" (which
+    includes WC Margin) as separate statements. Removed per CA guidance;
+    display-only — cma["total_project_cost"] (Fixed + WC Margin, used for
+    ROI/Payback/Asset Turnover/Executive Summary) is unaffected."""
+
+    def test_wc_margin_not_listed_as_a_fixed_cost_item(self):
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        idx = text.find("2 / SECTION-B")
+        end = text.find("B3. Means of Finance")
+        b2_section = text[idx:end]
+        assert "Working Capital Margin" not in b2_section
+        assert "TOTAL (Fixed Project Cost)" in b2_section
+        assert "TOTAL (Initial Project Investment)" not in text
+
+    def test_b2_total_matches_b3a_fixed_project_funding_total(self):
+        """B2's own total (sum of displayed fixed-asset items) must equal
+        B3.A's "TOTAL (Fixed Project Cost)" (sum of financing sources) —
+        the same Sources=Uses identity, now visibly consistent since both
+        describe the identical fixed-cost base."""
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        b2_total = _year1_row_value("TOTAL (Fixed Project Cost)", text)
+        idx = text.find("A. Fixed Project Funding")
+        b3a_total = _year1_row_value("TOTAL (Fixed Project Cost)", text[idx:])
+        assert abs(b2_total - b3a_total) < 1, (
+            f"B2 total ({b2_total}) must equal B3.A's own Fixed Project Cost total ({b3a_total})"
+        )
+
+
+class TestOverallFundingTableRemoved:
+    """CA AUDIT: "C. Overall Funding" blended Fixed + WC Margin + WC Bank
+    into one "TOTAL FUNDING" figure that needed a long footnote to explain
+    why it differed from "Total Project Cost" shown elsewhere — removed as
+    redundant/non-standard per CA guidance. "A. Fixed Project Funding" and
+    "B. Working Capital Funding" remain as clean, separate statements."""
+
+    def test_overall_funding_table_and_footnote_are_gone(self):
+        resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "C. Overall Funding" not in text
+        assert "TOTAL FUNDING (Fixed Cost + Total WC Requirement)" not in text
+        assert "Funding Gap (Arranged Sources)" not in text
+        # A and B must still be present and intact.
+        assert "A. Fixed Project Funding" in text
+        assert "B. Working Capital Funding" in text

@@ -407,26 +407,17 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     # requirement is the arranged WC bank facility, NOT Total Current Assets
     # ÷ Total Current Liabilities. Kept under its old key too for safety.
     _wc_bank_coverage = float(cma.get("wc_bank_finance_coverage_ratio", cma.get("current_ratio", 0)) or 0)
-    # A genuine Current Ratio, computed from the actual projected Balance
-    # Sheet (Year 1): Total Current Assets (WC current assets + cash, floored
-    # at 0 — see Section-K) ÷ Total Current Liabilities (WC bank borrowing,
-    # the only current liability this balance sheet models; the term loan is
-    # carried entirely as a long-term liability).
+    # A genuine Current Ratio: Total Current Assets (WC current assets +
+    # CASH — cash is a current asset like any other) ÷ Total Current
+    # Liabilities (WC bank borrowing + Trade Creditors + Other Current
+    # Liabilities; the term loan is carried entirely as a long-term
+    # liability). CA AUDIT: now computed ONCE, centrally, inside
+    # calculate_balance_sheet() (calculations/balance_sheet.py) rather than
+    # recalculated here from raw fields — this display just reads that
+    # single-source-of-truth value, so it can never drift from what
+    # Level-2 formula validation independently checks it against.
     _bs_y1 = pbs[1] if len(pbs) > 1 else {}
-    _bs_current_assets = float(_bs_y1.get("current_assets", 0) or 0) + max(float(_bs_y1.get("cash", 0) or 0), 0)
-    # CA AUDIT: Trade Creditors is a real current liability (money owed to
-    # suppliers) and must be included alongside the WC bank facility — it
-    # used to be silently netted INTO current_assets instead of appearing on
-    # the liability side at all, understating both sides of this ratio by
-    # the same amount and giving a Current Ratio no bank would recognise as
-    # "Total CA / Total CL" (see Section-K's own "Trade Creditors" row).
-    _bs_current_liabilities = max(
-        float(_bs_y1.get("wc_bank", 0) or 0)
-        + float(_bs_y1.get("trade_creditors", 0) or 0)
-        + float(_bs_y1.get("other_current_liabilities", 0) or 0),
-        1,
-    )
-    _true_current_ratio = R(_bs_current_assets / _bs_current_liabilities, 2)
+    _true_current_ratio = R(float(_bs_y1.get("current_ratio", 0) or 0), 2)
 
     # ════════════════════════════════════════════════════════════════
     # PART I — BANKER / CREDIT SUMMARY  (Sections 01-10)

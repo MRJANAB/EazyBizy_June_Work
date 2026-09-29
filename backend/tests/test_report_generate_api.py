@@ -1192,7 +1192,8 @@ class TestFormulaValidationLevel2:
             "WC Interest = WC Bank Finance x WC Interest Rate",
             "PBT = EBITDA - Depreciation", "Tax = MAX(PBT x Tax Rate, 0)", "PAT = PBT - Tax",
             "Cash Accrual = PAT + Depreciation", "DSCR = (Cash Accrual + TL Interest)",
-            "Current Ratio: Balance Sheet Current Assets", "Operating BEP = Operating Fixed Costs",
+            "M1. Current Assets Composition", "M2. Current Ratio = (Current Assets + Cash)",
+            "Operating BEP = Operating Fixed Costs",
             "Financial BEP = Financial Fixed Costs", "Balance Sheet: Total Assets = Total Equity",
         ):
             assert letter_check in section, f"Missing Level-2 check: {letter_check!r}"

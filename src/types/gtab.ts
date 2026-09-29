@@ -211,8 +211,23 @@ export interface ProjectReportInputs {
     computers_dep_rate_pct:     number;   // computers & IT equipment WDV %
     vehicle_dep_rate_pct:       number;   // vehicles & transportation WDV %
     salary_increase_pct:        number;   // annual salary hike % (CA standard: 8-10%)
-    admin_increase_rate_pct:    number;   // admin expense growth %
-    marketing_expense_pct:      number;   // marketing as % of revenue
+    admin_increase_rate_pct:    number;   // admin expense growth % (fallback for raw_material_escalation_pct/utilities_escalation_pct below when left at 0)
+    // CA AUDIT: Raw Material and Utilities used to escalate silently off
+    // admin_increase_rate_pct alone — correct in effect, but with no
+    // separately-named, disclosed rate for two genuinely different
+    // real-world assumptions. 0 = fall back to admin_increase_rate_pct (no
+    // behaviour change unless explicitly set). Defaults match
+    // backend/models/input_schema.py exactly.
+    raw_material_escalation_pct: number;  // Raw Material / COGS cost escalation % p.a. — 0 = use admin_increase_rate_pct
+    utilities_escalation_pct:    number;  // Utilities & other variable operating cost escalation % p.a. — 0 = use admin_increase_rate_pct
+    // CA AUDIT: this field previously existed but was never wired into the
+    // live report pipeline (buildCMAReportInput.ts never read it), and its
+    // old default (2.5) would have silently overridden every applicant's
+    // entered Rs./month marketing spend had it ever been wired up. Default
+    // is now 0 = keep the entered absolute Rs./month marketing spend
+    // (escalating at admin_increase_rate_pct); > 0 genuinely switches
+    // Marketing to Revenue x this % every year instead.
+    marketing_expense_pct:      number;   // Marketing as % of Revenue (opt-in) — 0 = use entered Rs./month marketing spend instead
     // ── Working capital norms ─────────────────────────────────────────────
     wip_days:                   number;   // WIP holding days
     fg_days:                    number;   // finished goods holding days
@@ -377,7 +392,9 @@ export const createInitialProjectReportInputs = (): ProjectReportInputs => ({
     salary_increase_pct:        10,
     salary_increase_rate_pct:   10,
     admin_increase_rate_pct:    5,
-    marketing_expense_pct:      2.5,
+    raw_material_escalation_pct: 0,
+    utilities_escalation_pct:  0,
+    marketing_expense_pct:      0,
     // Working capital norms
     wip_days:                   15,
     fg_days:                    30,

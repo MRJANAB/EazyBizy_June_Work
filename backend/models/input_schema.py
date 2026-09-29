@@ -178,7 +178,30 @@ class AssumptionsInfo(BaseModel):
     tenure_months:         int   = Field(default=60)
     moratorium_months:     int   = Field(default=0)
     revenue_growth_pct:    float = Field(default=7.0)
-    expense_growth_pct:    float = Field(default=5.0,  description="Fixed expense growth % p.a. (admin inflation)")
+    expense_growth_pct:    float = Field(default=5.0,  description="Fixed/admin expense growth % p.a. (admin inflation) — also the fallback for raw_material_escalation_pct/utilities_escalation_pct below when those are left at 0")
+    # CA AUDIT: Raw Material (COGS) and Utilities previously escalated
+    # silently off this SAME expense_growth_pct field — correct in effect
+    # (both already compound at the real assumption, not a hardcoded rate),
+    # but a CA reviewer had no explicit, separately-named/disclosed rate for
+    # "how fast does my raw material cost inflate" vs "how fast do my
+    # utilities/admin costs inflate" — two genuinely different real-world
+    # assumptions that happened to share one field. 0 = fall back to
+    # expense_growth_pct (no behaviour change for existing inputs that never
+    # set these), matching this schema's own established "0 = use default"
+    # convention (stock_holding_days, capacity_yN_pct, cogs_pct_override...).
+    raw_material_escalation_pct: float = Field(default=0.0, description="Raw Material / COGS cost escalation % p.a. — 0 = use expense_growth_pct")
+    utilities_escalation_pct:    float = Field(default=0.0, description="Utilities & other variable operating cost escalation % p.a. — 0 = use expense_growth_pct")
+    # CA AUDIT: "Marketing % of Rev" in the report used to be a purely
+    # derived, backward-computed display ratio (actual Marketing ÷ actual
+    # Year-1 Revenue) — never an input, however much it read like one. This
+    # field makes "marketing scales with revenue" a genuine, explicit,
+    # opt-in choice: 0 (default) keeps the existing behaviour (an absolute
+    # Rs./month marketing spend, entered in expenses.marketing, escalating
+    # at expense_growth_pct) exactly as before; > 0 genuinely switches
+    # Marketing to Revenue x this % for every year, overriding the absolute
+    # amount entirely, applied consistently everywhere marketing is used
+    # (P&L, EBITDA, BEP, Cash Flow, Sensitivity).
+    marketing_pct_of_revenue: float = Field(default=0.0, description="Marketing spend as % of Revenue, applied every year — 0 = use expenses.marketing (Rs./month) with expense_growth_pct escalation instead")
     tax_rate_pct:          float = Field(default=0.0)
     depreciation_pct:      float = Field(default=10.0, description="Plant & Machinery (incl. electrification) WDV depreciation %")
     building_dep_rate_pct: float = Field(default=5.0,  description="Building WDV depreciation % (CA: half of machinery rate)")

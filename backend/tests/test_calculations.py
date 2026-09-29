@@ -603,6 +603,75 @@ class TestIncomeStatement:
                     "PAT - TL Service formula when TL interest is nonzero"
                 )
 
+    def test_raw_material_escalation_pct_overrides_expense_growth_pct(self):
+        """raw_material_escalation_pct, when set, must independently drive
+        COGS escalation — distinct from expense_growth_pct, which used to be
+        the only (undisclosed) driver of both COGS and Utilities alike."""
+        income_default = self._get_income(expense_growth_pct=5.0)
+        income_override = self._get_income(expense_growth_pct=5.0, raw_material_escalation_pct=20.0)
+        # Year 2 COGS must grow faster under the 20% override than under the
+        # plain 5% expense_growth_pct fallback.
+        assert income_override[1]["cogs"] > income_default[1]["cogs"] * 1.1, (
+            "raw_material_escalation_pct=20% must escalate COGS faster than "
+            "the 5% expense_growth_pct fallback"
+        )
+
+    def test_utilities_escalation_pct_overrides_expense_growth_pct_independently_of_rm(self):
+        """utilities_escalation_pct must drive 'other_variable' (utilities)
+        escalation independently of raw_material_escalation_pct — the two
+        real-world assumptions must be settable to genuinely different rates."""
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        data = _make_data(
+            assumptions=_make_assumptions(expense_growth_pct=5.0, raw_material_escalation_pct=5.0, utilities_escalation_pct=25.0),
+            expenses=types.SimpleNamespace(
+                raw_materials=0, electricity_water=5000, repair_maintenance=2000,
+                transport_conveyance=3000, telephone_internet=1000,
+                stationery=500, miscellaneous=1000, marketing=0,
+                rent=0, monthly_rent=0,
+            ),
+        )
+        dep  = calculate_depreciation(data, SCHEME_PMEGP)
+        loan = calculate_loan_schedule(data, SCHEME_PMEGP)
+        wc   = calculate_wc_by_year(data, SCHEME_PMEGP)
+        income = calculate_income_statement(data, SCHEME_PMEGP, dep, loan, wc)
+        util_y1, util_y2 = income[0]["power"], income[1]["power"]
+        assert util_y1 > 0, "fixture must have nonzero utilities to test escalation"
+        actual_growth = util_y2 / util_y1
+        assert abs(actual_growth - 1.25) < 0.01, (
+            f"Utilities must escalate at utilities_escalation_pct (25%), got {(actual_growth-1)*100:.1f}%"
+        )
+
+    def test_marketing_pct_of_revenue_opt_in_overrides_absolute_amount(self):
+        """marketing_pct_of_revenue, when > 0, must genuinely switch Marketing
+        to Revenue x that % every year — not the absolute Rs./month +
+        escalation path."""
+        from calculations.depreciation import calculate_depreciation
+        from calculations.loan_schedule import calculate_loan_schedule
+        from calculations.working_capital import calculate_wc_by_year
+        from calculations.income_statement import calculate_income_statement
+        data = _make_data(
+            assumptions=_make_assumptions(marketing_pct_of_revenue=4.0),
+            expenses=types.SimpleNamespace(
+                raw_materials=0, electricity_water=0, repair_maintenance=0,
+                transport_conveyance=0, telephone_internet=0,
+                stationery=0, miscellaneous=0, marketing=9999,  # must be IGNORED
+                rent=0, monthly_rent=0,
+            ),
+        )
+        dep  = calculate_depreciation(data, SCHEME_PMEGP)
+        loan = calculate_loan_schedule(data, SCHEME_PMEGP)
+        wc   = calculate_wc_by_year(data, SCHEME_PMEGP)
+        income = calculate_income_statement(data, SCHEME_PMEGP, dep, loan, wc)
+        for yr in income:
+            expected = round(yr["revenue"] * 0.04)
+            assert abs(yr["marketing"] - expected) < 2, (
+                f"Year {yr['year']}: Marketing ({yr['marketing']}) must equal 4% of Revenue "
+                f"({expected}), ignoring the entered absolute amount (Rs.9999/month)"
+            )
+
     def test_cgtmse_guarantee_fee_is_actually_charged(self):
         """BUG FIX: schemes/cgtmse.py computes a real Annual Guarantee Fee
         and its own docstring says it "MUST be added to annual operating
@@ -954,6 +1023,33 @@ class TestBalanceSheet:
         assert bs[0]["year"] == 0
         assert bs[-1]["year"] == 5
 
+    def test_current_ratio_includes_cash_in_numerator(self):
+        """CA AUDIT: Current Ratio is Total Current Assets / Total Current
+        Liabilities — cash IS a current asset, so it must be in the
+        numerator. current_ratio is now computed centrally (once, here),
+        not recalculated separately inside pdf/builder.py."""
+        bs = self._get_bs()
+        for row in bs[1:]:
+            cl = max(
+                float(row.get("wc_bank", 0) or 0)
+                + float(row.get("trade_creditors", 0) or 0)
+                + float(row.get("other_current_liabilities", 0) or 0),
+                1,
+            )
+            expected = (float(row["current_assets"]) + max(float(row.get("cash", 0) or 0), 0)) / cl
+            assert abs(row["current_ratio"] - expected) < 0.001, (
+                f"Year {row['year']}: current_ratio ({row['current_ratio']}) must include cash "
+                f"in the numerator, expected {expected:.4f}"
+            )
+            # And it must genuinely differ from the cash-excluded version
+            # whenever cash is nonzero — otherwise cash silently isn't
+            # actually reaching the ratio.
+            if float(row.get("cash", 0) or 0) > 0:
+                excl_cash = float(row["current_assets"]) / cl
+                assert row["current_ratio"] != round(excl_cash, 4), (
+                    f"Year {row['year']}: Current Ratio must change when cash is included"
+                )
+
     def test_net_block_decreases_with_depreciation(self):
         bs = self._get_bs()
         for i in range(1, len(bs) - 1):
@@ -1251,6 +1347,43 @@ class TestSensitivityStructuralScenarios:
         assert rate["monthly_ebitda"]  == base["monthly_ebitda"], "Interest rate must not affect EBITDA"
         assert rate["monthly_profit"] < base["monthly_profit"], "Higher rate must reduce PAT"
         assert rate["dscr"] <= base["dscr"] + 0.01, "Higher rate must not improve DSCR"
+
+    def test_revenue_scenarios_are_recomputed_by_the_central_engine_not_hand_rolled(self):
+        """CA AUDIT: the 6 revenue scenarios (Best/Optimistic/Base/
+        Conservative/Pessimistic/Worst) used to be a hand-rolled monthly
+        approximation even when the real engine (data/dep/income) was
+        available — a "Raw Material +10%" structural scenario (already
+        engine-driven) and an "Optimistic +10%" revenue scenario
+        (hand-rolled) could show a materially different kind of result for
+        what is mechanically a similar-sized shock. The tell: the OLD
+        hand-rolled math held Working Capital interest FROZEN at the
+        unshocked base value under any revenue change (it never re-ran
+        calculate_wc_by_year), so WC Interest could never differ between
+        scenarios that changed revenue. A genuine engine re-run recomputes
+        Debtors (which scale with revenue) and therefore WC Interest too."""
+        sens = self._get_full_sensitivity()
+        base = next(s for s in sens if s["scenario"] == "Base Case")
+        opt  = next(s for s in sens if s["scenario"] == "Optimistic")
+        cons = next(s for s in sens if s["scenario"] == "Conservative")
+        assert opt["monthly_revenue"] > base["monthly_revenue"] > cons["monthly_revenue"]
+        # COGS must scale with revenue (CA rule) via genuine volume mutation,
+        # not a fixed base_cogs x (1+chg) hand multiply.
+        assert opt["monthly_cogs"] > base["monthly_cogs"] > cons["monthly_cogs"]
+
+    def test_combined_downside_revenue_shock_uses_the_same_engine_mutator_as_revenue_scenarios(self):
+        """Combined Downside's -10% revenue component used to be bolted on
+        with hand math AFTER running the engine once (scaling revenue/cogs/
+        marketing by a fixed factor post-hoc) — now it is just a 5th
+        mutator alongside the other 4 structural ones, run through the
+        same single engine call."""
+        sens = self._get_full_sensitivity()
+        rm_only  = next(s for s in sens if s["scenario"] == "Raw Material Cost +10%")
+        combined = next(s for s in sens if s["scenario"] == "Combined Downside")
+        # Combined must show LOWER revenue than the RM-only scenario (which
+        # doesn't touch revenue at all) — proving its own revenue shock is
+        # genuinely applied, not dropped.
+        assert combined["monthly_revenue"] < rm_only["monthly_revenue"]
+        assert combined["change_pct"] == -10
 
     def test_combined_downside_is_worse_than_any_single_lever(self):
         sens = self._get_full_sensitivity()

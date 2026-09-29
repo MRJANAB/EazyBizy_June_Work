@@ -1461,6 +1461,24 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
               placeholder="5"
             />
             <NumberField
+              label="Raw Material Escalation % per Year (optional)"
+              value={report.dpr.raw_material_escalation_pct || 0}
+              onChange={(value) => updateSection("dpr", { raw_material_escalation_pct: value })}
+              placeholder="0 = use Fixed Expense Growth"
+            />
+            <NumberField
+              label="Utilities Escalation % per Year (optional)"
+              value={report.dpr.utilities_escalation_pct || 0}
+              onChange={(value) => updateSection("dpr", { utilities_escalation_pct: value })}
+              placeholder="0 = use Fixed Expense Growth"
+            />
+            <NumberField
+              label="Marketing as % of Revenue (optional)"
+              value={report.dpr.marketing_expense_pct || 0}
+              onChange={(value) => updateSection("dpr", { marketing_expense_pct: value })}
+              placeholder="0 = use entered Rs./month spend"
+            />
+            <NumberField
               label="Annual Salary Hike % (Compounds Each Year)"
               value={(report.dpr as any).salary_increase_pct ?? 10}
               onChange={(value) => updateSection("dpr", { salary_increase_pct: value } as any)}
@@ -1483,6 +1501,9 @@ const ProjectReportInputsStep = ({ formData, updateFormData }: ProjectReportInpu
           </div>
           <p className="text-xs text-muted-foreground -mt-2">
             Drawings reduce Reserves &amp; Surplus / net worth on the Balance Sheet, but never DSCR or cash accruals — a bank checks debt-service capacity before the promoter's personal withdrawal. 0% assumes full profit retention (common conservative assumption for a new project's first 5 years).
+          </p>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Raw Material and Utilities Escalation are optional — leave at 0 to use Fixed Expense Growth for both (the platform default). Set them only if raw material costs and utility/power costs are expected to inflate at genuinely different rates. Marketing as % of Revenue is also optional and off by default — the report uses the Rs./month marketing spend entered in Step 6, escalating at Fixed Expense Growth; set a % here only if marketing spend should scale with revenue instead.
           </p>
           <p className="text-xs text-muted-foreground -mt-2">
             Cost-overrun buffer added on top of machinery cost before depreciation — CA standard is 5–10% for new equipment purchases. 0 = none.

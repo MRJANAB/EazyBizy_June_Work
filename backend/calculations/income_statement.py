@@ -87,6 +87,12 @@ def calculate_income_statement(
 
     rev_g        = float(getattr(assum, "revenue_growth_pct",  7.0) or 7.0) / 100
     exp_g        = float(getattr(assum, "expense_growth_pct",  5.0) or 5.0) / 100
+    # CA AUDIT: distinct, explicitly-named escalation rates for Raw Material
+    # and Utilities — each 0 = fall back to exp_g (identical behaviour for
+    # any input that never sets these), > 0 = its own genuine rate.
+    rm_esc_g     = float(getattr(assum, "raw_material_escalation_pct", 0) or 0) / 100 or exp_g
+    util_esc_g   = float(getattr(assum, "utilities_escalation_pct",    0) or 0) / 100 or exp_g
+    mktg_pct_of_rev = float(getattr(assum, "marketing_pct_of_revenue", 0) or 0) / 100
     # BUG 2 FIX: Use salary_increase_pct (not exp_g) for salary compounding
     salary_hike  = float(getattr(assum, "salary_increase_pct", 10.0) or 10.0) / 100
     tax_rate     = float(getattr(assum, "tax_rate_pct", _DEFAULT_TAX_RATE * 100) or (_DEFAULT_TAX_RATE * 100)) / 100
@@ -197,25 +203,34 @@ def calculate_income_statement(
         # under-ran the capacity ramp that COGS follows → margins collapsed.
         rev = R(annual_rev_100 * cap * (1 + rev_g) ** i)
 
-        # RM scales with capacity (volume) AND compounds by cost inflation (exp_g),
-        # mirroring revenue's price growth so gross margin stays realistic rather
-        # than expanding every year on flat unit costs.
-        cogs      = R(rm_at_100pct * cap * (1 + exp_g) ** i)
-        # BUG 2 FIX: When user enters absolute marketing cost, compound it by exp_g so it
-        # appears correctly in the "marketing" output key (and therefore in the PDF).
-        # If no absolute amount, fall back to industry default ratio applied to revenue.
-        if _actual_monthly_marketing > 0:
+        # RM scales with capacity (volume) AND compounds by its own cost-
+        # inflation rate (rm_esc_g — Raw Material Escalation, explicitly its
+        # own assumption now), mirroring revenue's price growth so gross
+        # margin stays realistic rather than expanding every year on flat
+        # unit costs.
+        cogs      = R(rm_at_100pct * cap * (1 + rm_esc_g) ** i)
+        # Marketing: genuinely % of Revenue when the applicant opted in
+        # (marketing_pct_of_revenue > 0) — recomputed fresh each year from
+        # THAT year's own revenue, never escalated from a Year-1 base.
+        # Otherwise (the default), compound the entered absolute Rs./month
+        # spend by admin/expense inflation so it appears correctly in the
+        # "marketing" output key (and therefore in the PDF); with neither
+        # an absolute amount nor a %-of-revenue opt-in, fall back to the
+        # industry default ratio applied to revenue.
+        if mktg_pct_of_rev > 0:
+            marketing = R(rev * mktg_pct_of_rev)
+        elif _actual_monthly_marketing > 0:
             marketing = R(_actual_monthly_marketing * 12 * (1 + exp_g) ** i)
         else:
             marketing = R(rev * mktg_ratio)
-        # CA AUDIT: this used to compound on rev_g (revenue/price growth) — but
-        # electricity/repair/transport/telephone/stationery/misc are operating
-        # cost-inflation items, not a revenue-linked figure; the schema's own
-        # field description for expense_growth_pct is literally "admin
-        # inflation". Using rev_g here silently escalated this bucket at the
-        # wrong assumption's rate (e.g. an 8% revenue-growth input inflating a
-        # cost line that should track the 6% expense-growth input instead).
-        other_var = R(_actual_monthly_var * 12 * (1 + exp_g) ** i) if _actual_monthly_var > 0 else 0.0
+        # CA AUDIT: this used to compound on rev_g (revenue/price growth) —
+        # but electricity/repair/transport/telephone/stationery/misc are
+        # operating cost-inflation items, not a revenue-linked figure; now
+        # its own explicit Utilities Escalation assumption (util_esc_g),
+        # falling back to expense_growth_pct so nothing changes for inputs
+        # that never set it. Using rev_g used to silently escalate this
+        # bucket at the wrong assumption's rate entirely.
+        other_var = R(_actual_monthly_var * 12 * (1 + util_esc_g) ** i) if _actual_monthly_var > 0 else 0.0
 
         # BUG 2 FIX: Fixed costs do NOT scale with capacity — only compound by hike/growth rate
         if _actual_fixed_base > 0:

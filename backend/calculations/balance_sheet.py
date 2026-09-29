@@ -131,4 +131,23 @@ def calculate_balance_sheet(
         })
 
     _tally_projected_balance_sheet(rows)
+
+    # CA AUDIT: Current Ratio used to be computed only inside pdf/builder.py
+    # (a display-layer recalculation from raw Balance Sheet fields, done
+    # nowhere else) — moved here so it is a genuine CENTRAL-ENGINE output
+    # every consumer (PDF, Level-2 formula validation) reads once, instead
+    # of each recomputing it themselves. Total Current Assets INCLUDES cash
+    # (a current asset like any other); Total Current Liabilities is the WC
+    # bank facility + Trade Creditors + Other Current Liabilities — never
+    # the Term Loan, which is carried entirely as a long-term liability.
+    for row in rows:
+        _cl = max(
+            float(row.get("wc_bank", 0) or 0)
+            + float(row.get("trade_creditors", 0) or 0)
+            + float(row.get("other_current_liabilities", 0) or 0),
+            1,
+        )
+        _ca = float(row.get("current_assets", 0) or 0) + max(float(row.get("cash", 0) or 0), 0)
+        row["current_ratio"] = R(_ca / _cl, 4)
+
     return rows

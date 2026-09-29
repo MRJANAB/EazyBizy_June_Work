@@ -286,6 +286,14 @@ export function buildCMAReportInput(formData: GTABFormData): object {
       revenue_growth_pct:     Number(ri.revenue.revenue_growth_pct   || 7),
       expense_growth_pct:     Number(ri.revenue.expense_growth_pct   || 5),
       salary_increase_pct:    Number(dpr.salary_increase_pct         || 10),
+      // CA AUDIT: distinct, explicitly-named escalation rates for Raw
+      // Material and Utilities — 0 = fall back to expense_growth_pct
+      // (matches backend/models/input_schema.py's identical fallback).
+      raw_material_escalation_pct: Number(dpr.raw_material_escalation_pct || 0),
+      utilities_escalation_pct:    Number(dpr.utilities_escalation_pct    || 0),
+      // Marketing as % of Revenue — opt-in (0 = keep the entered Rs./month
+      // marketing spend in Step 6 with expense_growth_pct escalation instead).
+      marketing_pct_of_revenue:    Number(dpr.marketing_expense_pct       || 0),
       // ── Tax & depreciation ───────────────────────────────────────────────
       tax_rate_pct:           Number(ri.revenue.tax_rate_pct         || 25),
       depreciation_pct:       Number(ri.revenue.depreciation_pct     || 10),

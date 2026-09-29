@@ -89,12 +89,15 @@ def calculate_wc_by_year(data, scheme_data: dict) -> list:
     rev_growth = float(getattr(assum, "revenue_growth_pct", 7.0) or 7.0) / 100
     salary_hike = float(getattr(assum, "salary_increase_pct", 10.0) or 10.0) / 100
     # CA AUDIT: must be the exact same cost-escalation rate income_statement.py
-    # applies to its own COGS ("cogs = rm_at_100pct * cap * (1+exp_g)**i") — WC's
-    # stock/creditors used to scale by capacity only, silently dropping this
-    # compounding, so Year 2+ Stock/Creditors were computed off a LOWER COGS
-    # base than the P&L's own COGS for the same year (two disagreeing formulas
-    # for the same figure). Single source of truth: same rate, same formula.
-    exp_growth = float(getattr(assum, "expense_growth_pct", 5.0) or 5.0) / 100
+    # applies to its own COGS ("cogs = rm_at_100pct * cap * (1+rm_esc_g)**i") —
+    # WC's stock/creditors used to scale by capacity only, silently dropping
+    # this compounding, so Year 2+ Stock/Creditors were computed off a LOWER
+    # COGS base than the P&L's own COGS for the same year (two disagreeing
+    # formulas for the same figure). Single source of truth: same rate
+    # (raw_material_escalation_pct, falling back to expense_growth_pct — see
+    # income_statement.py's own identical fallback), same formula.
+    exp_growth = float(getattr(assum, "raw_material_escalation_pct", 0) or 0) / 100 \
+                 or float(getattr(assum, "expense_growth_pct", 5.0) or 5.0) / 100
 
     annual_rev_base = annual_revenue_from_prod(data.production, industry)
     cogs_ratio      = ind["cogs_ratio"]

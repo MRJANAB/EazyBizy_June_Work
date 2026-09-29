@@ -80,12 +80,32 @@ def _bump_interest_rate(d, extra_pp: float) -> None:
     assum.interest_rate_pct = float(getattr(assum, "interest_rate_pct", 10.5) or 10.5) + extra_pp
 
 
-def _run_structural_scenario(data, scheme_data, dep, mutate_fns, revenue_chg_pct: float = 0.0):
+def _bump_revenue_volume(d, pct_change: float) -> None:
+    """Shock REVENUE by scaling VOLUME (not price), on whichever revenue
+    driver this applicant actually used, so COGS scales proportionally
+    with it through the real engine (calculate_income_statement's own
+    "cogs = rm_at_100pct x cap x (1+esc)**i" formula) — satisfying this
+    module's own documented CA rule ("variable costs MUST scale
+    proportionally with revenue") as a genuine consequence of re-running
+    the central engine, not a hand-rolled percentage applied after the
+    fact. Scaling price instead of volume would move revenue without
+    moving COGS, breaking that rule for a quantity-linked cost.
+    """
+    factor = 1 + pct_change / 100
+    products = getattr(d, "products", None) or []
+    for p in products:
+        p.units_per_month = float(getattr(p, "units_per_month", 0) or 0) * factor
+        if float(getattr(p, "monthly_revenue", 0) or 0) > 0:
+            p.monthly_revenue = float(p.monthly_revenue) * factor
+    prod = getattr(d, "production", None)
+    if prod is not None and float(getattr(prod, "input_qty_per_day", 0) or 0) > 0:
+        prod.input_qty_per_day = float(prod.input_qty_per_day) * factor
+
+
+def _run_structural_scenario(data, scheme_data, dep, mutate_fns):
     """Deep-copy `data`, apply each mutate_fn to it, then re-run the loan
     schedule / working capital / income statement through the SAME modules
-    the base report uses. Optionally also apply a revenue % shock on top,
-    using the identical proportional-variable-cost technique the original
-    revenue-only scenarios use (fixed costs constant).
+    the base report uses.
 
     Returns the Year-1 row plus the resolved loan/WC schedules, so the
     caller can pull whatever figures it needs (interest, principal, DSCR).
@@ -97,43 +117,6 @@ def _run_structural_scenario(data, scheme_data, dep, mutate_fns, revenue_chg_pct
     wc2     = calculate_wc_by_year(d2, scheme_data)
     income2 = calculate_income_statement(d2, scheme_data, dep, loan2, wc2)
     yr1 = dict(income2[0])
-
-    if revenue_chg_pct:
-        chg = revenue_chg_pct / 100
-        rev      = float(yr1.get("revenue", 0) or 0)
-        cogs     = float(yr1.get("cogs", 0) or 0)
-        other_var = float(yr1.get("other_variable", 0) or 0)
-        marketing = float(yr1.get("marketing", 0) or 0)
-        fixed_exp = float(yr1.get("fixed_expenses", 0) or 0)
-        dep_yr    = float(yr1.get("depreciation", 0) or 0)
-        interest  = float(yr1.get("interest", 0) or 0)
-        tl_int    = float(yr1.get("tl_interest", interest) or 0)
-        wc_int    = float(yr1.get("wc_interest", 0) or 0)
-        tax_rate  = (float(yr1.get("tax", 0) or 0) / float(yr1["profit_before_tax"])) if float(yr1.get("profit_before_tax", 0) or 0) > 0 else 0.25
-
-        new_rev  = R(rev * (1 + chg), 2)
-        new_var  = R((cogs + other_var + marketing) * (1 + chg), 2)
-        new_ebitda = R(new_rev - new_var - fixed_exp, 2)
-        new_ebit   = R(new_ebitda - dep_yr, 2)
-        new_pbt    = R(new_ebit - interest, 2)
-        new_tax    = R(max(new_pbt * tax_rate, 0), 2)
-        new_pat    = R(new_pbt - new_tax, 2)
-        yr1["revenue"] = new_rev
-        # BUG FIX: cogs/other_variable/marketing must be scaled by the same
-        # (1 + chg) factor used to compute new_var/new_ebitda above — leaving
-        # them at their pre-shock values made the displayed "COGS" cell
-        # self-contradictory against the EBITDA shown in the same row
-        # (e.g. "Combined Downside" showed the Raw-Material-Cost-mutated
-        # COGS without the -10% revenue shock also applied to it).
-        yr1["cogs"] = R(cogs * (1 + chg), 2)
-        yr1["other_variable"] = R(other_var * (1 + chg), 2)
-        yr1["marketing"] = R(marketing * (1 + chg), 2)
-        yr1["ebitda"]  = new_ebitda
-        yr1["pat"] = yr1["net_profit"] = new_pat
-        yr1["cash_accruals"] = R(new_pat + dep_yr, 2)
-        yr1["tl_interest"] = tl_int
-        yr1["wc_interest"] = wc_int
-
     return yr1, loan2, wc2
 
 
@@ -190,32 +173,58 @@ def calculate_sensitivity(data, scheme_data: dict, monthly: dict, income_stateme
         ("Worst Case",   -0.30),
     ]
 
+    # CA AUDIT: every scenario below (revenue AND structural) is runnable
+    # through the SAME central engine re-run (_run_structural_scenario)
+    # whenever we have a real CMAReportInput-shaped `data`, `scheme_data`
+    # and `dep` — i.e. the live report-generation path. The 6 revenue
+    # scenarios used to be a hand-rolled monthly-snapshot approximation
+    # (scale base_rev/base_var by (1+chg), recompute EBITDA/PBT/PAT by
+    # hand) even when the real engine was available, so a "Raw Material
+    # Cost +10%" structural scenario (already engine-driven) and an
+    # "Optimistic +10%" revenue scenario (hand-rolled) could show a
+    # materially different result for what is, mechanically, the same kind
+    # of shock. Only the legacy/no-`data` fallback below still uses the
+    # hand-rolled approximation.
+    _live_engine = data is not None and dep is not None and income_statement
+
     result = []
     for label, chg in scenarios:
-        # Revenue changes
+        if _live_engine:
+            s_yr1, s_loan, s_wc = _run_structural_scenario(
+                data, scheme_data, dep, [lambda d, pct=chg * 100: _bump_revenue_volume(d, pct)]
+            )
+            s_cash_accruals = float(s_yr1.get("cash_accruals", 0) or 0)
+            s_tl_int  = float(s_yr1.get("tl_interest", s_yr1.get("interest", 0)) or 0)
+            s_tl_prin = float(s_loan[0]["principal_paid"])
+            _, _, s_dscr = term_loan_dscr(s_cash_accruals, s_tl_int, s_tl_prin)
+            result.append({
+                "scenario":         label,
+                "type":             "revenue",
+                "change_pct":       int(chg * 100),
+                "monthly_revenue":  R(float(s_yr1.get("revenue", 0) or 0) / 12, 2),
+                "monthly_cogs":     R(float(s_yr1.get("cogs", 0) or 0) / 12, 2),
+                "monthly_variable": R((float(s_yr1.get("cogs", 0) or 0) + float(s_yr1.get("other_variable", 0) or 0) + float(s_yr1.get("marketing", 0) or 0)) / 12, 2),
+                "monthly_fixed":    R(float(s_yr1.get("fixed_expenses", 0) or 0) / 12, 2),
+                "monthly_ebitda":   R(float(s_yr1.get("ebitda", 0) or 0) / 12, 2),
+                "monthly_profit":   R(float(s_yr1.get("pat", s_yr1.get("net_profit", 0)) or 0) / 12, 2),
+                "dscr":             s_dscr,
+                "status":           dscr_label(s_dscr),
+            })
+            continue
+
+        # ── Legacy fallback (no `data` available to re-run the engine) ──
         s_rev = R(base_rev * (1 + chg), 2)
-
         # Variable costs scale proportionally with revenue (CA spec).
-        # Monotonic guarantee: higher revenue → lower variable cost ratio → better EBITDA,
-        # assuming variable cost ratio < 100%. We do NOT cap the scaling with revenue.
         s_var = R(base_var * (1 + chg), 2)
-
         # Fixed costs stay constant regardless of revenue level
         s_ebitda = R(s_rev - s_var - base_fixed, 2)
         s_ebit   = R(s_ebitda - monthly_dep, 2)
         s_pbt    = R(s_ebit - monthly_int, 2)
         s_tax    = R(max(s_pbt * tax_rate, 0), 2)
         s_pat    = R(s_pbt - s_tax, 2)
-
-        # Term Loan DSCR — calls the EXACT SAME formula function as the main
-        # DSCR schedule (calculations/dscr.py::term_loan_dscr), using TL-only
-        # interest, so this can never diverge from the main report's DSCR.
         s_cash_accruals = R(s_pat + monthly_dep, 2)
         _, _, s_dscr = term_loan_dscr(s_cash_accruals, monthly_tl_int, monthly_prin)
-
-        # COGS for this scenario (variable portion only, scaled with revenue)
         s_cogs = R(base_cogs * (1 + chg), 2)
-
         result.append({
             "scenario":         label,
             "type":             "revenue",
@@ -234,25 +243,25 @@ def calculate_sensitivity(data, scheme_data: dict, monthly: dict, income_stateme
     # Only runnable when we have real CMAReportInput-shaped data, a real
     # scheme_data dict, and the depreciation schedule to feed
     # calculate_income_statement — i.e. the live report-generation path.
-    if dep is not None and income_statement:
+    if _live_engine:
         _structural = [
             ("Raw Material Cost +{}%".format(_RM_COST_INCREASE_PCT),
-             [lambda d: _bump_rm_cost(d, _RM_COST_INCREASE_PCT)], 0.0),
+             [lambda d: _bump_rm_cost(d, _RM_COST_INCREASE_PCT)]),
             ("Salary Increase +{}%".format(_SALARY_INCREASE_PCT),
-             [lambda d: _bump_salaries(d, _SALARY_INCREASE_PCT)], 0.0),
+             [lambda d: _bump_salaries(d, _SALARY_INCREASE_PCT)]),
             ("Receivable Days +{}".format(_RECEIVABLE_DAYS_INCREASE),
-             [lambda d: _bump_receivable_days(d, _RECEIVABLE_DAYS_INCREASE)], 0.0),
+             [lambda d: _bump_receivable_days(d, _RECEIVABLE_DAYS_INCREASE)]),
             ("Interest Rate +{}pp".format(_INTEREST_RATE_INCREASE_PP),
-             [lambda d: _bump_interest_rate(d, _INTEREST_RATE_INCREASE_PP)], 0.0),
+             [lambda d: _bump_interest_rate(d, _INTEREST_RATE_INCREASE_PP)]),
             ("Combined Downside",
              [lambda d: _bump_rm_cost(d, _RM_COST_INCREASE_PCT),
               lambda d: _bump_salaries(d, _SALARY_INCREASE_PCT),
               lambda d: _bump_receivable_days(d, _RECEIVABLE_DAYS_INCREASE),
-              lambda d: _bump_interest_rate(d, _INTEREST_RATE_INCREASE_PP)],
-             _COMBINED_REVENUE_CHG_PCT),
+              lambda d: _bump_interest_rate(d, _INTEREST_RATE_INCREASE_PP),
+              lambda d: _bump_revenue_volume(d, _COMBINED_REVENUE_CHG_PCT)]),
         ]
-        for label, mutate_fns, rev_chg in _structural:
-            s_yr1, s_loan, s_wc = _run_structural_scenario(data, scheme_data, dep, mutate_fns, rev_chg)
+        for label, mutate_fns in _structural:
+            s_yr1, s_loan, s_wc = _run_structural_scenario(data, scheme_data, dep, mutate_fns)
             s_cash_accruals = float(s_yr1.get("cash_accruals", 0) or 0)
             s_tl_int  = float(s_yr1.get("tl_interest", s_yr1.get("interest", 0)) or 0)
             s_tl_prin = float(s_loan[0]["principal_paid"])
@@ -260,7 +269,7 @@ def calculate_sensitivity(data, scheme_data: dict, monthly: dict, income_stateme
             result.append({
                 "scenario":         label,
                 "type":             "structural",
-                "change_pct":       rev_chg,
+                "change_pct":       _COMBINED_REVENUE_CHG_PCT if label == "Combined Downside" else 0.0,
                 "monthly_revenue":  R(float(s_yr1.get("revenue", 0) or 0) / 12, 2),
                 "monthly_cogs":     R(float(s_yr1.get("cogs", 0) or 0) / 12, 2),
                 "monthly_variable": R((float(s_yr1.get("cogs", 0) or 0) + float(s_yr1.get("other_variable", 0) or 0) + float(s_yr1.get("marketing", 0) or 0)) / 12, 2),

@@ -666,15 +666,33 @@ def formula_validation(inp: dict, cma: dict, dpr: dict) -> list:
             lambda i: dscr_years[i]["dscr"], 0.02, n=len(dscr_years),
         )
 
-    # M. Current Ratio components: Gross Current Assets (Balance Sheet) must
-    #    equal the WC schedule's own net Requirement plus Creditors added back
-    #    (i.e. the Balance Sheet must stay GROSS, never silently re-net
-    #    Creditors into Current Assets again).
+    # M1. Current Assets composition: Balance Sheet's gross Current Assets
+    #     must equal the WC schedule's own net Requirement plus Creditors
+    #     added back (i.e. the Balance Sheet must stay GROSS, never
+    #     silently re-net Creditors into Current Assets again).
     if wc and pbs and len(pbs) > 1:
         _yearly_check(
-            "M. Current Ratio: Balance Sheet Current Assets = WC Requirement + Creditors (Gross)", "Section-K / Section-B4",
+            "M1. Current Assets Composition = WC Requirement + Creditors (Gross)", "Section-K / Section-B4",
             lambda i: wc[i]["total"] + wc[i].get("creditors", 0),
             lambda i: pbs[i + 1]["current_assets"], MONEY_TOL,
+        )
+
+    # M2. Current Ratio = (Current Assets + CASH) / (WC Bank + Trade
+    #     Creditors + Other Current Liabilities) — CA AUDIT: a Current
+    #     Ratio that omits cash from the numerator is not the ratio a bank
+    #     means by "Current Ratio"; cash is itself a current asset. This
+    #     independently re-derives the ratio from the Balance Sheet's own
+    #     raw line items and compares it to calculate_balance_sheet()'s own
+    #     stored "current_ratio" (single source of truth — pdf/builder.py
+    #     reads that exact same field for display, never recomputing it).
+    if pbs and len(pbs) > 1:
+        _yearly_check(
+            "M2. Current Ratio = (Current Assets + Cash) / (WC Bank + Creditors + Other CL)", "Section-K / Section-U",
+            lambda i: (
+                (pbs[i + 1]["current_assets"] + max(pbs[i + 1].get("cash", 0), 0))
+                / max(pbs[i + 1]["wc_bank"] + pbs[i + 1].get("trade_creditors", 0) + pbs[i + 1].get("other_current_liabilities", 0), 1)
+            ),
+            lambda i: pbs[i + 1]["current_ratio"], 0.001, n=len(pbs) - 1,
         )
 
     # N. Operating BEP = Operating Fixed Costs / Contribution Margin Ratio

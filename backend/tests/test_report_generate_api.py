@@ -1315,7 +1315,7 @@ class TestPmegpFundingSplitReconcilesExactlyToTheRupee:
         assert "1,191,750" in text, "Machinery gross value must match the pinned fixture"
         fixed_cost = _year1_row_value("TOTAL (Fixed Project Cost)", text)
         assert fixed_cost == 1596750.0, f"Fixed Project Cost must be exactly Rs.1,596,750, got {fixed_cost}"
-        idx = text.find("A. Fixed Project Funding")
+        idx = text.find("B3. Means of Finance")
         section = text[idx:idx + 600]
         equity  = _year1_row_value("Equity Capital", section)
         subsidy = _year1_row_value("Govt Subsidy", section)
@@ -1350,34 +1350,62 @@ class TestFixedProjectCostExcludesWcMargin:
 
     def test_b2_total_matches_b3a_fixed_project_funding_total(self):
         """B2's own total (sum of displayed fixed-asset items) must equal
-        B3.A's "TOTAL (Fixed Project Cost)" (sum of financing sources) —
+        B3's own "TOTAL (Fixed Project Cost)" (sum of financing sources) —
         the same Sources=Uses identity, now visibly consistent since both
         describe the identical fixed-cost base."""
         resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
         b2_total = _year1_row_value("TOTAL (Fixed Project Cost)", text)
-        idx = text.find("A. Fixed Project Funding")
-        b3a_total = _year1_row_value("TOTAL (Fixed Project Cost)", text[idx:])
-        assert abs(b2_total - b3a_total) < 1, (
-            f"B2 total ({b2_total}) must equal B3.A's own Fixed Project Cost total ({b3a_total})"
+        idx = text.find("B3. Means of Finance")
+        b3_total = _year1_row_value("TOTAL (Fixed Project Cost)", text[idx:])
+        assert abs(b2_total - b3_total) < 1, (
+            f"B2 total ({b2_total}) must equal B3's own Fixed Project Cost total ({b3_total})"
         )
 
 
 class TestOverallFundingTableRemoved:
-    """CA AUDIT: "C. Overall Funding" blended Fixed + WC Margin + WC Bank
-    into one "TOTAL FUNDING" figure that needed a long footnote to explain
-    why it differed from "Total Project Cost" shown elsewhere — removed as
-    redundant/non-standard per CA guidance. "A. Fixed Project Funding" and
-    "B. Working Capital Funding" remain as clean, separate statements."""
+    """CA AUDIT: "B. Working Capital Funding" and "C. Overall Funding" (a
+    blended Fixed + WC Margin + WC Bank total that needed a long footnote
+    to explain why it differed from "Total Project Cost" shown elsewhere)
+    were both removed per explicit request — B3 now states only Fixed
+    Project Funding sources (matching standard bank DPR format); Working
+    Capital figures remain fully shown in B4."""
 
-    def test_overall_funding_table_and_footnote_are_gone(self):
+    def test_overall_and_wc_funding_tables_are_gone(self):
         resp = client.post("/api/v1/report/generate", json=_cgtmse_payload())
         assert resp.status_code == 200, resp.text
         text = _download_pdf_text(resp.json()["report_id"])
         assert "C. Overall Funding" not in text
         assert "TOTAL FUNDING (Fixed Cost + Total WC Requirement)" not in text
         assert "Funding Gap (Arranged Sources)" not in text
-        # A and B must still be present and intact.
-        assert "A. Fixed Project Funding" in text
-        assert "B. Working Capital Funding" in text
+        assert "A. Fixed Project Funding" not in text
+        assert "B. Working Capital Funding" not in text
+        # B3 itself, and its one remaining table, must still be present.
+        assert "B3. Means of Finance" in text
+        idx = text.find("B3. Means of Finance")
+        assert "Term Loan from Bank" in text[idx:idx + 600]
+        # WC figures must still be fully present in B4.
+        assert "B4. Working Capital Requirement" in text
+
+
+class TestPreliminaryRelabelledPreOperativeExpenses:
+    """CA AUDIT: "Preliminary & Pre-operative Expenses" relabelled to
+    "Pre-operative Expenses" per explicit request — the word "Preliminary"
+    dropped from the displayed name only. The amount and its place in
+    Fixed Project Cost are UNCHANGED (unlike WC Margin, this genuinely is
+    a fixed-asset-adjacent cost, not a financing item — Term Loan sizing,
+    promoter equity and depreciation base must not shift)."""
+
+    def test_label_dropped_amount_and_total_unchanged(self):
+        payload = _cgtmse_payload()
+        payload["project"]["preliminary_expenses"] = 40000
+        resp = client.post("/api/v1/report/generate", json=payload)
+        assert resp.status_code == 200, resp.text
+        text = _download_pdf_text(resp.json()["report_id"])
+        assert "Pre-operative Expenses" in text
+        assert "Preliminary & Pre-operative Expenses" not in text
+        assert "Preliminary &" not in text
+        idx = text.find("Pre-operative Expenses")
+        amount = _year1_row_value("", text[idx:])
+        assert amount == 40000.0, f"Pre-operative Expenses amount must still be Rs.40,000, got {amount}"

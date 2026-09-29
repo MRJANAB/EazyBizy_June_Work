@@ -317,7 +317,10 @@ def _build_project_cost_items(project: dict, wc_sched: list, industry: str = "ma
         code += 1
     prelim = float(project.get("preliminary_expenses", 0) or 0)
     if prelim > 0:
-        items.append({"code": code, "particulars": "Preliminary & Pre-operative Expenses", "amount": prelim})
+        # Relabelled per explicit request — the amount and its place in
+        # Fixed Project Cost are unchanged, only the word "Preliminary" is
+        # dropped from the displayed name.
+        items.append({"code": code, "particulars": "Pre-operative Expenses", "amount": prelim})
         code += 1
     wc_margin = float(wc_sched[0].get("margin", 0)) if wc_sched else 0.0
     if wc_margin > 0:

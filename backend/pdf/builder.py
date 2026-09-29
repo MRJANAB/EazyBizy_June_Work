@@ -894,14 +894,18 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     cost_t.setStyle(BTS()); cost_t.setStyle(TOT(len(cost_rows)-1))
     story.append(cost_t)
 
-    H2("B3. Means of Finance – Fixed Project Funding", story)
+    H2("B3. Means of Finance", story)
     NL(story, 3)
+    # _b2_wc_loan/_b2_wc_margin are still needed below for the Total
+    # Leverage ratio (TL + WC Bank / Total Promoter) even though the WC
+    # Funding table itself is no longer shown here — Working Capital
+    # figures live fully in B4 (Working Capital Requirement — Assessment),
+    # not repeated in this section.
     _b2_margin_money = pc.get("margin_money", 0) or cma.get("margin_money", 0)
     _b2_wc_loan      = R(cma.get("working_capital_loan", pc.get("wc_loan", 0)) or 0, 2)
     _b2_wc_margin    = R(float(wc[0].get("margin", 0) if wc else 0), 2)
     _b2_wc_total     = R(_b2_wc_margin + _b2_wc_loan, 2)
 
-    _box("A. Fixed Project Funding", story)
     if _b2_margin_money:
         _b2_promoter_cash = R(display_promoter_fixed_equity, 2)
         finance_total_a   = R(_b2_promoter_cash + _b2_margin_money + pc["term_loan"], 2)
@@ -928,29 +932,15 @@ def build_pdf(inp: dict, cma: dict, dpr: dict, output_path: str):
     story.append(mof)
     NL(story, 5)
 
-    if _b2_wc_total > 0:
-        _box("B. Working Capital Funding", story)
-        wc_fin_rows = [
-            ["Source","Amount (Rs.)","% of WC Reqd."],
-            ["Promoter WC Margin",   rs(_b2_wc_margin), pof(_b2_wc_margin, _b2_wc_total) if _b2_wc_total else "0.0%"],
-            ["WC Bank Finance",      rs(_b2_wc_loan),   pof(_b2_wc_loan,   _b2_wc_total) if _b2_wc_total else "0.0%"],
-            ["TOTAL WC",             rs(_b2_wc_total),  "100.0%"],
-        ]
-        wc_fin = Table(wc_fin_rows, colWidths=[70*mm,55*mm,45*mm])
-        wc_fin.setStyle(BTS()); wc_fin.setStyle(TOT(3))
-        story.append(wc_fin)
-        NL(story, 2)
-        story.append(Paragraph(
-            "Working Capital Bank Finance is a revolving operational facility and is not included in fixed project cost.",
-            ST["small"]))
-        NL(story, 5)
-
-    # NOTE: "C. Overall Funding" (a blended Fixed + WC total, needing a long
-    # footnote to explain why it differed from "Total Project Cost") was
-    # removed as redundant/non-standard — "A. Fixed Project Funding" and
-    # "B. Working Capital Funding" above already state each funding
-    # statement cleanly and separately, matching standard bank DPR format.
-    NL(story, 5)
+    # NOTE: "B. Working Capital Funding" and "C. Overall Funding" were both
+    # removed from this section per explicit request — Working Capital
+    # figures (Promoter WC Margin, WC Bank Finance, and the full 5-year
+    # schedule) are shown fully and exclusively in B4 (Working Capital
+    # Requirement — Assessment) immediately below; nothing about WC is
+    # lost, it is simply not repeated here. B3 now states only the Fixed
+    # Project Funding sources (Equity / Subsidy / Term Loan), matching
+    # standard bank DPR format.
+    NL(story, 3)
     _tl_de  = round(pc["term_loan"] / max(display_promoter_fixed_equity, 1), 2) if display_promoter_fixed_equity else 0
     _tot_de = round((pc["term_loan"] + _b2_wc_loan) / max(display_promoter_contribution, 1), 2) if display_promoter_contribution else 0
     story.append(Paragraph(
